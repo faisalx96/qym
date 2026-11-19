@@ -3,7 +3,7 @@ import { Button as AriaButton, type ButtonProps as AriaButtonProps } from 'react
 import styles from './Button.module.css';
 import './reasonPlacement';
 
-export type ButtonVariant = 'neutral' | 'accent' | 'danger' | 'primary' | 'meta';
+export type ButtonVariant = 'neutral' | 'accent' | 'danger' | 'primary' | 'meta' | 'text';
 export type ButtonSize = 'sm' | 'md';
 
 export interface ButtonProps extends Omit<AriaButtonProps, 'className' | 'style' | 'children'> {
@@ -23,7 +23,7 @@ export interface ButtonProps extends Omit<AriaButtonProps, 'className' | 'style'
 
 /**
  * The one button. neutral/accent/danger = .qym-inline-action recipes;
- * primary = filled accent (.btn-primary). There is no text-only tone.
+ * primary = filled accent (.btn-primary). Text is for inline disclosure links (worker review, Nov 16).
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   {

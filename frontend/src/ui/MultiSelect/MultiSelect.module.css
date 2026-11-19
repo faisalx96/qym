@@ -300,6 +300,14 @@
 .trigger[data-variant='bar'][data-active][data-hovered] {
   background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent);
 }
+.trigger[data-variant='bar'][data-active][data-selection='neutral'] {
+  border-color: var(--border-strong);
+  background: var(--control-fill);
+  color: var(--text-primary);
+}
+.trigger[data-variant='bar'][data-active][data-selection='neutral'] .triggerLabel {
+  color: var(--text-primary);
+}
 .trigger[data-variant='bar'][data-pressed] {
   filter: brightness(0.92);
 }

@@ -37,14 +37,17 @@ JOB = {
     "until_day": "2026-01-31",
     "limit": 2000,
 }
+REEVALUATE = {"kind": "reevaluate", "trace_id": "trace-1"}
 WRITES = [
     ("PUT", "/state", {"state": "paused"}),
     ("PUT", "/key", {"api_key_id": None}),
     ("POST", "/settings", {"values": {}}),
     ("POST", "/settings/1/restore", None),
     ("POST", "/jobs", JOB),
+    ("POST", "/jobs", REEVALUATE),
     ("POST", "/jobs/missing/cancel", None),
 ]
+STEPS = ["fetch", "judge", "sql", "chart", "save"]
 
 
 @pytest.fixture(autouse=True)
@@ -262,6 +265,8 @@ def test_read_without_version_and_with_version(client, session_factory, values):
     assert body["settings"]["version"] == 56
     assert body["settings"]["created_by"] == "Creator 54"
     assert [v["version"] for v in body["versions"]] == list(range(56, 6, -1))
+    # Even the oldest visible version is compared to its predecessor outside the window.
+    assert all(v["changed_sections"] == [] for v in body["versions"])
     assert len(body["jobs"]) == 20
     assert [j["requested_by"] for j in body["jobs"]] == [
         f"Creator {i}" for i in range(54, 34, -1)
@@ -274,6 +279,30 @@ def test_read_without_version_and_with_version(client, session_factory, values):
     assert (
         client.get(BASE, headers=ADMIN, params={"source": "missing"}).status_code == 404
     )
+
+
+def test_read_version_changes_are_section_names_only(client, session_factory, values):
+    assert save(client, values, secrets=SECRETS).status_code == 201
+    values["models"]["judge_a"] = "other-judge"
+    values["evaluation"]["parallel_turns"] = 3
+    assert save(client, values, note="Two sections changed").status_code == 201
+    assert save(client, values, secrets=SECRETS, note="Same secrets").status_code == 201
+    body = read(client)
+    assert [row["changed_sections"] for row in body["versions"]] == [
+        [],
+        ["evaluation", "models"],
+        list(live_worker_settings.SETTINGS_SECTIONS),
+    ]
+    assert_safe(body)
+    for row in body["versions"]:
+        assert set(row) == {
+            "version",
+            "created_at",
+            "created_by",
+            "created_by_user_id",
+            "note",
+            "changed_sections",
+        }
 
 
 @pytest.mark.parametrize("jobs_limit", [1, 50, 200])
@@ -1009,6 +1038,7 @@ def test_viewer_is_403_on_every_write(client, session_factory):
     with session_factory() as db:
         headers = seed_member(db, ProjectRole.VIEWER)
     assert client.get(BASE, headers=headers).status_code == 200
+    assert client.get(BASE + "/activity", headers=headers).status_code == 200
     for method, path, body in WRITES:
         response = client.request(method, BASE + path, headers=headers, json=body)
         assert response.status_code == 403, response.text
@@ -1030,7 +1060,12 @@ def test_other_project_member_is_404(client, session_factory):
         db.add(Project(id="other", slug="other", name="Other", created_by_user_id="u"))
         db.flush()
         headers = seed_member(db, ProjectRole.MEMBER, "other")
-    for method, path, body in [("GET", "", None), ("GET", "/events", None), *WRITES]:
+    for method, path, body in [
+        ("GET", "", None),
+        ("GET", "/activity", None),
+        ("GET", "/events", None),
+        *WRITES,
+    ]:
         response = client.request(method, BASE + path, headers=headers, json=body)
         assert response.status_code == 404, response.text
 
@@ -1155,3 +1190,444 @@ def test_read_today_uses_source_day_and_selected_source(
         "failed": 2 if with_day else 0,
         "in_qym": 3,
     }
+
+
+def seed_turn(db, turn_id="trace-1", source_id="source"):
+    db.add(
+        LiveTurn(
+            source_id=source_id,
+            day=date(2026, 11, 3),
+            turn_id=turn_id,
+            turn_at=datetime(2026, 11, 3, 9),
+            status="completed",
+            question="Question",
+        )
+    )
+
+
+def slot(kind, **changes):
+    return {
+        "kind": kind,
+        "job_id": None,
+        "trace_id": None,
+        "step": None,
+        "step_index": None,
+        "step_count": 5,
+        "done": None,
+        "total": None,
+        "started_at": "2026-11-03T21:59:00.000001Z",
+        "reported_at": "2026-11-03T21:59:57.5Z",
+        **changes,
+    }
+
+
+def report(db, control, at=NOW, last_poll_at=None):
+    record_heartbeat(
+        db,
+        db.get(LiveSource, "source"),
+        at,
+        last_poll_at,
+        None,
+        {"control": control},
+        at,
+    )
+    db.commit()
+
+
+def activity(client, **params):
+    response = client.get(BASE + "/activity", headers=ADMIN, params=params)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_activity_before_any_report(client, session_factory):
+    assert activity(client) == {
+        "server_time": "2026-11-03T22:00:00Z",
+        "worker": {
+            "state": "waiting",
+            "reason": None,
+            "last_report_at": None,
+            "stale": True,
+            "last_poll_at": None,
+            "poll_interval_s": None,
+        },
+        "activity": None,
+        "job": None,
+    }
+
+
+def test_activity_passes_the_worker_report_through(client, session_factory):
+    job_slot = slot(
+        "backfill",
+        job_id="running-job",
+        trace_id="trace-1",
+        step="judge",
+        step_index=2,
+        done=7,
+        total=20,
+    )
+    live_slot = slot("live", done=0, total=2, step="fetch", step_index=1)
+    with session_factory() as db:
+        db.add(
+            LiveJob(
+                id="running-job",
+                source_id="source",
+                kind="backfill",
+                status="running",
+                params={"since_day": "2026-11-01", "until_day": "2026-11-02", "limit": 20},
+                progress={"evaluated": 7, "found": 20, "listing_stopped_early": True},
+                requested_by_user_id="u",
+                requested_at=NOW - timedelta(minutes=5),
+                updated_at=NOW - timedelta(seconds=30),
+            )
+        )
+        report(
+            db,
+            {
+                "state": "running",
+                "reason": "evaluating",
+                "running": {"evaluation": {"poll_interval_s": 30}},
+                "activity": {
+                    "steps": STEPS,
+                    # Unknown keys are dropped; positions follow the step name.
+                    "live": {**live_slot, "future_key": 1, "step_index": 4},
+                    "job": {**job_slot, "step_count": 9},
+                },
+            },
+            at=NOW - timedelta(seconds=3),
+            last_poll_at=NOW - timedelta(seconds=8),
+        )
+    assert activity(client) == {
+        "server_time": "2026-11-03T22:00:00Z",
+        "worker": {
+            "state": "running",
+            "reason": "evaluating",
+            "last_report_at": "2026-11-03T21:59:57Z",
+            "stale": False,
+            "last_poll_at": "2026-11-03T21:59:52Z",
+            "poll_interval_s": 30,
+        },
+        "activity": {"steps": STEPS, "live": live_slot, "job": job_slot},
+        "job": {
+            "id": "running-job",
+            "kind": "backfill",
+            "status": "running",
+            "trace_id": None,
+            "params": {"since_day": "2026-11-01", "until_day": "2026-11-02"},
+            "progress": {"evaluated": 7, "found": 20, "listing_stopped_early": True},
+            "requested_at": "2026-11-03T21:55:00Z",
+            "requested_by": "Owner",
+            "updated_at": "2026-11-03T21:59:30Z",
+        },
+    }
+    # The worker read keeps the same pass-through of the job's progress.
+    assert read(client)["jobs"][0]["progress"]["listing_stopped_early"] is True
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        "idle",
+        [],
+        {},
+        {"steps": [], "live": None, "job": None},
+        {"steps": ["fetch", "fetch"], "live": None, "job": None},
+        {"steps": ["fetch", "deploy"], "live": None, "job": None},
+        {"steps": [*STEPS, "fetch"], "live": None, "job": None},
+        {"steps": STEPS, "live": "evaluating", "job": None},
+        {"steps": STEPS, "live": slot("backfill"), "job": None},
+        {"steps": STEPS, "live": None, "job": slot("live")},
+        {"steps": STEPS, "live": None, "job": slot("backfill", step="deploy")},
+        {"steps": ["fetch"], "live": None, "job": slot("backfill", step="judge")},
+        {"steps": STEPS, "live": None, "job": slot("backfill", done=True)},
+        {"steps": STEPS, "live": None, "job": slot("backfill", total=-1)},
+        {"steps": STEPS, "live": None, "job": slot("backfill", done=1.5)},
+        {"steps": STEPS, "live": None, "job": slot("backfill", job_id=7)},
+        {"steps": STEPS, "live": None, "job": slot("backfill", job_id="j" * 65)},
+        {"steps": STEPS, "live": None, "job": slot("backfill", trace_id="t" * 201)},
+        {"steps": STEPS, "live": None, "job": slot("backfill", reported_at=None)},
+        {"steps": STEPS, "live": None, "job": slot("backfill", reported_at="soon")},
+        {"steps": STEPS, "live": None, "job": slot("backfill", started_at=5)},
+    ],
+)
+def test_activity_malformed_report_is_null(client, session_factory, malformed):
+    with session_factory() as db:
+        report(db, {"state": "restarting", "reason": 5, "activity": malformed})
+    body = activity(client)
+    assert body["activity"] is None
+    assert body["worker"]["state"] == "waiting"
+    assert body["worker"]["reason"] is None
+    assert body["worker"]["stale"] is False
+
+
+def test_activity_old_worker_and_stale_report(client, session_factory):
+    with session_factory() as db:
+        source = db.get(LiveSource, "source")
+        source.worker = {"poll_interval_s": 60}
+        report(db, {"state": "paused"}, at=NOW - timedelta(seconds=301))
+    body = activity(client)
+    assert body["activity"] is None
+    assert body["worker"] == {
+        "state": "paused",
+        "reason": None,
+        "last_report_at": "2026-11-03T21:54:59Z",
+        "stale": True,
+        "last_poll_at": None,
+        "poll_interval_s": 60,
+    }
+    with session_factory() as db:
+        # A report that stopped keeps its last activity; only its age says so.
+        report(
+            db,
+            {"activity": {"steps": STEPS, "live": slot("live"), "job": None}},
+            at=NOW - timedelta(seconds=301),
+        )
+    body = activity(client)
+    assert body["worker"]["stale"] is True
+    assert body["activity"] == {"steps": STEPS, "live": slot("live"), "job": None}
+
+
+def test_activity_job_is_the_named_then_running_then_oldest_queued(
+    client, session_factory
+):
+    with session_factory() as db:
+        seed_turn(db)
+        for job_id, kind, status, minutes, params in (
+            ("queued-old", "backfill", "queued", 30, {}),
+            ("queued-new", "reevaluate", "queued", 10, {"trace_ids": ["trace-1"]}),
+            ("finished", "backfill", "done", 40, {}),
+        ):
+            db.add(
+                LiveJob(
+                    id=job_id,
+                    source_id="source",
+                    kind=kind,
+                    status=status,
+                    params=params,
+                    requested_at=NOW - timedelta(minutes=minutes),
+                    updated_at=NOW - timedelta(minutes=minutes),
+                )
+            )
+        db.commit()
+    assert activity(client)["job"] == {
+        "id": "queued-old",
+        "kind": "backfill",
+        "status": "queued",
+        "trace_id": None,
+        "params": {},
+        "progress": {},
+        "requested_at": "2026-11-03T21:30:00Z",
+        "requested_by": None,
+        "updated_at": "2026-11-03T21:30:00Z",
+    }
+    with session_factory() as db:
+        db.add(
+            LiveJob(
+                id="running-preview",
+                source_id="source",
+                kind="backfill_preview",
+                status="running",
+                requested_at=NOW - timedelta(minutes=5),
+            )
+        )
+        db.commit()
+    assert activity(client)["job"]["id"] == "running-preview"
+    with session_factory() as db:
+        report(
+            db,
+            {
+                "activity": {
+                    "steps": STEPS,
+                    "live": None,
+                    "job": slot("reevaluate", job_id="queued-new", trace_id="trace-1"),
+                }
+            },
+        )
+    job = activity(client)["job"]
+    assert (job["id"], job["kind"], job["trace_id"]) == (
+        "queued-new",
+        "reevaluate",
+        "trace-1",
+    )
+    with session_factory() as db:
+        # A job the worker names but qym no longer runs does not win.
+        db.get(LiveJob, "queued-new").status = "done"
+        db.commit()
+    assert activity(client)["job"]["id"] == "running-preview"
+
+
+def test_activity_selected_source(client, session_factory):
+    with session_factory() as db:
+        db.add(
+            LiveSource(
+                id="second",
+                project_id="p",
+                key="second",
+                name="Second",
+                environment="test",
+                is_active=False,
+                last_heartbeat_at=NOW - timedelta(seconds=1),
+                worker={"control": {"state": "paused"}},
+            )
+        )
+        db.commit()
+    assert activity(client, source="second")["worker"]["state"] == "paused"
+    assert activity(client, source="worker")["worker"]["state"] == "waiting"
+    response = client.get(BASE + "/activity", headers=ADMIN, params={"source": "none"})
+    assert response.status_code == 404
+
+
+def test_reevaluate_creates_one_job_per_source(client, session_factory):
+    with session_factory() as db:
+        seed_turn(db)
+        db.add(
+            LiveSource(
+                id="second",
+                project_id="p",
+                key="second",
+                name="Second",
+                environment="test",
+                is_active=False,
+            )
+        )
+        db.flush()
+        seed_turn(db, "trace-2")
+        seed_turn(db, "second-trace", source_id="second")
+        db.commit()
+    response = client.post(BASE + "/jobs", headers=ADMIN, json=REEVALUATE)
+    assert response.status_code == 201, response.text
+    job = response.json()
+    assert job == {
+        "id": job["id"],
+        "kind": "reevaluate",
+        "params": {"trace_ids": ["trace-1"], "redo": ["all"], "limit": 1},
+        "status": "queued",
+        "progress": {},
+        "error": None,
+        "requested_by": "Owner",
+        "requested_by_user_id": "u",
+        "requested_at": "2026-11-03T22:00:00Z",
+        "updated_at": "2026-11-03T22:00:00Z",
+        "started_at": None,
+        "finished_at": None,
+        "cancel_requested": False,
+    }
+    assert read(client)["jobs"][0] == job
+    with session_factory() as db:
+        row = db.query(AuditLog).filter_by(action="live.worker.job").one()
+        assert row.after == job["params"]
+    for trace_id in ("trace-1", "trace-2"):
+        duplicate = client.post(
+            BASE + "/jobs", headers=ADMIN, json={**REEVALUATE, "trace_id": trace_id}
+        )
+        assert duplicate.status_code == 409, duplicate.text
+        assert (
+            duplicate.json()["detail"] == "A re-evaluation is already queued or running"
+        )
+        assert duplicate.json()["error"]["code"] == "conflict"
+    # Other kinds and other sources keep their own queue.
+    assert client.post(BASE + "/jobs", headers=ADMIN, json=JOB).status_code == 201
+    other = client.post(
+        BASE + "/jobs?source=second",
+        headers=ADMIN,
+        json={**REEVALUATE, "trace_id": "second-trace"},
+    )
+    assert other.status_code == 201, other.text
+    cancelled = client.post(BASE + f"/jobs/{job['id']}/cancel", headers=ADMIN)
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["status"] == "cancelled"
+    again = client.post(
+        BASE + "/jobs", headers=ADMIN, json={**REEVALUATE, "trace_id": "trace-2"}
+    )
+    assert again.status_code == 201, again.text
+    assert again.json()["params"]["trace_ids"] == ["trace-2"]
+    with session_factory() as db:
+        db.get(LiveJob, again.json()["id"]).status = "running"
+        db.commit()
+    running = client.post(BASE + "/jobs", headers=ADMIN, json=REEVALUATE)
+    assert running.status_code == 409
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"kind": "reevaluate"},
+        {"kind": "reevaluate", "trace_id": None},
+        {"kind": "reevaluate", "trace_id": ""},
+        {"kind": "reevaluate", "trace_id": "   "},
+        {"kind": "reevaluate", "trace_id": 7},
+        {"kind": "reevaluate", "trace_id": ["trace-1"]},
+        {"kind": "reevaluate", "trace_id": "t" * 201},
+    ],
+)
+def test_reevaluate_invalid_trace_id_is_422(client, session_factory, body):
+    with session_factory() as db:
+        seed_turn(db)
+        db.commit()
+    response = client.post(BASE + "/jobs", headers=ADMIN, json=body)
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "validation_error"
+    assert response.json()["detail"][0]["loc"] == ["body", "trace_id"]
+    with session_factory() as db:
+        assert db.query(LiveJob).count() == 0
+
+
+def test_job_body_keeps_its_field_paths(client):
+    response = client.post(
+        BASE + "/jobs", headers=ADMIN, json={"kind": "backfill", "limit": "many"}
+    )
+    assert response.status_code == 422, response.text
+    assert sorted(tuple(error["loc"]) for error in response.json()["detail"]) == [
+        ("body", "limit"),
+        ("body", "since_day"),
+        ("body", "until_day"),
+    ]
+    for body in ({"kind": "restart"}, {}, []):
+        response = client.post(BASE + "/jobs", headers=ADMIN, json=body)
+        assert response.status_code == 422, response.text
+
+
+def test_reevaluate_unknown_turn_is_404(client, session_factory):
+    with session_factory() as db:
+        db.add(
+            LiveSource(
+                id="second",
+                project_id="p",
+                key="second",
+                name="Second",
+                environment="test",
+                is_active=False,
+            )
+        )
+        db.flush()
+        seed_turn(db, "second-trace", source_id="second")
+        db.commit()
+    for trace_id in ("trace-1", "second-trace"):
+        response = client.post(
+            BASE + "/jobs", headers=ADMIN, json={**REEVALUATE, "trace_id": trace_id}
+        )
+        assert response.status_code == 404, response.text
+        assert response.json()["detail"] == "turn not found"
+    with session_factory() as db:
+        assert db.query(LiveJob).count() == 0
+        assert db.query(AuditLog).filter_by(action="live.worker.job").count() == 0
+
+
+def test_reevaluate_duplicate_insert_is_409(client, session_factory, monkeypatch):
+    with session_factory() as db:
+        seed_turn(db)
+        db.add(LiveJob(source_id="source", kind="reevaluate", status="queued"))
+        db.commit()
+    original_first = Query.first
+
+    def first(query):
+        if query.column_descriptions[0]["expr"] is LiveJob.id:
+            return None
+        return original_first(query)
+
+    monkeypatch.setattr(Query, "first", first)
+    response = client.post(BASE + "/jobs", headers=ADMIN, json=REEVALUATE)
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == "A re-evaluation is already queued or running"
+    with session_factory() as db:
+        assert db.query(LiveJob).count() == 1

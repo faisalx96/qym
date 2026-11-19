@@ -302,6 +302,21 @@ tr:focus-within .idCopy,
   font-variant-numeric: tabular-nums;
 }
 
+.progress[data-count-format='words'] {
+  display: flex;
+  flex-wrap: wrap;
+  inline-size: 100%;
+  font-family: var(--font-sans);
+}
+
+.progress[data-count-format='words'] .track {
+  flex: 1 1 48px;
+}
+
+.progress[data-count-format='words'] > span:last-child {
+  white-space: nowrap;
+}
+
 .num {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;

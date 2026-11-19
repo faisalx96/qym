@@ -2373,6 +2373,53 @@ class LiveChartImage(Base):
     )
 
 
+class LiveChartSnapshot(Base):
+    """The drawn chart of a live turn as text; the page redraws it in a locked frame."""
+
+    __tablename__ = "live_chart_snapshots"
+
+    id: Mapped[int] = mapped_column(BIG_ID, primary_key=True, autoincrement=True)
+    turn_pk: Mapped[int] = mapped_column(BIG_ID, ForeignKey("live_turns.id", ondelete="CASCADE"), index=True)
+    ref: Mapped[str] = mapped_column(String(100))
+    # zlib-compressed UTF-8 markup; html_size is its size before compression, byte_size as stored.
+    html: Mapped[bytes] = mapped_column(LargeBinary)
+    html_size: Mapped[int] = mapped_column(Integer)
+    byte_size: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    style_sha256: Mapped[str] = mapped_column(String(64))
+    viewport_width: Mapped[int] = mapped_column(Integer)
+    viewport_height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    box_x: Mapped[int] = mapped_column(Integer)
+    box_y: Mapped[int] = mapped_column(Integer)
+    box_width: Mapped[int] = mapped_column(Integer)
+    box_height: Mapped[int] = mapped_column(Integer)
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("turn_pk", "ref", name="uq_live_chart_snapshot"),
+        Index("ix_live_chart_snapshots_style_sha256", "style_sha256"),
+    )
+
+
+class LiveChartStyle(Base):
+    """A stylesheet that chart snapshots of one source refer to by content hash."""
+
+    __tablename__ = "live_chart_styles"
+
+    id: Mapped[int] = mapped_column(BIG_ID, primary_key=True, autoincrement=True)
+    source_id: Mapped[str] = mapped_column(ForeignKey("live_sources.id", ondelete="CASCADE"))
+    sha256: Mapped[str] = mapped_column(String(64))
+    # zlib-compressed UTF-8 stylesheet; css_size is its size before compression, byte_size as stored.
+    css: Mapped[bytes] = mapped_column(LargeBinary)
+    css_size: Mapped[int] = mapped_column(Integer)
+    byte_size: Mapped[int] = mapped_column(Integer)
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("source_id", "sha256", name="uq_live_chart_style"),
+    )
+
+
 class LiveCanaryResult(Base):
     __tablename__ = "live_canary_results"
 

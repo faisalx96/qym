@@ -161,6 +161,26 @@ a.button[data-variant='danger']:hover:not([data-disabled]) {
   background: color-mix(in srgb, var(--error) var(--tint-strong), transparent);
 }
 
+/* Worker error disclosure (owner review, Nov 16): a small text link directly below the raw text. */
+.button[data-variant='text'] {
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  color: var(--accent-primary);
+  background: transparent;
+  box-shadow: none;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.button[data-variant='text'][data-hovered],
+.button[data-variant='text'][data-pressed],
+a.button[data-variant='text']:hover:not([data-disabled]) {
+  color: var(--accent-primary-hover);
+  background: transparent;
+  box-shadow: none;
+}
+
 /* Disabled reads as inert but stays legible: muted text (6:1) in every variant, instead of fading the variant's own fill
    (a faded accent fill with void text fell below 3:1 against the ground). Round 10: the same flat shape as a resting
    button at half its fill and no outline, so a locked button reads as the button switched off; an outline made it look

@@ -172,6 +172,8 @@ export interface FooterProps {
   /** "Filtered from 423 runs" at the far left, while a search or filter narrows the list (D-10). */
   filterNote?: string;
   pagination?: PaginationProps;
+  /** Spread the pagination summary and controls to the edges; centred by default. */
+  layout?: 'center' | 'spread';
   /** "Last updated 16:30:12" and similar. */
   trailing?: ReactNode;
   /** A control centred in the footer (the 'Show N more' button, docs 3.4). Shown only when there is no pagination. */
@@ -181,6 +183,7 @@ export interface FooterProps {
 export function Footer({
   filterNote,
   pagination,
+  layout = 'center',
   center,
   trailing,
   testId,
@@ -191,6 +194,7 @@ export function Footer({
     <footer
       className={styles.footer}
       data-dt-footer=""
+      data-layout={layout}
       data-testid={testId}
       aria-label={ariaLabel}
       data-center={center && !pagination ? '' : undefined}
@@ -200,7 +204,10 @@ export function Footer({
         {selectedCount > 0 ? <span className={styles.count}>{selectedCount} selected</span> : null}
       </div>
       {pagination ? (
-        <Pagination {...pagination} />
+        <Pagination
+          {...pagination}
+          className={[styles.footerPagination, pagination.className].filter(Boolean).join(' ')}
+        />
       ) : center ? (
         <div className={styles.footerCenter}>{center}</div>
       ) : (

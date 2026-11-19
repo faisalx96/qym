@@ -25,6 +25,8 @@ from qym_platform.db.models import (
     DatasetVersionChange,
     LiveCanaryResult,
     LiveChartImage,
+    LiveChartSnapshot,
+    LiveChartStyle,
     LiveDay,
     LiveJob,
     LiveMetricSpec,
@@ -1894,6 +1896,9 @@ def _delete_project_rows(db: Session, project_id: str) -> None:
         db.query(LiveChartImage).filter(LiveChartImage.turn_pk.in_(ids)).delete(
             synchronize_session=False
         )
+        db.query(LiveChartSnapshot).filter(LiveChartSnapshot.turn_pk.in_(ids)).delete(
+            synchronize_session=False
+        )
         db.query(LiveTurnScore).filter(LiveTurnScore.turn_pk.in_(ids)).delete(
             synchronize_session=False
         )
@@ -1907,6 +1912,9 @@ def _delete_project_rows(db: Session, project_id: str) -> None:
         synchronize_session=False
     )
     db.query(LiveMetricSpec).filter(LiveMetricSpec.source_id.in_(live_source_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(LiveChartStyle).filter(LiveChartStyle.source_id.in_(live_source_ids)).delete(
         synchronize_session=False
     )
     for model in (LiveJob, LiveWorkerEvent, LiveWorkerSettings):

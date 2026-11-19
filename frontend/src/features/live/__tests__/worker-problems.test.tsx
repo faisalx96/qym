@@ -33,7 +33,7 @@ function paginatedProblems(
   staleTime = 0,
 ) {
   const requests: URLSearchParams[] = [];
-  const events = Array.from({ length: total ?? 10 }, (_, i) => ({
+  const events = Array.from({ length: total ?? 5 }, (_, i) => ({
     ...liveWorkerEvents[0]!,
     id: i + 1,
     component: 'gateway',
@@ -53,8 +53,8 @@ function paginatedProblems(
             respond
               ? await respond(url.searchParams)
               : {
-                  events: events.slice((page - 1) * 10, page * 10),
-                  ...(total === undefined ? {} : { total, page, limit: 10 }),
+                  events: events.slice((page - 1) * 5, page * 5),
+                  ...(total === undefined ? {} : { total, page, limit: 5 }),
                 },
           ),
         );
@@ -80,24 +80,22 @@ function paginatedProblems(
   return { ...view, requests, client };
 }
 
-it.each([0, 10, 11, undefined])(
-  'requests ten problems and only paginates a known total above ten: %s',
-  async (total) => {
-    const { requests } = paginatedProblems(total);
-    await screen.findByRole('heading', { name: 'Problems' });
-    if (total === 0) await screen.findByText('No problems reported by the worker');
-    else await screen.findByText('Problem 1');
-    expect(requests).toHaveLength(1);
-    expect(requests[0]!.get('limit')).toBe('10');
-    expect(requests[0]!.get('page')).toBe('1');
-    if (total !== undefined && total > 10) {
-      expect(await screen.findByRole('navigation', { name: 'problems pagination' })).toBeVisible();
-      expect(screen.getByText('1–10 of 11 problems')).toBeVisible();
-    } else {
-      expect(screen.queryByRole('navigation', { name: 'problems pagination' })).toBeNull();
-    }
-  },
-);
+it.each([0, 5, 6, undefined])('requests five problems and paginates every known total: %s', async (total) => {
+  const { requests } = paginatedProblems(total);
+  await screen.findByRole('heading', { name: 'Problems' });
+  if (total === 0) await screen.findByText('No problems reported by the worker');
+  else await screen.findByText('Problem 1');
+  expect(requests).toHaveLength(1);
+  expect(requests[0]!.get('limit')).toBe('5');
+  expect(requests[0]!.get('page')).toBe('1');
+  if (total !== undefined) {
+    expect(await screen.findByRole('navigation', { name: 'problems pagination' })).toBeVisible();
+    if (total === 6) expect(screen.getByText('Showing 1 to 5 of 6 problems')).toBeVisible();
+    expect(document.querySelectorAll('[data-worker-event]').length).toBeLessThanOrEqual(5);
+  } else {
+    expect(screen.queryByRole('navigation', { name: 'problems pagination' })).toBeNull();
+  }
+});
 
 it.each(['Gateway', 'Errors'])(
   'requests the next page and resets to page one on the %s filter',
@@ -105,10 +103,14 @@ it.each(['Gateway', 'Errors'])(
     const { requests } = paginatedProblems(25);
     const user = userEvent.setup();
     await screen.findByText('Problem 1');
-    await user.click(screen.getByRole('button', { name: 'Next page' }));
-    await screen.findByText('Problem 11');
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'problems pagination' })).getByRole('button', {
+        name: 'Next page',
+      }),
+    );
+    await screen.findByText('Problem 6');
     expect(requests.at(-1)!.get('page')).toBe('2');
-    expect(screen.getByText('11–20 of 25 problems')).toBeVisible();
+    expect(screen.getByText('Showing 6 to 10 of 25 problems')).toBeVisible();
     await user.click(
       screen.getByRole('button', {
         name: `${filter === 'Errors' || filter === 'Warnings' ? 'Level' : 'Component'} filter`,
@@ -130,15 +132,19 @@ it('keeps the previous problems visible while the next page loads', async () => 
     finish = resolve;
   });
   const { requests } = paginatedProblems(20, (params) =>
-    params.get('page') === '2' ? pending : { events: liveWorkerEvents, total: 20, page: 1, limit: 10 },
+    params.get('page') === '2' ? pending : { events: liveWorkerEvents, total: 20, page: 1, limit: 5 },
   );
   const user = userEvent.setup();
   await screen.findByRole('navigation', { name: 'problems pagination' });
-  await user.click(screen.getByRole('button', { name: 'Next page' }));
+  await user.click(
+    within(screen.getByRole('navigation', { name: 'problems pagination' })).getByRole('button', {
+      name: 'Next page',
+    }),
+  );
   expect(requests.at(-1)!.get('page')).toBe('2');
-  expect(document.querySelectorAll('[data-worker-event]')).toHaveLength(liveWorkerEvents.length);
+  expect(document.querySelectorAll('[data-worker-event]')).toHaveLength(5);
   expect(screen.queryByText('Loading worker problems')).toBeNull();
-  finish({ events: [{ ...liveWorkerEvents[0]!, message: 'Older problem' }], total: 20, page: 2, limit: 10 });
+  finish({ events: [{ ...liveWorkerEvents[0]!, message: 'Older problem' }], total: 20, page: 2, limit: 5 });
   expect(await screen.findByText('Older problem')).toBeVisible();
 });
 
@@ -156,12 +162,16 @@ it('sends all selected components before paging and keeps the filtered total', a
       ],
       total: selected.length === 2 ? 12 : 25,
       page,
-      limit: 10,
+      limit: 5,
     };
   });
   const user = userEvent.setup();
   await screen.findByText('Selection all page 1');
-  await user.click(screen.getByRole('button', { name: 'Next page' }));
+  await user.click(
+    within(screen.getByRole('navigation', { name: 'problems pagination' })).getByRole('button', {
+      name: 'Next page',
+    }),
+  );
   await screen.findByText('Selection all page 2');
   await user.click(screen.getByRole('button', { name: 'Component filter' }));
   await user.click(screen.getByRole('button', { name: 'Only Gateway' }));
@@ -171,11 +181,15 @@ it('sends all selected components before paging and keeps the filtered total', a
   await screen.findByText('Selection gateway,dataiku page 1');
   expect(requests.at(-1)!.getAll('component')).toEqual(['gateway', 'dataiku']);
   expect(requests.at(-1)!.get('page')).toBe('1');
-  expect(screen.getByText('1–10 of 12 problems')).toBeVisible();
-  await user.click(screen.getByRole('button', { name: 'Next page' }));
+  expect(screen.getByText('Showing 1 to 5 of 12 problems')).toBeVisible();
+  await user.click(
+    within(screen.getByRole('navigation', { name: 'problems pagination' })).getByRole('button', {
+      name: 'Next page',
+    }),
+  );
   await screen.findByText('Selection gateway,dataiku page 2');
   expect(requests.at(-1)!.getAll('component')).toEqual(['gateway', 'dataiku']);
-  expect(screen.getByText('11–12 of 12 problems')).toBeVisible();
+  expect(screen.getByText('Showing 6 to 10 of 12 problems')).toBeVisible();
 });
 
 it('serializes multiple levels and components as repeated query parameters', async () => {
@@ -195,7 +209,7 @@ it('serializes multiple levels and components as repeated query parameters', asy
         component: ['gateway', 'dataiku'],
         level: ['error', 'warning'],
         page: 2,
-        limit: 10,
+        limit: 5,
       }),
     { wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> },
   );
@@ -206,18 +220,22 @@ it('serializes multiple levels and components as repeated query parameters', asy
 });
 
 it('moves an empty page to the last existing page after problems age out', async () => {
-  const { requests } = paginatedProblems(25, (params) => {
+  const { requests } = paginatedProblems(13, (params) => {
     const page = Number(params.get('page'));
     return {
       events: page === 3 ? [] : [{ ...liveWorkerEvents[0]!, message: `Page ${page} problem` }],
-      total: page === 1 ? 25 : 12,
+      total: page === 1 ? 13 : 7,
       page,
-      limit: 10,
+      limit: 5,
     };
   });
   const user = userEvent.setup();
   await screen.findByText('Page 1 problem');
-  await user.click(screen.getByRole('button', { name: 'Last page' }));
+  await user.click(
+    within(screen.getByRole('navigation', { name: 'problems pagination' })).getByRole('button', {
+      name: 'Last page',
+    }),
+  );
   expect(await screen.findByText('Page 2 problem')).toBeVisible();
   expect(requests.map((params) => params.get('page'))).toEqual(['1', '3', '2']);
 });
@@ -229,40 +247,48 @@ it.each([0, Infinity])('can revisit a corrected empty page with staleTime %s', a
     finish = resolve;
   });
   const { client, requests } = paginatedProblems(
-    25,
+    13,
     (params) => {
       const page = Number(params.get('page'));
       if (grown && page === 3) return pending;
       return {
         events: page === 3 ? [] : [{ ...liveWorkerEvents[0]!, message: `Page ${page} problem` }],
-        total: grown || page === 1 ? 25 : 12,
+        total: grown || page === 1 ? 13 : 7,
         page,
-        limit: 10,
+        limit: 5,
       };
     },
     staleTime,
   );
   const user = userEvent.setup();
   await screen.findByText('Page 1 problem');
-  await user.click(screen.getByRole('button', { name: 'Last page' }));
+  await user.click(
+    within(screen.getByRole('navigation', { name: 'problems pagination' })).getByRole('button', {
+      name: 'Last page',
+    }),
+  );
   await screen.findByText('Page 2 problem');
-  expect(screen.getByText('11–12 of 12 problems')).toBeVisible();
+  expect(screen.getByText('Showing 6 to 7 of 7 problems')).toBeVisible();
   grown = true;
   await act(() =>
     client.refetchQueries({ queryKey: ['project', 'demo', 'live', 'worker-events'], type: 'active' }),
   );
-  expect(await screen.findByText('11–20 of 25 problems')).toBeVisible();
-  await user.click(screen.getByRole('button', { name: 'Next page' }));
-  expect(screen.getByText('21–25 of 25 problems')).toBeVisible();
+  expect(await screen.findByText('Showing 6 to 10 of 13 problems')).toBeVisible();
+  await user.click(
+    within(screen.getByRole('navigation', { name: 'problems pagination' })).getByRole('button', {
+      name: 'Next page',
+    }),
+  );
+  expect(screen.getByText('Showing 11 to 13 of 13 problems')).toBeVisible();
   expect(requests.at(-1)!.get('page')).toBe('3');
   finish({
     events: [{ ...liveWorkerEvents[0]!, message: 'New page 3 problem' }],
-    total: 25,
+    total: 13,
     page: 3,
-    limit: 10,
+    limit: 5,
   });
   expect(await screen.findByText('New page 3 problem')).toBeVisible();
-  expect(screen.getByText('21–25 of 25 problems')).toBeVisible();
+  expect(screen.getByText('Showing 11 to 13 of 13 problems')).toBeVisible();
 });
 
 it.each(['Warnings', 'Dataiku'])('shows loading while the changed %s filter is pending', async (filter) => {
@@ -279,7 +305,7 @@ it.each(['Warnings', 'Dataiku'])('shows loading while the changed %s filter is p
           ],
           total: 1,
           page: 1,
-          limit: 10,
+          limit: 5,
         },
   );
   const user = userEvent.setup();
@@ -298,7 +324,7 @@ it.each(['Warnings', 'Dataiku'])('shows loading while the changed %s filter is p
     events: [{ ...liveWorkerEvents[0]!, level: 'warning', component: 'dataiku', message: 'Warning problem' }],
     total: 1,
     page: 1,
-    limit: 10,
+    limit: 5,
   });
   expect(await screen.findByText('Warning problem')).toBeVisible();
   expect(screen.queryByLabelText('Loading worker problems')).toBeNull();
@@ -329,14 +355,14 @@ function filteredProblems() {
         (!components.length || components.includes(event.component)) &&
         (!levels.length || levels.includes(event.level)),
     );
-    return { events, total: events.length, page: 1, limit: 10 };
+    return { events, total: events.length, page: 1, limit: 5 };
   });
   return () => container.querySelectorAll('[data-worker-event]');
 }
 it('renders grouped counts and filters by component', async () => {
   const rows = filteredProblems();
-  await waitFor(() => expect(rows()).toHaveLength(6));
-  expect(screen.getByText('×14')).toBeVisible();
+  await waitFor(() => expect(rows()).toHaveLength(5));
+  expect(screen.getByText('14 times')).toBeVisible();
   expect(screen.getAllByText('in 12 min')[0]).toBeVisible();
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: 'Component filter' }));
@@ -345,7 +371,7 @@ it('renders grouped counts and filters by component', async () => {
 });
 it('filters by level and can clear the filter', async () => {
   const rows = filteredProblems();
-  await waitFor(() => expect(rows()).toHaveLength(6));
+  await waitFor(() => expect(rows()).toHaveLength(5));
   const errors = liveWorkerEvents.filter((event) => event.level === 'error').length;
   expect(errors).toBeGreaterThan(0);
   expect(errors).toBeLessThan(6);
@@ -355,19 +381,19 @@ it('filters by level and can clear the filter', async () => {
   await waitFor(() => expect(rows()).toHaveLength(errors));
   await user.keyboard('{Escape}');
   await user.click(screen.getByRole('button', { name: 'Clear 1 filter' }));
-  await waitFor(() => expect(rows()).toHaveLength(6));
+  await waitFor(() => expect(rows()).toHaveLength(5));
   expect(screen.queryByTestId('filters-clear')).toBeNull();
 });
 it('shows the empty state for a filter with no problems and clears it', async () => {
   const rows = filteredProblems();
-  await waitFor(() => expect(rows()).toHaveLength(6));
+  await waitFor(() => expect(rows()).toHaveLength(5));
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: 'Component filter' }));
   await user.click(screen.getByRole('button', { name: 'Only Settings' }));
   await user.keyboard('{Escape}');
   expect(await screen.findByText('No problems reported by the worker')).toBeVisible();
   await user.click(screen.getByRole('button', { name: 'Clear 1 filter' }));
-  await waitFor(() => expect(rows()).toHaveLength(6));
+  await waitFor(() => expect(rows()).toHaveLength(5));
 });
 it('copies the full problem report including code and message', async () => {
   const user = userEvent.setup();
@@ -576,4 +602,40 @@ it('keeps main diagnostic report timestamps unchanged for a source with a differ
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Time (UTC): 2026-11-09T22:30:12')),
   );
   expect(writeText.mock.calls[0]![0]).not.toContain('Time (Riyadh)');
+});
+
+it('keeps short details with their keys on the code line and copy in the final column', () => {
+  const event = { ...liveWorkerEvents[0]!, details: { model: 'judge-a', timeout_s: 60, status: 503 } };
+  render(<Problems events={[event]} />);
+  const summary = screen.getByText(`${event.code} · model: judge-a · timeout_s: 60 · status: 503`);
+  expect(summary).toHaveAttribute('data-mono');
+  expect(screen.queryByRole('button', { name: 'Show full error' })).toBeNull();
+  const copyCell = screen.getByRole('button', { name: 'Copy report' }).closest('td');
+  expect(copyCell).toHaveAttribute('data-col', 'actions');
+  expect(copyCell?.nextElementSibling).toBeNull();
+});
+
+it('expands a 600-character raw error without truncating the stored detail and copies it', async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal('isSecureContext', true);
+  const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+  const raw = 'خطأ'.repeat(200);
+  const event = { ...liveWorkerEvents[0]!, details: { model: 'judge-a', error: raw } };
+  render(<Problems events={[event]} />);
+  const text = screen.getByText(`error: ${raw}`);
+  expect(text).toHaveAttribute('data-collapsed');
+  expect(text).toHaveAttribute('dir', 'rtl');
+  expect(text).toHaveAttribute('lang', 'ar');
+  expect(screen.getByText(`${event.code} · model: judge-a`)).toBeVisible();
+  const toggle = screen.getByRole('button', { name: 'Show full error' });
+  expect(toggle).toHaveAttribute('data-variant', 'text');
+  expect(text.nextElementSibling).toBe(toggle);
+  expect(toggle).toHaveAttribute('aria-controls', text.id);
+  await user.click(toggle);
+  expect(text).not.toHaveAttribute('data-collapsed');
+  expect(screen.getByRole('button', { name: 'Show less' })).toHaveAttribute('aria-expanded', 'true');
+  await user.click(screen.getByRole('button', { name: 'Copy report' }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining(raw)));
+  await user.click(screen.getByRole('button', { name: 'Show less' }));
+  expect(text).toHaveAttribute('data-collapsed');
 });

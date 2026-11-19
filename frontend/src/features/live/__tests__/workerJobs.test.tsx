@@ -1,4 +1,4 @@
-import { formatHeaderDate } from '@/lib/dates';
+import { formatHeaderDate, formatTableDate } from '@/lib/dates';
 import { act, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -9,6 +9,7 @@ import {
   useLiveWorker,
   validateDateRange,
   workerDefaults,
+  type LiveJob,
 } from '@/api/liveWorker';
 import {
   liveWorkerRead,
@@ -33,13 +34,13 @@ it.each([
     ...liveWorkerRead,
     jobs: [{ ...liveWorkerRead.jobs[0]!, status, cancel_requested }],
   });
-  const table = await screen.findByRole('grid', { name: 'Worker jobs' });
+  const table = await screen.findByRole('treegrid', { name: 'Worker jobs' });
   const badge = within(table).getByText(label).closest('[data-shape]');
   expect(badge).toBeVisible();
   expect(badge).toHaveAttribute('data-tone', tone);
   if (status === 'running') {
     const button = within(table).getByRole('button', {
-      name: cancel_requested ? 'Cancel requested' : 'Cancel job',
+      name: cancel_requested ? 'Cancel requested' : 'Cancel',
     });
     if (cancel_requested) expect(button).toBeDisabled();
     else expect(button).toBeEnabled();
@@ -48,7 +49,7 @@ it.each([
 it.each([
   ['running', '2026-11-03T12:18:00Z', 'updated 2m ago', 'muted'],
   ['running', '2026-11-03T12:10:00Z', 'updated 10m ago', 'muted'],
-  ['running', '2026-11-03T12:09:59Z', 'no update for 10m ago', 'danger'],
+  ['running', '2026-11-03T12:09:59Z', 'no update for 10m', 'danger'],
   ['queued', '2026-11-03T12:00:00Z', 'updated 20m ago', 'muted'],
   ['done', '2026-11-03T12:00:00Z', 'updated 20m ago', 'muted'],
   ['failed', '2026-11-03T12:00:00Z', 'updated 20m ago', 'muted'],
@@ -58,10 +59,18 @@ it.each([
   vi.setSystemTime(new Date('2026-11-03T12:20:00Z'));
   setup({
     ...liveWorkerRead,
-    jobs: [{ ...liveWorkerRead.jobs[0]!, status, requested_at: '2026-11-03T11:20:00Z', updated_at }],
+    jobs: [
+      {
+        ...liveWorkerRead.jobs[0]!,
+        status,
+        started_at: '2026-11-03T11:20:00Z',
+        requested_at: '2026-11-03T11:20:00Z',
+        updated_at,
+      },
+    ],
   });
-  const table = await screen.findByRole('grid', { name: 'Worker jobs' });
-  const requested = within(table).getByText('1h ago');
+  const table = await screen.findByRole('treegrid', { name: 'Worker jobs' });
+  const requested = within(table).getByText(formatTableDate('2026-11-03T11:20:00Z'));
   const cell = requested.closest('td')!;
   const updated = within(cell).getByText(label);
   expect(updated).toBeVisible();
@@ -77,7 +86,7 @@ it('confirms cancelling a job and shows cancelling after the worker refresh', as
     return response(cancelled);
   });
   const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: 'Cancel job' }));
+  await user.click(await screen.findByRole('button', { name: 'Cancel' }));
   const dialog = screen.getByRole('dialog', { name: 'Cancel job?' });
   expect(writes(view.fetch)).toHaveLength(0);
   await user.click(within(dialog).getByRole('button', { name: 'Cancel job' }));
@@ -259,54 +268,107 @@ it('keeps errors for duplicate host and database field names in their own sectio
 });
 
 it.each([
-  [{}, '0 evaluated · 0 failed · 0 already evaluated · 0 turns in the range', undefined],
+  [{}, '0 of 0', undefined],
   [
     { evaluated: 4, found: 8, skipped_existing: 0, redone: 0, failed: 0, listed: 0 },
-    '4 evaluated · 0 failed · 0 already evaluated · 8 turns in the range',
+    '4 of 8',
     '0 traces listed',
   ],
   [
+    // Redone turns count as finished work in the bar: 4 new + 2 redone.
     { evaluated: 4, found: 10, skipped_existing: 3, redone: 2, failed: 1, listed: 20 },
-    '4 evaluated · 2 redone · 1 failed · 3 already evaluated · 10 turns in the range',
+    '6 of 10',
     '20 traces listed',
   ],
 ] as const)('explains progress counters for %j', async (progress, label, listed) => {
   setup({ ...liveWorkerRead, jobs: [{ ...liveWorkerRead.jobs[0]!, progress }] });
-  const table = await screen.findByRole('grid', { name: 'Worker jobs' });
+  const table = await screen.findByRole('treegrid', { name: 'Worker jobs' });
   expect(within(table).getByText(label)).toBeVisible();
-  if (listed) expect(within(table).getByText(listed)).toBeVisible();
+  expect(table.querySelector('tbody [data-col="progress"]')).toHaveTextContent(new RegExp(`^${label}$`));
+  expect(
+    within(table)
+      .getAllByRole('columnheader')
+      .map((node) => node.textContent),
+  ).toEqual([
+    'Kind',
+    'Days',
+    'Status',
+    'Progress',
+    'Evaluated',
+    'Failed',
+    'Already done',
+    'Started by',
+    'Started',
+    'Actions',
+  ]);
+  for (const key of ['evaluated', 'failed', 'skipped_existing'] as const) {
+    const cell = table.querySelector(`tbody [data-col="${key}"]`)!;
+    expect(cell).toHaveAttribute('data-align', 'end');
+    const count = key in progress ? (progress[key as keyof typeof progress] as number) : 0;
+    // The Evaluated column counts redone turns too.
+    const redone = key === 'evaluated' && 'redone' in progress ? (progress.redone as number) : 0;
+    expect(cell).toHaveTextContent(String(count + redone));
+  }
+  if (listed) expect(table.querySelector('tbody [data-col="requested_at"]')).toHaveTextContent(listed);
   else expect(within(table).queryByText(/traces listed/)).toBeNull();
 });
 it.each([
-  [['failed'], null],
-  [['failed', 'inconclusive'], 'redo inconclusive'],
-  [['all'], 'redo all'],
-] as const)('labels redo params %j', async (redo, label) => {
+  [undefined, 200, undefined],
+  [['failed'], 200, undefined],
+  [['failed', 'inconclusive'], 200, 'redo failed, inconclusive'],
+  [['all'], 200, 'redo all'],
+  [[], 200, 'redo none'],
+  [['failed'], 25, 'Limit 25'],
+  [[], 25, 'Limit 25 · redo none'],
+] as const)('puts non-default job options %j, %s in the kind title', async (redo, limit, title) => {
   const job = liveWorkerRead.jobs[0]!;
-  setup({ ...liveWorkerRead, jobs: [{ ...job, params: { ...job.params, redo: [...redo] } }] });
-  const table = await screen.findByRole('grid', { name: 'Worker jobs' });
-  if (label) expect(within(table).getByText(label)).toBeVisible();
-  expect(within(table).getByText(`Limit 200 · redo ${redo.join(', ')}`)).toBeVisible();
+  setup({
+    ...liveWorkerRead,
+    jobs: [{ ...job, params: { ...job.params, limit, redo: redo ? [...redo] : undefined } }],
+  });
+  const table = await screen.findByRole('treegrid', { name: 'Worker jobs' });
+  const kind = within(table).getByText('Backfill');
+  if (title) expect(kind).toHaveAttribute('title', title);
+  else expect(kind).not.toHaveAttribute('title');
+  expect(table.querySelector('tbody [data-col="kind"]')).toHaveTextContent(/^Backfill$/);
 });
-it('requests older jobs at 20, 50, 100 and 200 and stops at the maximum', async () => {
+it('paginates five jobs and loads older batches through 200', async () => {
   const jobs = Array.from({ length: 200 }, (_, i) => ({
     ...liveWorkerRead.jobs[0]!,
     id: `job-${i}`,
-    status: 'done' as const,
+    requested_by: `Owner ${i}`,
+    status: i === 0 || i === 199 ? ('failed' as const) : ('done' as const),
+    error: i === 0 || i === 199 ? `Job ${i} stopped after an upstream timeout.` : null,
   }));
   const { fetch } = setup({ ...liveWorkerRead, jobs });
   const user = userEvent.setup();
-  for (const limit of [20, 50, 100, 200]) {
-    expect(await screen.findByText(`Newest ${limit} jobs`)).toBeVisible();
+  await screen.findByText('Showing 1 to 5 of at least 20 jobs');
+  const pager = within(screen.getByRole('navigation', { name: 'jobs pagination' }));
+  for (const [limit, first] of [
+    [20, 1],
+    [50, 21],
+    [100, 51],
+    [200, 101],
+  ]) {
+    await screen.findByText(`Showing ${first} to ${first! + 4} of at least ${limit} jobs`);
+    const table = screen.getByRole('treegrid', { name: 'Worker jobs' });
+    expect(table.querySelectorAll('[data-row-key]')).toHaveLength(5);
+    expect(table.querySelectorAll('[data-detail-row]')).toHaveLength(first === 1 ? 1 : 0);
     expect(
       fetch.mock.calls.some(([input]) => {
         const url = new URL(input, 'http://localhost');
         return url.pathname.endsWith('/worker') && url.searchParams.get('jobs_limit') === String(limit);
       }),
     ).toBe(true);
-    if (limit < 200) await user.click(screen.getByRole('button', { name: 'Show older jobs' }));
+    if (limit! < 200) await user.click(pager.getByRole('button', { name: 'Last page' }));
   }
-  expect(screen.queryByRole('button', { name: 'Show older jobs' })).toBeNull();
+  await user.click(pager.getByRole('button', { name: 'Last page' }));
+  await screen.findByText('Showing 196 to 200 of at least 200 jobs');
+  expect(screen.getByText('Job 199 stopped after an upstream timeout.')).toBeVisible();
+  expect(pager.getByRole('button', { name: 'Next page' })).toBeDisabled();
+  await user.click(pager.getByRole('button', { name: 'Previous page' }));
+  expect(await screen.findByText('Owner 190')).toBeVisible();
+  expect(screen.queryByText('Job 199 stopped after an upstream timeout.')).not.toBeInTheDocument();
 });
 it.each([20, 50])('keeps the page and draft when loading jobs beyond %i fails', async (limit) => {
   const jobs = Array.from({ length: 100 }, (_, i) => ({
@@ -316,13 +378,14 @@ it.each([20, 50])('keeps the page and draft when loading jobs beyond %i fails', 
   }));
   const { fetch, client } = setup({ ...liveWorkerRead, jobs });
   const user = userEvent.setup();
-  await screen.findByText('Newest 20 jobs');
+  await screen.findByText('Showing 1 to 5 of at least 20 jobs');
+  const pager = within(screen.getByRole('navigation', { name: 'jobs pagination' }));
   if (limit === 50) {
-    await user.click(screen.getByRole('button', { name: 'Show older jobs' }));
-    await screen.findByText('Newest 50 jobs');
+    await user.click(pager.getByRole('button', { name: 'Last page' }));
+    await screen.findByText('Showing 21 to 25 of at least 50 jobs');
   }
   await user.type(screen.getByRole('textbox', { name: 'Note' }), 'Unsaved note');
-  const table = screen.getByRole('grid', { name: 'Worker jobs' });
+  const table = screen.getByRole('treegrid', { name: 'Worker jobs' });
   const original = fetch.getMockImplementation()!;
   fetch.mockImplementation((input, init) => {
     const url = new URL(input, 'http://localhost');
@@ -330,10 +393,14 @@ it.each([20, 50])('keeps the page and draft when loading jobs beyond %i fails', 
       return Promise.resolve(response({ detail: 'Older jobs unavailable' }, 500));
     return original(input, init);
   });
-  await user.click(screen.getByRole('button', { name: 'Show older jobs' }));
+  await user.click(pager.getByRole('button', { name: 'Last page' }));
   expect(await screen.findByText(/Couldn’t load older jobs/)).toBeVisible();
-  expect(screen.getByRole('grid', { name: 'Worker jobs' })).toBe(table);
-  expect(screen.getByText(`Newest ${limit} jobs`)).toBeVisible();
+  expect(screen.getByRole('treegrid', { name: 'Worker jobs' })).toBe(table);
+  expect(
+    screen.getByText(
+      limit === 20 ? 'Showing 1 to 5 of at least 20 jobs' : 'Showing 21 to 25 of at least 50 jobs',
+    ),
+  ).toBeVisible();
   expect(screen.getByRole('textbox', { name: 'Note' })).toHaveValue('Unsaved note');
   fetch.mockClear();
   await act(async () => {
@@ -346,11 +413,10 @@ it.each([20, 50])('keeps the page and draft when loading jobs beyond %i fails', 
       .map((url) => url.searchParams.get('jobs_limit')),
   ).toEqual([String(limit)]);
 });
-it('hides older jobs when fewer than the current limit are returned', async () => {
+it('has no jobs pager for an empty list', async () => {
   setup({ ...liveWorkerRead, jobs: [] });
   expect(await screen.findByText('No jobs yet')).toBeVisible();
-  expect(screen.queryByText(/Newest \d+ jobs/)).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Show older jobs' })).toBeNull();
+  expect(screen.queryByRole('navigation', { name: 'jobs pagination' })).toBeNull();
 });
 it.each(['running', 'done'] as const)('explains new backfill outcomes for %s', async (status) => {
   setup({
@@ -386,10 +452,10 @@ it.each(['running', 'done'] as const)('explains new backfill outcomes for %s', a
       },
     ],
   });
-  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  const table = within(await screen.findByRole('treegrid', { name: 'Worker jobs' }));
   expect(
     table.getByText(
-      '6 evaluated · 2 redone · 1 failed · 4 already evaluated · 30 turns in the range · 3 from an earlier attempt · 1 could not be fetched, will be retried by the next backfill',
+      '2 redone · 3 from an earlier attempt · 1 could not be fetched, will be retried by the next backfill',
     ),
   ).toBeVisible();
   expect(
@@ -429,7 +495,7 @@ it('hides empty breakdowns and zero rejection categories', async () => {
       },
     ],
   });
-  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  const table = within(await screen.findByRole('treegrid', { name: 'Worker jobs' }));
   expect(table.queryByText(/Of the evaluated/)).toBeNull();
   expect(
     table.queryByText(/Stopped at the limit|earlier attempt|could not be fetched|Covers turns/),
@@ -448,28 +514,63 @@ it('explains why a running job is waiting from progress', async () => {
       },
     ],
   });
-  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  const table = within(await screen.findByRole('treegrid', { name: 'Worker jobs' }));
   expect(table.getByText('Waiting: worker paused')).toBeVisible();
   expect(table.queryByText(/no update for/)).toBeNull();
 });
 it('shows Queued for an old worker without heartbeat waiting fields', async () => {
   setup({ ...liveWorkerRead, jobs: [{ ...liveWorkerRead.jobs[0]!, status: 'queued', progress: {} }] });
-  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  const table = within(await screen.findByRole('treegrid', { name: 'Worker jobs' }));
   expect(table.getAllByText('Queued').length).toBeGreaterThan(0);
 });
-it('shows the reason for cancelling an unresponsive worker job', async () => {
+it.each([
+  ['failed', 'Dataiku did not answer for 10 minutes; the job stopped after 46 of 91 turns.', false, 'auto'],
+  ['cancelled', 'توقف العامل عن الاستجابة وألغيت المهمة.', false, 'rtl'],
+  ['failed', 'upstream_error_'.repeat(60), true, 'auto'],
+  ['cancelled', 'توقف العامل عن الاستجابة وألغيت المهمة.', true, 'rtl'],
+] as const)('shows the job error under its row or card %#', async (status, error, cards, dir) => {
+  const matchMedia = window.matchMedia;
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    ...matchMedia(query),
+    matches: cards && query === '(max-width: 639px)',
+  }));
+  const job = liveWorkerRead.jobs[0]!;
   setup({
     ...liveWorkerRead,
     jobs: [
-      {
-        ...liveWorkerRead.jobs[0]!,
-        status: 'cancelled',
-        error: 'cancelled while the worker was not responding',
-      },
+      { ...job, id: 'job-error', status, error },
+      { ...job, id: 'failed-without-error', status: 'failed', error: null },
+      { ...job, id: 'cancelled-without-error', status: 'cancelled', error: '' },
+      { ...job, id: 'running-with-error', status: 'running', error: 'An earlier error while running' },
+      { ...job, id: 'done-with-error', status: 'done', error: 'An earlier error before completion' },
     ],
   });
-  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
-  expect(table.getByText('cancelled while the worker was not responding')).toBeVisible();
+  const table = await screen.findByRole(cards ? 'list' : 'treegrid', { name: 'Worker jobs' });
+  const row = table.querySelector<HTMLElement>('[data-row-key="job-error"]')!;
+  const message = within(table).getByText(error);
+  expect(message).toBeVisible();
+  expect(message).toHaveAttribute('data-tone', 'danger');
+  expect(message).toHaveAttribute('dir', dir);
+  if (dir === 'rtl') expect(message).toHaveAttribute('lang', 'ar');
+  expect(row).not.toContainElement(message);
+  expect(row.nextElementSibling).toContainElement(message);
+  expect(within(table).queryByRole('button', { name: /Expand row|Collapse row/ })).not.toBeInTheDocument();
+  expect(within(table).queryByText('An earlier error while running')).not.toBeInTheDocument();
+  expect(within(table).queryByText('An earlier error before completion')).not.toBeInTheDocument();
+  if (cards) {
+    expect(within(table).getAllByRole('listitem')).toHaveLength(6);
+  } else {
+    expect(row.querySelector('[data-col="status"]')).toHaveTextContent(
+      status === 'failed' ? /^Failed$/ : /^Cancelled$/,
+    );
+    expect(row.nextElementSibling).toHaveAttribute('data-detail-row');
+    expect(row.nextElementSibling?.querySelector('td')).toHaveAttribute('colspan', '10');
+    expect(table.querySelectorAll('[data-detail-row]')).toHaveLength(1);
+    expect(table.querySelectorAll('[data-row-key]:not([aria-expanded])')).toHaveLength(4);
+    act(() => row.focus());
+    await userEvent.setup().keyboard('{ArrowLeft}');
+    expect(message).toBeVisible();
+  }
 });
 it.each([
   [{ found: 12, skipped_existing: 10 }, '12 turns, 10 already evaluated, 2 to evaluate'],
@@ -503,21 +604,27 @@ it.each([
       },
     ],
   });
-  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  const grid = await screen.findByRole('treegrid', { name: 'Worker jobs' });
+  const table = within(grid);
   expect(table.getByText(sentence)).toBeVisible();
-  expect(table.getByText('Limit 25 · redo none')).toBeVisible();
+  expect(grid.querySelector('tbody [data-col="requested_at"]')).toHaveTextContent(sentence);
+  expect(grid.querySelector('tbody [data-col="progress"]')).toHaveTextContent(
+    `${progress.found} of ${progress.found}`,
+  );
+  expect(grid.querySelector('tbody [data-col="progress"]')).not.toHaveTextContent(sentence);
+  expect(table.getByText('Preview')).toHaveAttribute('title', 'Limit 25 · redo none');
   expect(table.queryByText(/Stopped at the limit/)).toBeNull();
 });
 it('keeps a zero redone count visible after the job previously reported redos', async () => {
   const job = { ...liveWorkerRead.jobs[0]!, progress: { evaluated: 1, found: 3, redone: 2 } };
   const { client, setRead } = setup({ ...liveWorkerRead, jobs: [job] });
-  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
-  expect(table.getByText(/1 evaluated · 2 redone/)).toBeVisible();
+  const table = within(await screen.findByRole('treegrid', { name: 'Worker jobs' }));
+  expect(table.getByText(/2 redone/)).toBeVisible();
   setRead({ ...liveWorkerRead, jobs: [{ ...job, progress: { ...job.progress, redone: 0 } }] });
   await act(async () => {
     await client.invalidateQueries({ queryKey: ['project', 'demo', 'live', 'worker', source] });
   });
-  await waitFor(() => expect(table.getByText(/1 evaluated · 0 redone/)).toBeVisible());
+  await waitFor(() => expect(table.getByText(/0 redone/)).toBeVisible());
 });
 it('does not invent a rejection gap when listed equals found', async () => {
   setup({
@@ -533,7 +640,7 @@ it('does not invent a rejection gap when listed equals found', async () => {
       },
     ],
   });
-  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  const table = within(await screen.findByRole('treegrid', { name: 'Worker jobs' }));
   expect(table.getByText('4 traces listed')).toBeVisible();
   expect(table.queryByText(/user turns/)).toBeNull();
 });
@@ -555,7 +662,7 @@ it.each([
       { ...job, id: 'other', status: 'queued', progress: {} },
     ],
   });
-  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  const table = within(await screen.findByRole('treegrid', { name: 'Worker jobs' }));
   expect(table.getAllByText(`Waiting: ${reason}`)).toHaveLength(1);
   expect(table.getAllByText('Queued')).toHaveLength(3);
 });
@@ -571,7 +678,7 @@ it.each(['running', 'done', 'failed', 'cancelled'] as const)(
       },
       jobs: [{ ...job, status, progress: {} }],
     });
-    const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+    const table = within(await screen.findByRole('treegrid', { name: 'Worker jobs' }));
     expect(table.queryByText('Waiting: worker paused')).toBeNull();
   },
 );
@@ -590,7 +697,7 @@ it.each([undefined, 0, 3])('shows only positive deferred counts: %s', async (def
       },
     ],
   });
-  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  const table = within(await screen.findByRole('treegrid', { name: 'Worker jobs' }));
   if (deferred) expect(table.getByText('3 left to the live loop (still arriving)')).toBeVisible();
   else expect(table.queryByText(/left to the live loop/)).toBeNull();
   expect(table.getByText('9 traces listed: 2 user turns, 1 other traces')).toBeVisible();
@@ -611,4 +718,93 @@ it.each([false, true])('reports an evaluator trace auth failure when overall ver
   expect(fieldStatus('langfuse', read)).toBe('running');
   read.running!.verification.version = 2;
   expect(failedCheckText('evaluator_traces', read)).toBeNull();
+});
+
+it('keeps five jobs while an older page loads and handles a short final batch', async () => {
+  const jobs = Array.from({ length: 22 }, (_, i) => ({
+    ...liveWorkerRead.jobs[0]!,
+    id: `job-${i}`,
+    requested_by: `Owner ${i}`,
+    status: 'done' as const,
+  }));
+  const { fetch } = setup({ ...liveWorkerRead, jobs });
+  const user = userEvent.setup();
+  await screen.findByText('Showing 1 to 5 of at least 20 jobs');
+  const original = fetch.getMockImplementation()!;
+  let finish!: (value: Response) => void;
+  const pending = new Promise<Response>((resolve) => {
+    finish = resolve;
+  });
+  fetch.mockImplementation((input, init) => {
+    const url = new URL(input, 'http://localhost');
+    return url.pathname.endsWith('/worker') && url.searchParams.get('jobs_limit') === '50'
+      ? pending
+      : original(input, init);
+  });
+  const pager = within(screen.getByRole('navigation', { name: 'jobs pagination' }));
+  await user.click(pager.getByRole('button', { name: 'Last page' }));
+  expect(await screen.findByText('Loading older jobs…')).toBeVisible();
+  expect(within(screen.getByRole('treegrid', { name: 'Worker jobs' })).getAllByRole('row')).toHaveLength(6);
+  expect(screen.getByText('Owner 0')).toBeVisible();
+  finish(response({ ...liveWorkerRead, jobs }));
+  expect(await screen.findByText('Showing 21 to 22 of 22 jobs')).toBeVisible();
+  expect(screen.queryByText('Loading older jobs…')).toBeNull();
+  expect(pager.getByRole('button', { name: 'Next page' })).toBeDisabled();
+  expect(within(screen.getByRole('treegrid', { name: 'Worker jobs' })).getAllByRole('row')).toHaveLength(3);
+  expect(screen.getByText('Owner 21')).toBeVisible();
+});
+it('shows a re-evaluation as one turn that links to it, and names it as the current job', async () => {
+  setup({
+    ...liveWorkerRead,
+    running: {
+      ...liveWorkerRead.running!,
+      job: { id: 'job-redo', kind: 'reevaluate', progress: { found: 1, evaluated: 0 } },
+    },
+    jobs: [
+      {
+        ...liveWorkerRead.jobs[0]!,
+        id: 'job-redo',
+        kind: 'reevaluate',
+        // A re-evaluation names its turn and has no day range.
+        params: { trace_ids: ['turn/2026 0001'], redo: ['all'], limit: 1 } as LiveJob['params'],
+        progress: { found: 1, evaluated: 0 },
+      },
+      liveWorkerRead.jobs[1]!,
+    ],
+  });
+  const table = within(await screen.findByRole('treegrid', { name: 'Worker jobs' }));
+  const kind = table.getByText('Re-evaluation');
+  expect(kind).toBeVisible();
+  expect(kind).not.toHaveAttribute('title');
+  const link = table.getByRole('link', { name: '1 turn' });
+  expect(link).toHaveAttribute(
+    'href',
+    `/projects/demo/live/turns/${encodeURIComponent('turn/2026 0001')}?source=${source}`,
+  );
+  expect(link).toHaveAttribute('data-link', 'name');
+  // The other row keeps its day range.
+  expect(table.getByText('Oct 30 – Oct 31')).toBeVisible();
+  const strip = within(document.querySelector<HTMLElement>('[data-live-block="worker-status"]')!);
+  expect(strip.getByText('Re-evaluation')).toBeVisible();
+  expect(strip.queryByText('Backfill')).toBeNull();
+});
+it('says that more turns exist when the worker stopped listing at the limit', async () => {
+  const job = liveWorkerRead.jobs[0]!;
+  setup({
+    ...liveWorkerRead,
+    jobs: [
+      {
+        ...job,
+        status: 'done',
+        params: { ...job.params, limit: 20 },
+        progress: { found: 20, evaluated: 20, limit_reached: true, listing_stopped_early: true },
+      },
+    ],
+  });
+  const table = within(await screen.findByRole('treegrid', { name: 'Worker jobs' }));
+  expect(table.getByText('Stopped at the limit of 20. 20 done, more exist.')).toHaveAttribute(
+    'data-tone',
+    'warning',
+  );
+  expect(table.queryByText(/still not evaluated/)).toBeNull();
 });

@@ -2,8 +2,19 @@ import { Link } from 'react-router-dom';
 import type { LiveFilters, LiveMetricSpec, LiveTurnRow, LiveTurnsPage } from '@/api/live';
 import { formatHeaderDate, formatTableDate } from '@/lib/dates';
 import { formatDuration, formatPercentValue } from '@/lib/format';
+import { textDirAttrs } from '@/lib/text';
 import { applyQueryUpdates, useSearchParamsState } from '@/lib/url-state';
-import { DataTable, EmptyState, ScoreValue, StateTag, Tag, type Column, type SortState } from '@/ui';
+import {
+  DataTable,
+  EmptyState,
+  KeyValueGrid,
+  ScoreValue,
+  StatusMark,
+  Tag,
+  type Column,
+  type SortState,
+  type TagTone,
+} from '@/ui';
 import { listedScoreColumns } from '../lib/filters';
 import { diagnosisSpec, mixSegments, verdictOf } from '../lib/mix';
 import { PassFailTag } from './turn/Evidence';
@@ -30,6 +41,29 @@ function scoreText(row: LiveTurnRow, spec: LiveMetricSpec): string {
   return `${value.toFixed(digits)}${spec.unit ? (['s', 'ms', 'min', 'h'].includes(spec.unit) ? spec.unit : ` ${spec.unit}`) : ''}`;
 }
 
+function turnScore(row: LiveTurnRow, spec: LiveMetricSpec) {
+  const score = row.scores[spec.metric_name];
+  const value = score?.skipped ? null : score?.score_numeric;
+  return spec.score_type === 'boolean' ? (
+    <PassFailTag value={value ?? null} />
+  ) : (
+    <ScoreValue
+      value={value}
+      direction={spec.direction}
+      type={spec.score_type === 'percentage' ? 'score' : spec.score_type}
+      text={scoreText(row, spec)}
+      variant="plain"
+    />
+  );
+}
+
+function scoreHeader(spec: LiveMetricSpec) {
+  if (spec.is_primary) return 'Success';
+  if (spec.metric_name === 'compliance_a') return 'Judge A';
+  if (spec.metric_name === 'compliance_b') return 'Judge B';
+  return spec.label;
+}
+
 export function TurnsTable({ slug, source, filters, data, specs, refreshing }: TurnsTableProps) {
   const { params, replaceUrlQuery } = useSearchParamsState();
   const path = `/projects/${encodeURIComponent(slug)}/live/turns`;
@@ -41,6 +75,76 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
     diagnosis,
   );
   const labelFor = (value: string | null) => labels.find((label) => label.value === value);
+  // Layout A keeps three scores in the scan row; the remaining returned scores are in its details.
+  const listed = listedScoreColumns(specs);
+  const scoreColumns = listed.slice(0, 3);
+  const columnNames = new Set(scoreColumns.map((spec) => spec.metric_name));
+  const remainingScores = specs.filter(
+    (spec) => spec.score_type !== 'categorical' && !columnNames.has(spec.metric_name),
+  );
+  const problems = (row: LiveTurnRow) => [
+    ...row.services_not_ok.map((service) => {
+      const tone =
+        labelFor(service.fault)?.tone ??
+        labelFor(service.fault ? `${service.fault}_problem` : null)?.tone ??
+        'neutral';
+      return {
+        key: service.name,
+        label: `${(specs.find((spec) => spec.metric_name === `service.${service.name}`)?.label ?? service.name).replace(/\b(sql|api|url|id)\b/gi, (word) => word.toUpperCase())}${service.fault ? ` · ${service.fault}` : ''}`,
+        tone: tone === 'neutral' ? undefined : (tone as TagTone),
+      };
+    }),
+    ...(row.charts.failed
+      ? [
+          {
+            key: 'charts-failed',
+            label: `${row.charts.failed} chart${row.charts.failed === 1 ? '' : 's'} failed`,
+            tone: 'danger' as const,
+          },
+        ]
+      : []),
+  ];
+  const problemTags = (row: LiveTurnRow, compact = false) => {
+    const all = problems(row);
+    const shown = compact ? all.slice(0, 2) : all;
+    const tag = (problem: (typeof all)[number]) => (
+      <Tag
+        key={problem.key}
+        tone={problem.tone}
+        title={problem.label}
+        className={styles.problemTag}
+        data-live-problem-tag
+      >
+        <span
+          {...textDirAttrs(problem.label)}
+          className={styles.problemText}
+          data-compact={compact || undefined}
+        >
+          {problem.label}
+        </span>
+      </Tag>
+    );
+    return (
+      <div className={compact ? styles.problems : styles.allProblems}>
+        {shown.length ? (
+          shown.map((problem, index) =>
+            compact && index === 1 && all.length > 2 ? (
+              <span className={styles.problemTail} key={problem.key}>
+                {tag(problem)}
+                <span className={styles.moreProblems} title={all.map((item) => item.label).join('\n')}>
+                  +{all.length - 2} more
+                </span>
+              </span>
+            ) : (
+              tag(problem)
+            ),
+          )
+        ) : (
+          <span className={styles.muted}>None</span>
+        )}
+      </div>
+    );
+  };
   const sort = filters.sort ?? '-turn_at';
   const sortState: SortState = {
     key: sort.replace(/^-/, ''),
@@ -62,80 +166,59 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
     {
       id: 'question',
       header: 'Question',
-      width: 260,
+      flex: true,
+      minWidth: 240,
+      primary: true,
       cell: (row) => (
-        <span dir="auto" title={row.question} className={styles.question} data-live-question>
+        <div
+          {...textDirAttrs(row.question)}
+          title={row.question}
+          className={styles.question}
+          data-live-question
+        >
           {row.question}
-        </span>
+        </div>
       ),
-    },
-    {
-      id: 'mode',
-      header: 'Mode',
-      width: 90,
-      cell: (row) =>
-        row.mode ? (
-          <Tag kind="data" dir="auto">
-            {row.mode}
-          </Tag>
-        ) : (
-          '—'
-        ),
     },
     {
       id: 'label',
       header: 'Diagnosis',
-      width: 200,
+      width: 220,
       cell: (row) => {
         const label = labelFor(row.label);
         const v = verdictOf(label?.specTone);
         return (
-          <span
-            className={styles.diagnosisCell}
-            title={[label?.label ?? row.label, row.label_reason].filter(Boolean).join(' · ')}
-          >
-            <StateTag tone={v.tone} dir="auto">
-              {label?.label ?? row.label ?? '—'}
-            </StateTag>
+          <div className={styles.diagnosisCell}>
+            <StatusMark
+              tone={v.tone}
+              shape={v.tone === 'danger' ? 'cross' : v.tone === 'neutral' ? 'ring' : 'full'}
+              label={label?.label ?? row.label ?? '—'}
+            />
             {row.label_reason ? (
-              <span className={styles.reason} dir="auto" title={row.label_reason}>
+              <div className={styles.reason} {...textDirAttrs(row.label_reason)} title={row.label_reason}>
                 {row.label_reason}
-              </span>
+              </div>
             ) : null}
-          </span>
+          </div>
         );
       },
     },
-    ...listedScoreColumns(specs).map((spec): Column<LiveTurnRow> => ({
+    ...scoreColumns.map((spec): Column<LiveTurnRow> => ({
       id: `metric:${spec.metric_name}`,
-      header: spec.label,
-      width: 108,
-      align: 'center',
+      header: scoreHeader(spec),
+      label: spec.label,
+      hint: spec.label,
+      width: 88,
+      align: 'end',
       mono: true,
       sort: { key: `metric:${spec.metric_name}`, first: 'desc' },
-      cell: (row) =>
-        spec.score_type === 'boolean' ? (
-          <PassFailTag
-            value={
-              row.scores[spec.metric_name]?.skipped
-                ? null
-                : (row.scores[spec.metric_name]?.score_numeric ?? null)
-            }
-          />
-        ) : (
-          <ScoreValue
-            value={row.scores[spec.metric_name]?.skipped ? null : row.scores[spec.metric_name]?.score_numeric}
-            direction={spec.direction}
-            type={spec.score_type === 'percentage' ? 'score' : spec.score_type}
-            text={scoreText(row, spec)}
-            variant="plain"
-          />
-        ),
+      cell: (row) => turnScore(row, spec),
     })),
     {
       id: 'latency_ms',
       header: 'Latency',
       width: 88,
+      align: 'end',
       mono: true,
       sort: { key: 'latency_ms', first: 'desc' },
       cell: (row) => (
@@ -148,75 +231,28 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
         </span>
       ),
     },
+    { id: 'problems', header: 'Problems', width: 220, cell: (row) => problemTags(row, true) },
     {
-      id: 'charts',
-      header: 'Charts',
-      width: 120,
+      id: 'turn',
+      header: 'Turn',
+      width: 64,
+      align: 'end',
       mono: true,
-      cell: (row) => (
-        <span className={styles.number}>
-          {row.charts.count}
-          {row.charts.failed ? (
-            <span data-tone="danger" className={styles.toneText}>
-              {' '}
-              · {row.charts.failed} failed
-            </span>
-          ) : null}
-        </span>
-      ),
-    },
-    {
-      id: 'services',
-      header: 'Services not OK',
-      width: 150,
       cell: (row) =>
-        row.services_not_ok.length
-          ? row.services_not_ok.map((service) => (
-              <span
-                key={service.name}
-                className={styles.serviceFault}
-                data-tone={
-                  labelFor(service.fault)?.tone ??
-                  labelFor(service.fault ? `${service.fault}_problem` : null)?.tone ??
-                  'neutral'
-                }
-                dir="auto"
-              >
-                {specs.find((spec) => spec.metric_name === `service.${service.name}`)?.label ?? service.name}
-                {service.fault ? ` · ${service.fault}` : ''}
-              </span>
-            ))
-          : '—',
-    },
-    {
-      id: 'user',
-      header: 'User · conversation',
-      width: 180,
-      cell: (row) => {
-        return (
-          <span className={styles.diagnosisCell}>
-            <span
-              className={`${styles.number} ${styles.userRef}`}
-              dir="auto"
-              title={row.user_ref ?? undefined}
-            >
-              {row.user_ref ?? '—'}
-            </span>
-            {row.conversation_id ? (
-              <Link
-                data-link="name"
-                className={`${styles.number} ${styles.oneLine}`}
-                to={linkTo(row.conversation_id)}
-                title={row.conversation_id}
-                dir="auto"
-              >
-                conversation {row.conversation_id.slice(-3)}
-                {row.turn_index === null ? '' : ` · turn ${row.turn_index + 1}`}
-              </Link>
-            ) : null}
-          </span>
-        );
-      },
+        row.conversation_id ? (
+          <Link
+            data-link="name"
+            to={linkTo(row.conversation_id)}
+            title={row.conversation_id}
+            aria-label={`Conversation ${row.conversation_id}${row.turn_index === null ? '' : ` · turn ${row.turn_index + 1}`}`}
+          >
+            {row.turn_index === null ? '—' : row.turn_index + 1}
+          </Link>
+        ) : row.turn_index === null ? (
+          '—'
+        ) : (
+          row.turn_index + 1
+        ),
     },
   ];
 
@@ -224,6 +260,7 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
     <div data-live-block="turns-table" className={styles.table}>
       <DataTable
         aria-label="Live turns"
+        cellAlign="first-line"
         rows={data.rows}
         columns={columns}
         rowKey={(row) => row.turn_id}
@@ -231,6 +268,97 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
           `${path}/${encodeURIComponent(row.turn_id)}?${new URLSearchParams({ source, list: params.toString() })}`
         }
         rowProps={(row) => ({ 'data-live-turn-row': row.turn_id })}
+        renderExpanded={(row) => (
+          <div className={styles.details} data-live-turn-details>
+            <KeyValueGrid
+              columns={1}
+              items={[
+                {
+                  key: 'reason',
+                  label: 'Why this diagnosis',
+                  value: (
+                    <div {...textDirAttrs(row.label_reason)} className={styles.detailText}>
+                      {row.label_reason ?? '—'}
+                    </div>
+                  ),
+                },
+              ]}
+            />
+            <KeyValueGrid
+              columns={4}
+              items={[
+                ...remainingScores
+                  .filter((spec) => Object.hasOwn(row.scores, spec.metric_name))
+                  .map((spec) => ({
+                    key: spec.metric_name,
+                    label: spec.label,
+                    value: turnScore(row, spec),
+                  })),
+                {
+                  key: 'charts',
+                  label: 'Charts',
+                  value: (
+                    <span className={styles.number}>
+                      {row.charts.count}
+                      {row.charts.failed ? (
+                        <span data-tone="danger" className={styles.toneText}>
+                          {' '}
+                          · {row.charts.failed} failed
+                        </span>
+                      ) : null}
+                    </span>
+                  ),
+                },
+                {
+                  key: 'mode',
+                  label: 'Mode',
+                  value: row.mode ? (
+                    <Tag kind="data">
+                      <span {...textDirAttrs(row.mode)} className={styles.detailText}>
+                        {row.mode}
+                      </span>
+                    </Tag>
+                  ) : (
+                    '—'
+                  ),
+                },
+                {
+                  key: 'user',
+                  label: 'User',
+                  value: (
+                    <div {...textDirAttrs(row.user_ref)} className={styles.detailText}>
+                      {row.user_ref ?? '—'}
+                    </div>
+                  ),
+                  mono: true,
+                },
+              ]}
+            />
+            <KeyValueGrid
+              columns={2}
+              items={[
+                {
+                  key: 'conversation',
+                  label: 'Conversation',
+                  value: row.conversation_id ? (
+                    <Link data-link="name" className={styles.number} to={linkTo(row.conversation_id)}>
+                      <div {...textDirAttrs(row.conversation_id)} className={styles.detailText}>
+                        {row.conversation_id}
+                      </div>
+                    </Link>
+                  ) : (
+                    '—'
+                  ),
+                },
+                {
+                  key: 'services',
+                  label: 'Services not OK',
+                  value: problemTags({ ...row, charts: { ...row.charts, failed: 0 } }),
+                },
+              ]}
+            />
+          </div>
+        )}
         sort={sortState}
         onSortChange={(next) =>
           replaceUrlQuery({
@@ -241,7 +369,6 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
         refreshing={refreshing}
         responsive="scroll"
         fit="declared"
-        minWidth={1600}
         empty={<EmptyState title="No turns match" body="Try removing a filter or changing the search." />}
       >
         <DataTable.Footer

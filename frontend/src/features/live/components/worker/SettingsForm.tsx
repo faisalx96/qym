@@ -2,29 +2,29 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   failedCheckText,
-  fieldStatus,
   normalizeWorkerValues,
   type LiveWorkerRead,
   type LiveWorkerSecrets,
   type LiveWorkerValues,
 } from '@/api/liveWorker';
-import { modelSeriesOf } from '@/features/runs-list/model';
 import { SaveFooter } from '@/features/shell/settings/SettingsCard';
 import { actionErrorMessage, ApiError, errorSentence, fieldErrorsOf } from '@/lib/http';
+import { textDirAttrs } from '@/lib/text';
 import {
   Button,
   Disclosure,
   ErrorState,
   InlineNotice,
-  ModelTag,
   NumberField,
   Select,
   StateTag,
+  StatusMark,
   Switch,
   Text,
   TextField,
   useToast,
 } from '@/ui';
+import { fieldStyles } from '@/ui/Field';
 import { workerTime } from './format';
 import { WorkerBlock } from './WorkerBlock';
 import type { WorkerCallbacks } from './types';
@@ -54,6 +54,7 @@ function SettingsSection({
   read,
   summary,
   differsFromRunning,
+  changed,
   invalid,
   targeted,
   children,
@@ -61,51 +62,45 @@ function SettingsSection({
   section: keyof LiveWorkerValues;
   title: string;
   read: LiveWorkerRead;
-  summary: ReactNode;
+  summary: string;
   differsFromRunning: boolean;
+  changed: boolean;
   invalid: boolean;
   targeted: boolean;
   children: ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const status = fieldStatus(section, read);
   const error = failedCheckText(section, read);
   const attention = differsFromRunning || invalid || Boolean(error);
   const models = section === 'models' ? read.running?.models : null;
   return (
     <section id={`settings-${section}`} className={styles.settingsSection} aria-label={title}>
       <Disclosure
+        layout="columns"
         open={expanded || attention || targeted}
         onOpenChange={setExpanded}
         title={
           <span className={styles.inline}>
             {title}
-            <StateTag tone={status === 'running' ? 'info' : status === 'failed' ? 'danger' : 'neutral'}>
-              {status === 'running'
-                ? 'Running'
-                : status === 'pending'
-                  ? 'Pending'
-                  : status === 'failed'
-                    ? 'Failed'
-                    : status === 'waiting'
-                      ? 'Waiting for version 1'
-                      : status}
-            </StateTag>
+            {error || invalid || changed ? (
+              <StateTag tone={error || invalid ? 'danger' : 'neutral'}>
+                {error ? 'Failed' : invalid ? 'Invalid' : 'Changed'}
+              </StateTag>
+            ) : null}
           </span>
         }
         summary={
-          <span className={styles.wrap} dir="auto">
-            {differsFromRunning ? `differs from running v${read.running!.settings_version_applied} · ` : ''}
+          <span className={styles.wrap} {...textDirAttrs(summary)}>
             {summary}
-            {models ? (
-              <span className={styles.wrap}>
-                gateway listed {read.model_ids.length} models at {workerTime(models.listed_at)}
-              </span>
-            ) : null}
           </span>
         }
       >
         <div className={styles.stack}>
+          {models ? (
+            <Text as="p" tone="secondary">
+              gateway listed {read.model_ids.length} models at {workerTime(models.listed_at)}
+            </Text>
+          ) : null}
           {error ? (
             <Text as="p" tone="danger" dir="auto">
               {error}
@@ -118,13 +113,51 @@ function SettingsSection({
   );
 }
 
+function SettingsSwitch({
+  label,
+  isSelected,
+  onChange,
+  help,
+  error,
+}: {
+  label: string;
+  isSelected: boolean;
+  onChange: (selected: boolean) => void;
+  help?: string;
+  error?: string;
+}) {
+  const id = useId();
+  return (
+    <div className={fieldStyles.field}>
+      <label id={`${id}-label`} htmlFor={id} className={fieldStyles.label}>
+        {label}
+      </label>
+      <div className={styles.switchControl}>
+        <Switch
+          id={id}
+          aria-labelledby={`${id}-label`}
+          aria-describedby={error || help ? `${id}-help` : undefined}
+          isSelected={isSelected}
+          onChange={onChange}
+        >
+          {isSelected ? 'On' : 'Off'}
+        </Switch>
+      </div>
+      {error || help ? (
+        <span id={`${id}-help`} className={error ? fieldStyles.error : fieldStyles.help}>
+          {error || help}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export function SettingsForm({
   read,
   onSave,
   onKey,
   busy,
   busyKey,
-  modelIndex,
 }: {
   read: LiveWorkerRead;
   busy?: boolean;
@@ -163,23 +196,9 @@ export function SettingsForm({
     typedSecret ||
     sections.some((section) => sectionChanged(section, values, latest.values));
   const evaluation = values.evaluation;
-  const judgeSummary = (name: string, role: string) => (
-    <>
-      {name ? <ModelTag name={name} series={modelSeriesOf(modelIndex ?? null, name, false)} /> : '—'}
-      <Text as="span" tone="muted">
-        {' '}
-        ({role})
-      </Text>
-    </>
-  );
-  const summaries: Record<keyof LiveWorkerValues, ReactNode> = {
-    evaluation: `Chart vision ${evaluation.chart_vision_enabled ? 'on' : 'off'} · Dataiku replay ${evaluation.dataiku_execution ? 'on' : 'off'} · ${evaluation.parallel_turns} lanes · poll ${evaluation.poll_interval_s}s · lookback ${evaluation.lookback_hours}h`,
-    models: (
-      <>
-        {judgeSummary(values.models.judge_a, 'A')} · {judgeSummary(values.models.judge_b, 'B')} ·{' '}
-        {judgeSummary(values.models.vision_judge, 'vision')}
-      </>
-    ),
+  const summaries: Record<keyof LiveWorkerValues, string> = {
+    evaluation: `Chart vision ${evaluation.chart_vision_enabled ? 'on' : 'off'} · Dataiku replay ${evaluation.dataiku_execution ? 'on' : 'off'} · ${evaluation.parallel_turns} lanes · poll every ${evaluation.poll_interval_s}s · look back ${evaluation.lookback_hours}h`,
+    models: `Judge A ${values.models.judge_a || '—'} · Judge B ${values.models.judge_b || '—'} · vision judge ${values.models.vision_judge || '—'}`,
     langfuse: `${values.langfuse.host || '—'} · secret ${secrets.langfuse_secret_key || read.settings?.secret_hints.langfuse_secret_key ? 'set' : 'not set'}`,
     evaluator_traces: values.evaluator_traces.enabled
       ? `${values.evaluator_traces.host || '—'} · secret ${secrets.evaluator_traces_secret_key || read.settings?.secret_hints.evaluator_traces_secret_key ? 'set' : 'not set'}`
@@ -192,6 +211,7 @@ export function SettingsForm({
     const running = normalizeWorkerValues(read.running?.running);
     return {
       summary: summaries[section],
+      changed: sectionChanged(section, values, loaded.values) || Boolean(secretKey && secrets[secretKey]),
       differsFromRunning:
         read.running?.settings_version_applied != null &&
         Boolean(read.running?.running && sectionChanged(section, values, running)) &&
@@ -210,6 +230,19 @@ export function SettingsForm({
     JSON.stringify(values) !== JSON.stringify(loaded.values) ||
     Object.values(secrets).some((value) => value !== '') ||
     note !== '';
+  const appliedVersion = read.running?.settings_version_applied;
+  const applied = loaded.version != null && appliedVersion === loaded.version;
+  const settingsStatus = dirty
+    ? loaded.version
+      ? `Unsaved changes since v${loaded.version}`
+      : 'Unsaved settings'
+    : !loaded.version
+      ? 'Waiting for version 1'
+      : applied
+        ? `The worker is running these settings (v${loaded.version})`
+        : appliedVersion != null
+          ? `Saved as v${loaded.version}, the worker is still running v${appliedVersion}`
+          : `Saved as v${loaded.version}, waiting for the worker to apply these settings`;
   function initialise(version: number | undefined, nextValues: Partial<LiveWorkerValues>) {
     const normalized = normalizeWorkerValues(nextValues);
     setLoaded({ version, values: normalized });
@@ -301,6 +334,12 @@ export function SettingsForm({
           void save();
         }}
       >
+        <StatusMark
+          tone={!dirty && applied ? 'success' : 'neutral'}
+          shape={!dirty && applied ? 'check' : 'hourglass'}
+          label={settingsStatus}
+          wrap
+        />
         <div className={styles.workerKey}>
           <Select
             label="Worker key"
@@ -356,17 +395,13 @@ export function SettingsForm({
               ['dataiku_execution', 'Dataiku execution'],
             ] as const
           ).map(([key, label]) => (
-            <div key={key}>
-              <Switch
-                isSelected={values.evaluation[key]}
-                onChange={(value) => update('evaluation', key, value)}
-              >
-                {label}
-              </Switch>
-              {fieldError('evaluation', key) ? (
-                <Text tone="danger">{fieldError('evaluation', key)}</Text>
-              ) : null}
-            </div>
+            <SettingsSwitch
+              key={key}
+              label={label}
+              isSelected={values.evaluation[key]}
+              onChange={(value) => update('evaluation', key, value)}
+              error={fieldError('evaluation', key)}
+            />
           ))}
           {(
             [
@@ -450,24 +485,16 @@ export function SettingsForm({
           read={read}
           {...sectionProps('evaluator_traces')}
         >
-          <div>
-            <Switch
-              isSelected={values.evaluator_traces.enabled}
-              onChange={(enabled) => {
-                update('evaluator_traces', 'enabled', enabled);
-                if (!enabled) setSecrets((previous) => ({ ...previous, evaluator_traces_secret_key: '' }));
-              }}
-            >
-              Send evaluator traces
-            </Switch>
-            <Text as="p" tone="muted">
-              The worker’s own traces of each evaluated turn (checks, judge calls, SQL comparison) go to this
-              Langfuse project; use a project separate from the one Insightor writes to.
-            </Text>
-            {fieldError('evaluator_traces', 'enabled') ? (
-              <Text tone="danger">{fieldError('evaluator_traces', 'enabled')}</Text>
-            ) : null}
-          </div>
+          <SettingsSwitch
+            label="Send evaluator traces"
+            isSelected={values.evaluator_traces.enabled}
+            onChange={(enabled) => {
+              update('evaluator_traces', 'enabled', enabled);
+              if (!enabled) setSecrets((previous) => ({ ...previous, evaluator_traces_secret_key: '' }));
+            }}
+            help="The worker’s own traces of each evaluated turn (checks, judge calls, SQL comparison) go to this Langfuse project; use a project separate from the one Insightor writes to."
+            error={fieldError('evaluator_traces', 'enabled')}
+          />
           <TextField
             label="Langfuse host"
             value={values.evaluator_traces.host}

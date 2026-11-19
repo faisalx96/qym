@@ -108,6 +108,8 @@ Roles:
 | POST | `/ingestion/v1/projects/{project_id}/live/sources/{key:path}/turns` | api_key |
 | POST | `/ingestion/v1/projects/{project_id}/live/sources/{key:path}/canaries` | api_key |
 | PUT | `/ingestion/v1/projects/{project_id}/live/sources/{key}/turns/{turn_id:path}/charts/{ref}/image` | api_key |
+| PUT | `/ingestion/v1/projects/{project_id}/live/sources/{key}/turns/{turn_id:path}/charts/{ref}/snapshot` | api_key |
+| PUT | `/ingestion/v1/projects/{project_id}/live/sources/{key}/chart-styles/{sha256}` | api_key |
 | DELETE | `/v1/admin/feedback-agent` | admin |
 | PUT | `/v1/admin/feedback-agent` | admin |
 | POST | `/v1/admin/feedback-agent/test` | admin |
@@ -195,6 +197,8 @@ Roles:
 | POST | `/v1/projects/{project_id}/live/sources/{key:path}/turns` | api_key |
 | POST | `/v1/projects/{project_id}/live/sources/{key:path}/canaries` | api_key |
 | PUT | `/v1/projects/{project_id}/live/sources/{key}/turns/{turn_id:path}/charts/{ref}/image` | api_key |
+| PUT | `/v1/projects/{project_id}/live/sources/{key}/turns/{turn_id:path}/charts/{ref}/snapshot` | api_key |
+| PUT | `/v1/projects/{project_id}/live/sources/{key}/chart-styles/{sha256}` | api_key |
 | POST | `/v1/runs/submit` | owner_or_manager |
 | POST | `/v1/runs/{run_id}/approve` | manager |
 | POST | `/v1/runs/{run_id}/events` | api_key |

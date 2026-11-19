@@ -214,11 +214,21 @@ describe('tone primitives', () => {
           b
         </Chip>
         <Chip>c</Chip>
+        <Chip selectionStyle="neutral" mark="warning" count={2} isSelected>
+          d
+        </Chip>
       </>,
     );
     expect(screen.getByRole('button', { name: 'a' })).toHaveAttribute('data-tone', 'danger');
     expect(screen.getByRole('button', { name: 'b' })).toHaveAttribute('data-series', '5');
     expect(screen.getByRole('button', { name: 'c' })).not.toHaveAttribute('data-tone');
+    expect(screen.getByRole('button', { name: 'a' })).not.toHaveAttribute('data-selection');
+    const marked = screen.getByRole('button', { name: 'd 2' });
+    expect(marked).toHaveTextContent('d 2');
+    expect(marked).toHaveAttribute('data-selection', 'neutral');
+    expect(marked).toHaveAttribute('aria-pressed', 'true');
+    expect(marked.querySelector('[data-chip-mark]')).toHaveAttribute('data-tone', 'warning');
+    expect(marked.querySelector('[data-chip-mark]')).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('ScoreValue pill keeps the band and the title cue', () => {

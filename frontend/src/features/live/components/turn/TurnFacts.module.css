@@ -16,3 +16,19 @@
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
+
+/* Keep every label on the same baseline as its adjacent value. FieldRow owns wrapping and RTL anchoring. */
+.factRow > [role='group'] {
+  align-items: baseline;
+}
+
+.factRow [data-case='sentence'] {
+  padding-block-start: 0;
+}
+
+/* A chart title keeps its own reading width, even beside a longer delivery summary. */
+.stack > [data-text-mode] {
+  inline-size: fit-content;
+  max-inline-size: min(100%, var(--field-measure));
+  min-inline-size: 0;
+}

@@ -32,6 +32,17 @@
   white-space: nowrap;
 }
 
+.user[data-wrap] {
+  max-inline-size: 100%;
+}
+
+.user[data-wrap] .name {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
+}
+
 .email {
   overflow: hidden;
   color: var(--text-muted);

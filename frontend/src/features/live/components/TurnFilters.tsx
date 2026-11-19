@@ -1,7 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { liveTurnsQuery, type LiveFilters, type LiveMetricSpec, type LiveTurnsPage } from '@/api/live';
+import { formatDayKey, formatShortDayKey } from '@/lib/dates';
 import { useSearchParamsState, type QueryUpdates } from '@/lib/url-state';
-import { BarTrigger, Chip, ClearFiltersButton, MultiSelect, NumberField, SearchField, Select } from '@/ui';
+import {
+  BarTrigger,
+  Chip,
+  ClearFiltersButton,
+  MultiSelect,
+  NumberField,
+  SearchField,
+  Select,
+  Popover,
+} from '@/ui';
 import { filterChips } from '../lib/filters';
 import { diagnosisSpec, mixSegments } from '../lib/mix';
 import styles from '../turns.module.css';
@@ -12,12 +22,27 @@ interface TurnFiltersProps {
   facets: LiveTurnsPage['facets'] | undefined;
   specs: LiveMetricSpec[];
   dayCount?: number;
+  days?: { day: string; in_qym: number }[];
 }
 
-export function TurnFilters({ filters, facets, specs, dayCount }: TurnFiltersProps) {
+export function TurnFilters({ filters, facets, specs, dayCount, days = [] }: TurnFiltersProps) {
   const { replaceUrlQuery } = useSearchParamsState();
   const update = (updates: QueryUpdates) => replaceUrlQuery({ ...updates, page: null });
   const chips = filterChips(filters, facets, specs);
+  const secondaryChips = chips.filter(
+    (chip) => !['day', 'from', 'labels', 'q'].includes(chip.key.split(':')[0]!),
+  );
+  const dateChip = chips.find((chip) => chip.key === 'day' || chip.key === 'from');
+  const dateKey = filters.day ?? (dateChip ? 'range' : undefined);
+  const dateLabel = filters.day ? formatShortDayKey(filters.day) : dateChip?.label;
+  const dayItems: { key: string; label: string; count?: number }[] = days.map((day) => ({
+    key: day.day,
+    label: formatDayKey(day.day),
+    count: day.in_qym,
+  }));
+  if (dateChip && dateKey && !dayItems.some((item) => item.key === dateKey)) {
+    dayItems.unshift({ key: dateKey, label: dateChip.label, count: filters.day ? dayCount : undefined });
+  }
   const diagnosis = diagnosisSpec(specs);
   const labelValues = new Set([
     ...(diagnosis?.values ?? []).flatMap((item) => (typeof item.value === 'string' ? [item.value] : [])),
@@ -41,9 +66,7 @@ export function TurnFilters({ filters, facets, specs, dayCount }: TurnFiltersPro
       {label} <span className={styles.number}>{count}</span>
     </>
   );
-  // Metric and Service open their fields in one row under the bar: closed on load, one row at a time.
-  const [openRow, setOpenRow] = useState<'metric' | 'service' | null>(null);
-  const toggleRow = (row: 'metric' | 'service') => setOpenRow((current) => (current === row ? null : row));
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const [search, setSearch] = useState(filters.q ?? '');
   const [seenSearch, setSeenSearch] = useState(filters.q);
@@ -65,12 +88,6 @@ export function TurnFilters({ filters, facets, specs, dayCount }: TurnFiltersPro
     clearTimeout(timer.current);
     timer.current = setTimeout(() => replaceQuery.current({ q: value.trim() || null, page: null }), 300);
   };
-  const metricValue = filters.metric
-    ? `${specs.find((spec) => spec.metric_name === filters.metric)?.label ?? filters.metric}${filters.min === undefined ? '' : ` ≥ ${filters.min}`}${filters.max === undefined ? '' : ` ≤ ${filters.max}`}`
-    : undefined;
-  const serviceValue = filters.service
-    ? `${serviceName(filters.service)}${filters.service_status ? ` · ${filters.service_status.replaceAll('_', ' ')}` : ''}`
-    : undefined;
   // X07: each set filter counts 1 (a date range is one filter), the search text counts 1.
   const count = [
     filters.day || filters.from || filters.to,
@@ -78,17 +95,27 @@ export function TurnFilters({ filters, facets, specs, dayCount }: TurnFiltersPro
     filters.modes?.length,
     filters.statuses?.length,
     filters.outcomes?.length,
-    filters.metric,
-    filters.service,
+    filters.metric || filters.min !== undefined || filters.max !== undefined,
+    filters.service || filters.service_status,
     filters.charts,
     filters.user,
     filters.conversation,
     filters.q,
   ].filter(Boolean).length;
+  const moreCount = [
+    filters.modes?.length,
+    filters.statuses?.length,
+    filters.outcomes?.length,
+    filters.metric || filters.min !== undefined || filters.max !== undefined,
+    filters.service || filters.service_status,
+    filters.charts,
+    filters.user,
+    filters.conversation,
+  ].filter(Boolean).length;
   const clearAll = () => {
     clearTimeout(timer.current);
     setSearch('');
-    setOpenRow(null);
+    setMoreOpen(false);
     update({
       day: null,
       from: null,
@@ -111,190 +138,206 @@ export function TurnFilters({ filters, facets, specs, dayCount }: TurnFiltersPro
 
   return (
     <div className={styles.filterBlock} data-live-block="filters">
-      <SearchField
-        label="Search questions and answers"
-        placeholder="Search question or answer"
-        width="var(--search-width)"
-        shortcut="/"
-        value={search}
-        onChange={searchChange}
-        inputProps={{ dir: 'auto' }}
-      />
       <div className={styles.filters} role="group" aria-label="Turn filters">
-        {chips
-          .filter((chip) => ['day', 'from', 'user', 'conversation'].includes(chip.key))
-          .map((chip) =>
-            chip.key === 'day' || chip.key === 'from' ? (
-              <MultiSelect
-                key={chip.key}
-                label="Day"
-                triggerVariant="bar"
-                searchable={false}
-                selectAll={false}
-                onlyAction={false}
-                items={[
-                  { key: chip.key, label: chip.label, count: chip.key === 'day' ? dayCount : undefined },
-                ]}
-                value={new Set([chip.key])}
-                onChange={(next) => {
-                  if (!next.size) removeChip(chip.onRemove);
-                }}
+        <div className={styles.filterControls} data-live-filter-controls>
+          <SearchField
+            className={styles.searchFilter}
+            label="Search questions and answers"
+            placeholder="Search question or answer"
+            width="var(--search-width)"
+            shortcut="/"
+            value={search}
+            onChange={searchChange}
+            inputProps={{ dir: 'auto' }}
+          />
+          <MultiSelect
+            label={dateLabel ? `Day: ${dateLabel}` : 'All days'}
+            selectionStyle="neutral"
+            summary={() => ''}
+            triggerVariant="bar"
+            searchable={false}
+            selectAll={false}
+            onlyAction={false}
+            items={dayItems}
+            value={new Set(dateKey ? [dateKey] : [])}
+            onChange={(next) => {
+              const selected = [...next].find((key) => key !== dateKey);
+              if (selected) update({ day: String(selected), from: null, to: null });
+              else if (!next.size && dateChip) removeChip(dateChip.onRemove);
+            }}
+          />
+          <Popover
+            label="More filters"
+            isOpen={moreOpen}
+            onOpenChange={setMoreOpen}
+            trigger={
+              <BarTrigger
+                label="More filters"
+                value={moreCount ? String(moreCount) : undefined}
+                active={moreCount > 0}
               />
-            ) : (
-              // User and conversation come from a link in the table, not from this bar: they keep their chip.
-              <Chip
-                key={chip.key}
-                isSelected
-                onChange={() => removeChip(chip.onRemove)}
-                onRemove={() => removeChip(chip.onRemove)}
-                removeLabel={`Remove ${chip.label}`}
-              >
-                <span dir="auto">{chip.label}</span>
-              </Chip>
-            ),
-          )}
-        <MultiSelect
-          label="Diagnosis"
-          triggerVariant="bar"
-          emptyMeansAll
-          items={labels.map((item) => ({
-            key: item.value,
-            label: item.label,
-            count: facets?.labels[item.value] ?? 0,
-          }))}
-          value={new Set(filters.labels ?? [])}
-          onChange={(next) => update({ label: next.size ? [...next].map(String) : null })}
-        />
-        {(['modes', 'statuses', 'outcomes'] as const).map((field) => {
-          const label = field === 'modes' ? 'Mode' : field === 'statuses' ? 'Status' : 'Outcome';
-          const key = field === 'modes' ? 'mode' : field === 'statuses' ? 'status' : 'outcome';
-          const selected = filters[field] ?? [];
-          const values = [...new Set([...Object.keys(facets?.[field] ?? {}), ...selected])].map((value) => ({
-            key: value,
-            label:
-              field === 'statuses'
-                ? value.replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase())
-                : value.replaceAll('_', ' '),
-            count: facets?.[field][value] ?? 0,
-          }));
-          return (
-            <MultiSelect
-              key={field}
-              label={label}
-              triggerVariant="bar"
-              emptyMeansAll
-              items={values}
-              value={new Set(selected)}
-              onChange={(next) => update({ [key]: next.size ? [...next].map(String) : null })}
-            />
-          );
-        })}
-        <BarTrigger
-          label="Metric"
-          value={metricValue}
-          active={Boolean(filters.metric)}
-          aria-expanded={openRow === 'metric'}
-          onPress={() => toggleRow('metric')}
-        />
-        <BarTrigger
-          label="Service"
-          value={serviceValue}
-          active={Boolean(filters.service)}
-          aria-expanded={openRow === 'service'}
-          onPress={() => toggleRow('service')}
-        />
-        <Select
-          label="Charts"
-          hideLabel
-          triggerVariant="bar"
-          value={filters.charts ?? ''}
-          items={[
-            { key: '', label: 'All turns' },
-            { key: 'any', label: 'Any charts' },
-            { key: 'failed', label: 'Failed charts' },
-            { key: 'none', label: 'No charts' },
-          ]}
-          onChange={(value) => update({ charts: value ? String(value) : null })}
-        />
-        <ClearFiltersButton count={count} onClear={clearAll} />
-      </div>
-      {openRow === 'metric' ? (
-        <div className={styles.filterFields} role="group" aria-label="Metric bounds">
-          <Select
-            label="Metric"
-            hideLabel
-            width={160}
-            items={[
-              { key: '', label: 'Any metric' },
-              ...specs
-                .filter((spec) => spec.score_type !== 'categorical')
-                .map((spec) => ({ key: spec.metric_name, label: spec.label })),
-            ]}
-            value={filters.metric ?? ''}
-            onChange={(value) => update({ metric: value ? String(value) : null, min: null, max: null })}
-          />
-          <NumberField
-            label="Minimum"
-            hideLabel
-            placeholder="Min"
-            width={80}
-            value={filters.min ?? NaN}
-            isDisabled={!filters.metric}
-            maxValue={filters.max}
-            step={0.01}
-            steppers={false}
-            onChange={(value) => update({ min: Number.isFinite(value) ? value : null })}
-          />
-          <NumberField
-            label="Maximum"
-            hideLabel
-            placeholder="Max"
-            width={80}
-            value={filters.max ?? NaN}
-            isDisabled={!filters.metric}
-            minValue={filters.min}
-            step={0.01}
-            steppers={false}
-            onChange={(value) => update({ max: Number.isFinite(value) ? value : null })}
-          />
+            }
+          >
+            <div className={styles.moreFilters}>
+              {(['modes', 'statuses', 'outcomes'] as const).map((field) => {
+                const label = field === 'modes' ? 'Mode' : field === 'statuses' ? 'Status' : 'Outcome';
+                const key = field === 'modes' ? 'mode' : field === 'statuses' ? 'status' : 'outcome';
+                const selected = filters[field] ?? [];
+                const values = [...new Set([...Object.keys(facets?.[field] ?? {}), ...selected])].map(
+                  (value) => ({
+                    key: value,
+                    label:
+                      field === 'statuses'
+                        ? value.replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase())
+                        : value.replaceAll('_', ' '),
+                    count: facets?.[field][value] ?? 0,
+                  }),
+                );
+                return (
+                  <MultiSelect
+                    key={field}
+                    inline
+                    label={label}
+                    triggerVariant="bar"
+                    emptyMeansAll
+                    items={values}
+                    value={new Set(selected)}
+                    onChange={(next) => update({ [key]: next.size ? [...next].map(String) : null })}
+                  />
+                );
+              })}
+              <div className={styles.filterFields} role="group" aria-label="Metric bounds">
+                <Select
+                  label="Metric"
+                  hideLabel
+                  width={160}
+                  items={[
+                    { key: '', label: 'Any metric' },
+                    ...specs
+                      .filter((spec) => spec.score_type !== 'categorical')
+                      .map((spec) => ({ key: spec.metric_name, label: spec.label })),
+                  ]}
+                  value={filters.metric ?? ''}
+                  onChange={(value) => update({ metric: value ? String(value) : null, min: null, max: null })}
+                />
+                <NumberField
+                  label="Minimum"
+                  hideLabel
+                  placeholder="Min"
+                  width={80}
+                  value={filters.min ?? NaN}
+                  isDisabled={!filters.metric}
+                  maxValue={filters.max}
+                  step={0.01}
+                  steppers={false}
+                  onChange={(value) => update({ min: Number.isFinite(value) ? value : null })}
+                />
+                <NumberField
+                  label="Maximum"
+                  hideLabel
+                  placeholder="Max"
+                  width={80}
+                  value={filters.max ?? NaN}
+                  isDisabled={!filters.metric}
+                  minValue={filters.min}
+                  step={0.01}
+                  steppers={false}
+                  onChange={(value) => update({ max: Number.isFinite(value) ? value : null })}
+                />
+              </div>
+              <div className={styles.filterFields} role="group" aria-label="Service filter">
+                <Select
+                  label="Service"
+                  hideLabel
+                  width="var(--dropdown-width)"
+                  value={filters.service ?? ''}
+                  items={[
+                    { key: '', label: 'Any service', count: undefined },
+                    ...services.map((value) => ({
+                      key: value,
+                      label: serviceName(value),
+                      count: facets?.services[value] ?? 0,
+                    })),
+                  ]}
+                  renderItem={(item) =>
+                    item.count === undefined ? item.label : countLabel(item.label, item.count)
+                  }
+                  renderValue={(item) =>
+                    item.count === undefined ? item.label : countLabel(item.label, item.count)
+                  }
+                  onChange={(value) =>
+                    update({ service: value ? String(value) : null, service_status: null })
+                  }
+                />
+                <Select
+                  label="Service status"
+                  hideLabel
+                  width="var(--dropdown-width)"
+                  value={filters.service_status ?? ''}
+                  isDisabled={!filters.service}
+                  items={[
+                    { key: '', label: 'Any status' },
+                    { key: 'ok', label: 'OK' },
+                    { key: 'not_ok', label: 'Not OK' },
+                  ]}
+                  onChange={(value) => update({ service_status: value ? String(value) : null })}
+                />
+              </div>
+              <Select
+                label="Charts"
+                hideLabel
+                triggerVariant="bar"
+                value={filters.charts ?? ''}
+                items={[
+                  { key: '', label: 'All turns' },
+                  { key: 'any', label: 'Any charts' },
+                  { key: 'failed', label: 'Failed charts' },
+                  { key: 'none', label: 'No charts' },
+                ]}
+                onChange={(value) => update({ charts: value ? String(value) : null })}
+              />
+            </div>
+          </Popover>
         </div>
-      ) : null}
-      {openRow === 'service' ? (
-        <div className={styles.filterFields} role="group" aria-label="Service filter">
-          <Select
-            label="Service"
-            hideLabel
-            width="var(--dropdown-width)"
-            value={filters.service ?? ''}
-            items={[
-              { key: '', label: 'Any service', count: undefined },
-              ...services.map((value) => ({
-                key: value,
-                label: serviceName(value),
-                count: facets?.services[value] ?? 0,
-              })),
-            ]}
-            renderItem={(item) =>
-              item.count === undefined ? item.label : countLabel(item.label, item.count)
-            }
-            renderValue={(item) =>
-              item.count === undefined ? item.label : countLabel(item.label, item.count)
-            }
-            onChange={(value) => update({ service: value ? String(value) : null, service_status: null })}
-          />
-          <Select
-            label="Service status"
-            hideLabel
-            width="var(--dropdown-width)"
-            value={filters.service_status ?? ''}
-            isDisabled={!filters.service}
-            items={[
-              { key: '', label: 'Any status' },
-              { key: 'ok', label: 'OK' },
-              { key: 'not_ok', label: 'Not OK' },
-            ]}
-            onChange={(value) => update({ service_status: value ? String(value) : null })}
-          />
+        <Chip
+          selectionStyle="neutral"
+          isSelected={!filters.labels?.length}
+          onChange={() => update({ label: null })}
+        >
+          All
+        </Chip>
+        {labels.map((item) => (
+          <Chip
+            key={item.value}
+            selectionStyle="neutral"
+            mark={item.tone}
+            count={facets?.labels[item.value] ?? 0}
+            isSelected={filters.labels?.includes(item.value) ?? false}
+            onChange={(selected) => {
+              const next = selected
+                ? [...(filters.labels ?? []), item.value]
+                : (filters.labels ?? []).filter((value) => value !== item.value);
+              update({ label: next.length ? next : null });
+            }}
+          >
+            {item.label}
+          </Chip>
+        ))}
+      </div>
+      {count > 0 ? (
+        <div className={styles.filters} role="group" aria-label="Active filters">
+          {secondaryChips.map((chip) => (
+            <Chip
+              key={chip.key}
+              isSelected
+              onChange={() => removeChip(chip.onRemove)}
+              onRemove={() => removeChip(chip.onRemove)}
+              removeLabel={`Remove ${chip.label}`}
+            >
+              <span dir="auto">{chip.label}</span>
+            </Chip>
+          ))}
+          <ClearFiltersButton count={count} onClear={clearAll} />
         </div>
       ) : null}
     </div>

@@ -164,7 +164,12 @@ describe('consistency v3: family A (buttons, links, menus)', () => {
     expect(src('ui/DataTable/parts.tsx')).toMatch(/\bcenter\?: ReactNode/);
     expect(src('MaintenanceTab.tsx')).toMatch(/center=\{\s*[\s\S]{0,120}?<Button/);
     // D-12: no "Show all <count>" text and no full-tree toggle in KeyTree
-    none(grep(under(shippedTs, 'features/', 'ui/'), /Show all (\d|\$?\{)/));
+    // The approved Live turn rules disclosure uses "Show all M" to switch cited/all evidence.
+    none(
+      grep(under(shippedTs, 'features/', 'ui/'), /Show all (\d|\$?\{)/, [
+        'features/live/components/turn/DiagnosisVerdict.tsx',
+      ]),
+    );
     expect(src('KeyTree.tsx')).not.toContain('.showFull');
     // shim: Button.tsx keeps a 'ghost' alias until the cv3-shim removal
     expect(src('ui/Button/Button.tsx')).not.toContain('ghost');
@@ -363,11 +368,13 @@ describe('consistency v3: family A (buttons, links, menus)', () => {
     none(problems);
   });
 
-  it('A-16: turn filters are a bar with a clear button, no popover', () => {
+  it('A-16: turns layout A has one More filters popover and a clear button', () => {
     const t = src('TurnFilters.tsx');
-    for (const s of ['icon="close"', 'Popover', 'QuickFilterGroup', 'FilterControl', '>Done<'])
+    for (const s of ['icon="close"', 'QuickFilterGroup', 'FilterControl', '>Done<'])
       expect(t, s).not.toContain(s);
     for (const s of ['ClearFiltersButton', 'BarTrigger', 'shortcut="/"']) expect(t, s).toContain(s);
+    expect(elements(t, ['Popover'])).toHaveLength(1);
+    expect(elements(t, ['Popover'])[0]!.attrs).toContain('label="More filters"');
   });
 
   it('A-17: a name link is not underlined and not blue', () => {
@@ -536,14 +543,15 @@ describe('consistency v3: family B (status, tags, counts, tones)', () => {
       expect(src(p), p).toMatch(/import \{[^}]*\bverdictOf\b[^}]*\} from/);
   });
 
-  it('B-07: verdict tones live in one place; a dark swatch is dim', () => {
+  it('B-07 replacement: distribution colours follow values while verdict styling stays shared', () => {
     const mix = src('features/live/lib/mix.ts');
     expect(mix).toContain('export function verdictOf');
+    expect(mix).toContain('export function diagnosisColors');
     expect(mix).not.toContain('function labelTone');
     const css = src('features/live/live.module.css');
-    expect(css).toContain('[data-dark] > .swatch');
-    expect(css).toContain('--tone: var(--text-dim)');
-    expect(src('features/live/lib/trend.ts')).toContain('dark: boolean');
+    expect(css).not.toContain('--tone: var(--text-dim)');
+    expect(src('features/live/components/TrendChart.tsx')).toContain('stack.color');
+    expect(src('features/live/components/DaysTable.tsx')).toContain('background: segment.color');
   });
 
   it('B-08: a live status shows a word, never the raw key', () => {
@@ -621,7 +629,8 @@ describe('consistency v3: family B (status, tags, counts, tones)', () => {
     const line = src('features/live/components/StatusLine.tsx');
     expect(line).not.toMatch(/<Tag[^>]*kind="data"[^>]*>\s*\{judge\}/);
     expect(line).toContain('<ModelTag');
-    expect(src('features/live/components/worker/SettingsForm.tsx')).toContain('<ModelTag');
+    // Approved worker section summaries (2026-11-16) use plain operator values.
+    expect(src('features/live/components/worker/SettingsForm.tsx')).toContain('models: `Judge A ');
     const names = src('features/datasets/catalog/UnregisteredNames.tsx');
     expect(names).toMatch(/import \{[^}]*\bDatasetTag\b/);
     expect(names).not.toContain('styles.unregisteredName');
@@ -858,17 +867,18 @@ describe('consistency v3: family B (status, tags, counts, tones)', () => {
     expect(map).toMatch(/high:\s*'danger'/);
   });
 
-  it('B-40: a worker problem level is a StateTag (status rules, 2026-11-12)', () => {
+  it('B-40: worker problem levels use status marks (approved worker redesign, 2026-11-16)', () => {
     const p = src('features/live/components/worker/ProblemsBlock.tsx');
     expect(p).not.toContain('<Tag tone={event.level');
-    expect(p).toContain('<StateTag');
+    expect(p).toContain('<StatusMark');
+    expect(p).toContain("shape={e.level === 'error' ? 'cross' : 'full'}");
   });
 
   it('B-41: a diagnosis axis is not a danger tag', () => {
-    expect(src('features/live/components/turn/DiagnosisTab.tsx')).not.toContain(
-      "item.axis === 'sql' ? 'danger'",
+    // Deviation axes moved from Diagnosis into the judge cards; obsolete severity CSS was removed.
+    expect(src('features/live/components/turn/JudgeDeviations.tsx')).not.toMatch(
+      /(?:row|item)\.axis\s*===\s*'sql'\s*\?\s*'danger'/,
     );
-    expect(src('features/live/turn.module.css')).toContain('.sevError');
   });
 });
 
@@ -1027,9 +1037,9 @@ describe('consistency v3: family C (dates, numbers, words, notices)', () => {
     expect(fnBody(sweep, 'signed')).toMatch(/ pts`;?\s*$/);
   });
 
-  it('C-18: live percents keep one decimal and scores align left', () => {
+  it('C-18: live percents keep one decimal; turns layout A aligns numbers at the end', () => {
     none(grep(live, /formatPercentValue\([^,]+, (0|spec)/));
-    expect(src('features/live/components/TurnsTable.tsx')).not.toContain("align: 'end'");
+    expect(src('features/live/components/TurnsTable.tsx')).toContain("align: 'end'");
   });
 
   it('C-19: a live score never reads True/False', () => {
@@ -1348,13 +1358,14 @@ describe('consistency v3: family D (tables, bars, tabs, stats)', () => {
     expect(t).not.toContain(".replace(/\\s+/g, ' ')");
   });
 
-  it('D-06: a live turn reason is one line', () => {
+  it('D-06: turns layout A clamps the question and reason to two lines and expands full details', () => {
     const css = src('features/live/turns.module.css');
-    expect(rule(css, ".reason[dir='auto']")).toMatch(/-webkit-line-clamp:\s*1/);
-    expect(rule(css, '.oneLine')).toMatch(/white-space:\s*nowrap/);
+    for (const selector of ['.question', '.reason'])
+      expect(rule(css, selector)).toMatch(/-webkit-line-clamp:\s*2/);
     const t = src('features/live/components/TurnsTable.tsx');
-    expect(t).toContain('styles.oneLine');
-    expect(t).not.toContain("align: 'end'");
+    expect(t).toContain('renderExpanded=');
+    expect(t).toContain('<KeyValueGrid');
+    expect(t).not.toContain('minWidth={1600}');
   });
 
   it('D-09: worker problems and jobs are embedded tables with bar filters', () => {
@@ -1536,7 +1547,9 @@ describe('consistency v3: family D (tables, bars, tabs, stats)', () => {
     expect(rule(css, ".strip[data-variant='mini']")).toMatch(/background:\s*transparent/);
     expect(rule(css, ".strip[data-variant='mini'] .label")).toMatch(/color:\s*var\(--text-muted\)/);
     const health = src('features/live/components/ServiceHealth.tsx');
-    expect(health).toContain('<StatStrip');
+    // The approved Live overview redesign replaces service tiles with one embedded table.
+    expect(health).toContain('<DataTable');
+    expect(health).toContain('variant="embedded"');
     expect(health).not.toMatch(/import \{[^}]*\bLink\b/);
     expect(src('features/live/components/turn/TurnTiles.tsx')).not.toMatch(/import \{[^}]*\bStatTiles\b/);
   });

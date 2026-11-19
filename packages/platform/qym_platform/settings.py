@@ -222,6 +222,9 @@ class PlatformSettings(BaseSettings):
 
     # Live evaluation (feature round 2026-11-live-evaluation)
     live_retention_days: int = Field(default=180, ge=1)
+    # Chart screenshots are deleted this many days after their upload; the turn
+    # and its scores stay until live_retention_days.
+    live_chart_image_retention_days: int = Field(default=30, ge=1)
     live_stale_after_seconds: int = Field(default=300, ge=30)
     live_turn_batch_max: int = Field(default=100, ge=1, le=1000)
     live_detail_max_bytes: int = Field(default=524288, ge=4096)
@@ -229,6 +232,10 @@ class PlatformSettings(BaseSettings):
     live_ingest_max_body_bytes: int = Field(default=64 * 1024 * 1024, ge=1_048_576)
     live_chart_image_max_bytes: int = Field(default=2 * 1024 * 1024, ge=65536)
     live_chart_images_per_turn: int = Field(default=10, ge=1, le=100)
+    # A chart snapshot is the drawn chart as HTML text; its stylesheet is stored
+    # once per source and content hash. Both caps count uncompressed UTF-8 bytes.
+    live_chart_snapshot_max_bytes: int = Field(default=2 * 1024 * 1024, ge=65536)
+    live_chart_style_max_bytes: int = Field(default=2 * 1024 * 1024, ge=65536)
     live_jobs_retention_days: int = Field(default=90, ge=1)
     live_events_retention_days: int = Field(default=30, ge=1)
     live_job_max_days: int = Field(default=31, ge=1)

@@ -647,6 +647,8 @@ KEY_ONLY = [
     ),
     # Live evaluation ingest (project API key; the key resolution refuses an archived project).
     ("PUT", "/v1/projects/{project_id}/live/sources/{key}/turns/{turn_id:path}/charts/{ref}/image", "/v1/projects/pa/live/sources/w1/turns/t/charts/r/image", {"content": b""}),
+    ("PUT", "/v1/projects/{project_id}/live/sources/{key}/turns/{turn_id:path}/charts/{ref}/snapshot", "/v1/projects/pa/live/sources/w1/turns/t/charts/r/snapshot", {"json": {}}),
+    ("PUT", "/v1/projects/{project_id}/live/sources/{key}/chart-styles/{sha256}", "/v1/projects/pa/live/sources/w1/chart-styles/0000000000000000000000000000000000000000000000000000000000000000", {"content": b""}),
     ("PUT", "/v1/projects/{project_id}/live/sources/{key:path}", "/v1/projects/pa/live/sources/w1", {"json": {"name": "w", "environment": "test"}}),
     ("POST", "/v1/projects/{project_id}/live/sources/{key:path}/heartbeat", "/v1/projects/pa/live/sources/w1/heartbeat", {"json": {"at": "2026-11-01T00:00:00Z"}}),
     ("GET", "/v1/projects/{project_id}/live/sources/{key:path}/control", "/v1/projects/pa/live/sources/w1/control", {}),
@@ -657,6 +659,8 @@ KEY_ONLY = [
     ("POST", "/v1/projects/{project_id}/live/sources/{key:path}/turns", "/v1/projects/pa/live/sources/w1/turns", {"json": {"turns": [{"turn_id": "t", "turn_at": "2026-11-01T00:00:00Z", "status": "completed", "question": "q"}]}}),
     ("POST", "/v1/projects/{project_id}/live/sources/{key:path}/canaries", "/v1/projects/pa/live/sources/w1/canaries", {"json": {"results": []}}),
     ("PUT", "/ingestion/v1/projects/{project_id}/live/sources/{key}/turns/{turn_id:path}/charts/{ref}/image", "/ingestion/v1/projects/pa/live/sources/w1/turns/t/charts/r/image", {"content": b""}),
+    ("PUT", "/ingestion/v1/projects/{project_id}/live/sources/{key}/turns/{turn_id:path}/charts/{ref}/snapshot", "/ingestion/v1/projects/pa/live/sources/w1/turns/t/charts/r/snapshot", {"json": {}}),
+    ("PUT", "/ingestion/v1/projects/{project_id}/live/sources/{key}/chart-styles/{sha256}", "/ingestion/v1/projects/pa/live/sources/w1/chart-styles/0000000000000000000000000000000000000000000000000000000000000000", {"content": b""}),
     ("PUT", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}", "/ingestion/v1/projects/pa/live/sources/w1", {"json": {"name": "w", "environment": "test"}}),
     ("POST", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}/heartbeat", "/ingestion/v1/projects/pa/live/sources/w1/heartbeat", {"json": {"at": "2026-11-01T00:00:00Z"}}),
     ("GET", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}/control", "/ingestion/v1/projects/pa/live/sources/w1/control", {}),

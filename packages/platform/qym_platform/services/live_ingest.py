@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import re
 import struct
+import zlib
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -15,6 +18,8 @@ from qym_platform.datetime_utils import to_api_timestamp, to_storage_utc, utc_no
 from qym_platform.db.models import (
     LiveCanaryResult,
     LiveChartImage,
+    LiveChartSnapshot,
+    LiveChartStyle,
     LiveDay,
     LiveMetricSpec,
     LiveSource,
@@ -28,6 +33,7 @@ from qym_platform.settings import PlatformSettings
 if TYPE_CHECKING:
     from qym_platform.api.live_ingest import (
         CanaryBody,
+        ChartSnapshotBody,
         DayBody,
         MetricSpecBody,
         SourceBody,
@@ -41,8 +47,30 @@ class _NonFiniteJSONError(ValueError):
     """A turn contains a non-finite number in a producer JSON value."""
 
 
+# A snapshot is one serialized chart document. Its text is escaped by the
+# serializer, so these can only be real tags. The page's locked frame is the
+# protection; this check only keeps obviously active markup out of storage.
+# Whole names only: <metadata> and <foreignObject> are ordinary chart elements.
+_SNAPSHOT_HEAD = "<head></head>"
+# The canonical start of a serialized document: an <html> start tag whose
+# attributes are plain names or name="value" pairs, then the empty head at once.
+# Anything else ahead of the head (an element, a comment, a text area that only
+# quotes it) would let the markup decide where the page's own head ends.
+# Every attribute starts with whitespace and a name holds none, so the pattern
+# reads any input in one way only and its work stays linear in the length.
+_SNAPSHOT_START = re.compile(
+    r"[ \t\n\f\r]*<html"
+    r"(?:[ \t\n\f\r]+[^ \t\n\f\r\"'<>/=]+(?:=\"[^\"<>]*\")?)*"
+    r"[ \t\n\f\r]*><head></head>"
+)
+_SNAPSHOT_FORBIDDEN_TAG = re.compile(
+    r"<\s*(script|iframe|object|embed|link|meta|base|template|noscript)[\s>/]",
+    re.IGNORECASE | re.ASCII,
+)
+
+
 class ChartImageError(Exception):
-    """A chart image cannot be attached to the requested live turn."""
+    """Chart evidence (image, snapshot or stylesheet) cannot be stored as requested."""
 
     def __init__(self, status: int, detail: str) -> None:
         super().__init__(detail)
@@ -237,6 +265,10 @@ def _upsert_turn(
             LiveChartImage.turn_pk == row.id,
             LiveChartImage.ref.notin_(refs),
         ).delete(synchronize_session=False)
+        db.query(LiveChartSnapshot).filter(
+            LiveChartSnapshot.turn_pk == row.id,
+            LiveChartSnapshot.ref.notin_(refs),
+        ).delete(synchronize_session=False)
         db.query(LiveTurnScore).filter_by(turn_pk=row.id).delete(
             synchronize_session=False
         )
@@ -308,15 +340,8 @@ def upsert_turns(
     return report
 
 
-def upsert_chart_image(
-    db: Session,
-    source: LiveSource,
-    turn_id: str,
-    ref: str,
-    data: bytes,
-    settings: PlatformSettings,
-) -> str:
-    """Store a declared chart's PNG, leaving the commit to the caller."""
+def _chart_turn(db: Session, source: LiveSource, turn_id: str, ref: str) -> LiveTurn:
+    """Lock the turn and check that its summary declares the chart."""
     turn = (
         db.query(LiveTurn)
         .filter_by(source_id=source.id, turn_id=turn_id)
@@ -330,6 +355,19 @@ def upsert_chart_image(
         isinstance(chart, dict) and chart.get("ref") == ref for chart in charts
     ):
         raise ChartImageError(404, "chart not found")
+    return turn
+
+
+def upsert_chart_image(
+    db: Session,
+    source: LiveSource,
+    turn_id: str,
+    ref: str,
+    data: bytes,
+    settings: PlatformSettings,
+) -> str:
+    """Store a declared chart's PNG, leaving the commit to the caller."""
+    turn = _chart_turn(db, source, turn_id, ref)
     width, height = parse_png(data)
     row = db.query(LiveChartImage).filter_by(turn_pk=turn.id, ref=ref).first()
     created = row is None
@@ -346,7 +384,119 @@ def upsert_chart_image(
     row.sha256 = hashlib.sha256(data).hexdigest()
     row.image = data
     row.received_at = utcnow()
+    # One kind of evidence per chart, latest wins: the PNG replaces a snapshot.
+    db.query(LiveChartSnapshot).filter_by(turn_pk=turn.id, ref=ref).delete(
+        synchronize_session=False
+    )
     return "created" if created else "replaced"
+
+
+def check_snapshot_html(html: str, max_bytes: int) -> bytes:
+    """Return the snapshot as UTF-8 bytes, or refuse its size or its markup."""
+    try:
+        data = html.encode("utf-8")
+    except UnicodeEncodeError:
+        raise ChartImageError(422, "snapshot html is not valid text") from None
+    if len(data) > max_bytes:
+        raise ChartImageError(
+            413, f"chart snapshot html exceeds the {max_bytes} byte limit"
+        )
+    if _SNAPSHOT_START.match(html) is None:
+        raise ChartImageError(
+            422,
+            "snapshot html must start with an <html> tag followed by <head></head>",
+        )
+    lowered = html.lower()
+    if html.count(_SNAPSHOT_HEAD) != 1 or lowered.count(_SNAPSHOT_HEAD) != 1:
+        raise ChartImageError(
+            422, "snapshot html must contain <head></head> exactly once"
+        )
+    forbidden = _SNAPSHOT_FORBIDDEN_TAG.search(html)
+    if forbidden is not None:
+        raise ChartImageError(
+            422, f"snapshot html must not contain <{forbidden.group(1).lower()}"
+        )
+    return data
+
+
+def upsert_chart_snapshot(
+    db: Session,
+    source: LiveSource,
+    turn_id: str,
+    ref: str,
+    body: ChartSnapshotBody,
+    settings: PlatformSettings,
+) -> str:
+    """Store a declared chart's drawn markup, leaving the commit to the caller."""
+    data = check_snapshot_html(body.html, settings.live_chart_snapshot_max_bytes)
+    turn = _chart_turn(db, source, turn_id, ref)
+    style = (
+        db.query(LiveChartStyle.id)
+        .filter_by(source_id=source.id, sha256=body.style_sha256)
+        .first()
+    )
+    if style is None:
+        raise ChartImageError(412, "chart style not found")
+    row = db.query(LiveChartSnapshot).filter_by(turn_pk=turn.id, ref=ref).first()
+    created = row is None
+    if row is None:
+        count = db.query(LiveChartSnapshot.id).filter_by(turn_pk=turn.id).count()
+        if count >= settings.live_chart_images_per_turn:
+            raise ChartImageError(409, "chart snapshot limit reached")
+        row = LiveChartSnapshot(turn_pk=turn.id, ref=ref)
+        db.add(row)
+    stored = zlib.compress(data)
+    row.html = stored
+    row.html_size = len(data)
+    row.byte_size = len(stored)
+    row.sha256 = hashlib.sha256(data).hexdigest()
+    row.style_sha256 = body.style_sha256
+    row.viewport_width = body.viewport_width
+    row.viewport_height = body.viewport_height
+    # Round the captured region outward so the stored box never cuts into it.
+    row.box_x = math.floor(body.box.x)
+    row.box_y = math.floor(body.box.y)
+    row.box_width = math.ceil(body.box.x + body.box.width) - row.box_x
+    row.box_height = math.ceil(body.box.y + body.box.height) - row.box_y
+    row.received_at = utcnow()
+    # One kind of evidence per chart, latest wins: the snapshot replaces a PNG.
+    db.query(LiveChartImage).filter_by(turn_pk=turn.id, ref=ref).delete(
+        synchronize_session=False
+    )
+    return "created" if created else "replaced"
+
+
+def store_chart_style(db: Session, source: LiveSource, sha256: str, data: bytes) -> str:
+    """Store a stylesheet under its content hash, leaving the commit to the caller."""
+    if hashlib.sha256(data).hexdigest() != sha256:
+        raise ChartImageError(422, "sha256 does not match the body")
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise ChartImageError(422, "chart style is not UTF-8") from None
+    existing = (
+        db.query(LiveChartStyle.id)
+        .filter_by(source_id=source.id, sha256=sha256)
+        .first()
+    )
+    if existing is not None:
+        # Same hash, same bytes. A repeated upload restarts the unused-style grace.
+        db.query(LiveChartStyle).filter_by(id=existing.id).update(
+            {"received_at": utcnow()}, synchronize_session=False
+        )
+        return "present"
+    stored = zlib.compress(data)
+    db.add(
+        LiveChartStyle(
+            source_id=source.id,
+            sha256=sha256,
+            css=stored,
+            css_size=len(data),
+            byte_size=len(stored),
+            received_at=utcnow(),
+        )
+    )
+    return "created"
 
 
 def insert_canaries(db: Session, source: LiveSource, results: list[CanaryBody]) -> int:

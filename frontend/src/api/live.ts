@@ -145,8 +145,27 @@ export interface LiveChartImage {
   byte_size: number;
 }
 
+/** The drawn chart as stored markup. Both URLs return data (JSON and CSS), never a page to open. */
+export interface LiveChartSnapshot {
+  url: string;
+  style_url: string;
+  /** Width in CSS pixels of the page the chart was drawn in. */
+  viewport_width: number;
+  /** Height that page was laid out at; null or absent when the producer did not report it. */
+  viewport_height?: number | null;
+  /** The chart's region in that page. */
+  box: { x: number; y: number; width: number; height: number };
+  byte_size: number;
+}
+
 export interface LiveTurnDetail {
   chart_images: Record<string, LiveChartImage>;
+  /** Charts stored as markup; a chart has a snapshot or an image, not both. */
+  chart_snapshots?: Record<string, LiveChartSnapshot>;
+  /** Days a chart screenshot is kept after its upload. */
+  chart_image_retention_days?: number;
+  /** True when the turn was first received longer ago than that: a chart without an image may have lost it. */
+  chart_images_expired?: boolean;
   turn: LiveTurnColumns & {
     id: number;
     source_id: string;
@@ -180,6 +199,23 @@ export interface LiveTurnDetail {
     current: boolean;
   })[];
   specs: LiveMetricSpec[];
+  /** Re-evaluation jobs of this turn: the queued or running one, and the latest finished one. */
+  reevaluation?: LiveTurnReevaluation | null;
+}
+
+export interface LiveTurnReevaluation {
+  active: null | {
+    id: string;
+    status: 'queued' | 'running';
+    requested_at?: string | null;
+    requested_by?: string | null;
+  };
+  last: null | {
+    id: string;
+    status: 'done' | 'failed' | 'cancelled';
+    finished_at?: string | null;
+    error?: string | null;
+  };
 }
 
 export interface LiveFilters {
@@ -312,6 +348,34 @@ export function useLiveTurn(slug: string, turnId: string, source?: string | null
       return { ...data, chart_images: data.chart_images ?? {} };
     },
   });
+}
+
+/** Chart URLs from the turn detail already carry the platform root path; an absolute URL keeps the client from adding it again. */
+function absoluteUrl(path: string): string {
+  return new URL(path, window.location.origin).toString();
+}
+
+/** The snapshot's markup and its stylesheet, as text. Both addresses change with their content, so they never go stale. */
+export function useLiveChartSnapshot(snapshot: LiveChartSnapshot) {
+  const markup = useQuery({
+    queryKey: ['live', 'chart-snapshot', snapshot.url],
+    queryFn: async () => {
+      const data = await api.get<{ html?: unknown }>(absoluteUrl(snapshot.url));
+      if (typeof data?.html !== 'string') throw new Error('The saved chart has no markup.');
+      return data.html;
+    },
+    staleTime: Infinity,
+  });
+  const style = useQuery({
+    queryKey: ['live', 'chart-style', snapshot.style_url],
+    queryFn: async () => {
+      // The client parses a body as JSON when it can; a stylesheet is kept as text either way.
+      const css = await api.get<unknown>(absoluteUrl(snapshot.style_url));
+      return typeof css === 'string' ? css : css == null ? '' : JSON.stringify(css);
+    },
+    staleTime: Infinity,
+  });
+  return { markup, style };
 }
 
 export function liveTurnsCsvUrl(slug: string, filters: LiveFilters, source?: string | null): string {

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import zlib
 from datetime import date, datetime, timedelta
 
 import pytest
@@ -11,6 +12,8 @@ from qym_platform.db.models import (
     AuditLog,
     LiveCanaryResult,
     LiveChartImage,
+    LiveChartSnapshot,
+    LiveChartStyle,
     LiveDay,
     LiveMetricSpec,
     LiveSource,
@@ -101,10 +104,14 @@ def test_purge_deletes_old_turns_scores_and_canaries_only(
         assert len(kept_images) == 24
         assert len(kept_canaries) == 5
 
-    counts = purge_live(session_factory, retention_days=180, now=NOW)
+    counts = purge_live(
+        session_factory, retention_days=180, chart_image_retention_days=30, now=NOW
+    )
 
     assert counts == {
-        "turns": 16, "scores": 96, "chart_images": 16, "canaries": 2, "days": 0, "jobs": 0, "events": 0
+        "turns": 16, "scores": 96, "chart_images": 16, "chart_images_expired": 0,
+        "chart_snapshots": 0, "chart_styles": 0,
+        "canaries": 2, "days": 0, "jobs": 0, "events": 0,
     }
     with session_factory() as db:
         assert {row.id for row in db.query(LiveTurn)} == kept_turn_ids
@@ -140,10 +147,15 @@ def test_purge_deletes_old_turns_scores_and_canaries_only(
         assert entry.actor_user_id is None
         assert entry.after == counts
 
-    assert purge_live(session_factory, retention_days=180, now=NOW) == {
+    assert purge_live(
+        session_factory, retention_days=180, chart_image_retention_days=30, now=NOW
+    ) == {
         "turns": 0,
         "scores": 0,
         "chart_images": 0,
+        "chart_images_expired": 0,
+        "chart_snapshots": 0,
+        "chart_styles": 0,
         "canaries": 0,
         "days": 0,
         "jobs": 0,
@@ -153,7 +165,220 @@ def test_purge_deletes_old_turns_scores_and_canaries_only(
         assert db.query(AuditLog).filter_by(action="live_retention").count() == 1
 
 
-def test_sqlite_repush_after_batch_selection_survives_purge(tmp_path):
+@pytest.mark.parametrize("batch_size", [4, 10])
+def test_purge_expires_chart_images_by_upload_age(
+    session_factory, monkeypatch, batch_size
+):
+    from qym_platform.services.live_retention import purge_live
+
+    monkeypatch.setattr("qym_platform.services.live_retention.BATCH_SIZE", batch_size)
+    image = _png()
+    image_cutoff = NOW - timedelta(days=30)
+    old = image_cutoff - timedelta(microseconds=1)
+
+    def chart(turn, ref, received_at):
+        return LiveChartImage(
+            turn_pk=turn.id,
+            ref=ref,
+            content_type="image/png",
+            byte_size=len(image),
+            width=3,
+            height=2,
+            sha256=hashlib.sha256(image).hexdigest(),
+            image=image,
+            received_at=received_at,
+        )
+
+    with session_factory() as db:
+        turns = db.query(LiveTurn).order_by(LiveTurn.id).all()
+        expired_turns = [turn for turn in turns if turn.day < date(2026, 10, 29)]
+        kept_turns = [turn for turn in turns if turn.day >= date(2026, 10, 29)]
+        assert (len(expired_turns), len(kept_turns)) == (16, 24)
+        for turn in expired_turns:
+            db.add(chart(turn, "first", old))
+        # Every kept turn is far older than the image limit: only the upload counts.
+        for index, turn in enumerate(kept_turns):
+            db.add(chart(turn, "first", old if index < 10 else image_cutoff))
+            if index < 5:
+                # A backfill uploaded this screenshot yesterday for the old turn.
+                db.add(chart(turn, "second", NOW - timedelta(days=1)))
+        db.commit()
+        kept_turn_ids = {turn.id for turn in kept_turns}
+        kept_scores = db.execute(
+            select(LiveTurnScore.__table__)
+            .where(LiveTurnScore.turn_pk.in_(kept_turn_ids))
+            .order_by(LiveTurnScore.id)
+        ).all()
+        kept_images = db.execute(
+            select(LiveChartImage.__table__)
+            .where(
+                LiveChartImage.turn_pk.in_(kept_turn_ids),
+                LiveChartImage.received_at >= image_cutoff,
+            )
+            .order_by(LiveChartImage.id)
+        ).all()
+        assert len(kept_scores) == 144
+        assert len(kept_images) == 19
+
+    counts = purge_live(
+        session_factory, retention_days=180, chart_image_retention_days=30, now=NOW
+    )
+
+    # Screenshots deleted with their turn and those deleted by age are counted apart.
+    assert counts == {
+        "turns": 16, "scores": 96, "chart_images": 16, "chart_images_expired": 10,
+        "chart_snapshots": 0, "chart_styles": 0,
+        "canaries": 0, "days": 0, "jobs": 0, "events": 0,
+    }
+    with session_factory() as db:
+        assert {row.id for row in db.query(LiveTurn)} == kept_turn_ids
+        assert (
+            db.execute(select(LiveTurnScore.__table__).order_by(LiveTurnScore.id)).all()
+            == kept_scores
+        )
+        assert (
+            db.execute(select(LiveChartImage.__table__).order_by(LiveChartImage.id)).all()
+            == kept_images
+        )
+        assert (
+            db.query(AuditLog).filter_by(action="live_retention").one().after == counts
+        )
+
+
+def _style(source_id, name, received_at):
+    css = zlib.compress(name.encode())
+    return LiveChartStyle(
+        source_id=source_id,
+        sha256=hashlib.sha256(name.encode()).hexdigest(),
+        css=css,
+        css_size=len(name),
+        byte_size=len(css),
+        received_at=received_at,
+    )
+
+
+def _snapshot(turn, style, received_at, ref="first"):
+    html = zlib.compress(b"<html><head></head><body></body></html>")
+    return LiveChartSnapshot(
+        turn_pk=turn.id,
+        ref=ref,
+        html=html,
+        html_size=39,
+        byte_size=len(html),
+        sha256="0" * 64,
+        style_sha256=style.sha256,
+        viewport_width=1248,
+        box_x=0,
+        box_y=0,
+        box_width=1248,
+        box_height=462,
+        received_at=received_at,
+    )
+
+
+@pytest.mark.parametrize("batch_size", [5, 16])
+def test_purge_deletes_snapshots_with_turns_and_then_unused_styles(
+    session_factory, monkeypatch, batch_size
+):
+    from qym_platform.services.live_retention import purge_live
+
+    monkeypatch.setattr("qym_platform.services.live_retention.BATCH_SIZE", batch_size)
+    long_ago = NOW - timedelta(days=170)
+    with session_factory() as db:
+        source = db.query(LiveSource).one()
+        other = LiveSource(project_id="p", key="other", name="Other", environment="test")
+        db.add(other)
+        db.flush()
+        styles = {
+            # Named by a snapshot of a kept turn.
+            "used": _style(source.id, "used", long_ago),
+            # Named only by snapshots that go with their turns in this run.
+            "expiring": _style(source.id, "expiring", long_ago),
+            "orphan": _style(source.id, "orphan", NOW - timedelta(days=1, seconds=1)),
+            # Not named yet, but inside the one-day grace: its snapshot may follow.
+            "boundary": _style(source.id, "boundary", NOW - timedelta(days=1)),
+            "fresh": _style(source.id, "fresh", NOW - timedelta(hours=1)),
+            # The same stylesheet under another source, which has no snapshot of it.
+            "elsewhere": _style(other.id, "used", long_ago),
+        }
+        db.add_all(styles.values())
+        turns = db.query(LiveTurn).order_by(LiveTurn.id).all()
+        kept_turns = [turn for turn in turns if turn.day >= date(2026, 10, 29)]
+        for turn in turns:
+            if turn.day < date(2026, 10, 29):
+                db.add(_snapshot(turn, styles["expiring"], long_ago))
+        # Far older than the 30-day image limit, which does not apply to snapshots.
+        for turn in kept_turns[:3]:
+            db.add(_snapshot(turn, styles["used"], long_ago))
+        db.commit()
+        kept_snapshots = db.execute(
+            select(LiveChartSnapshot.__table__)
+            .where(LiveChartSnapshot.turn_pk.in_([turn.id for turn in kept_turns]))
+            .order_by(LiveChartSnapshot.id)
+        ).all()
+        kept_styles = {styles[name].id for name in ("used", "boundary", "fresh")}
+        assert len(kept_snapshots) == 3
+        assert db.query(LiveChartSnapshot).count() == 19
+
+    counts = purge_live(
+        session_factory, retention_days=180, chart_image_retention_days=30, now=NOW
+    )
+
+    assert counts == {
+        "turns": 16, "scores": 96, "chart_images": 0, "chart_images_expired": 0,
+        "chart_snapshots": 16, "chart_styles": 3,
+        "canaries": 0, "days": 0, "jobs": 0, "events": 0,
+    }
+    with session_factory() as db:
+        assert (
+            db.execute(
+                select(LiveChartSnapshot.__table__).order_by(LiveChartSnapshot.id)
+            ).all()
+            == kept_snapshots
+        )
+        assert {row.id for row in db.query(LiveChartStyle.id)} == kept_styles
+        assert (
+            db.query(AuditLog).filter_by(action="live_retention").one().after == counts
+        )
+
+    again = purge_live(
+        session_factory, retention_days=180, chart_image_retention_days=30, now=NOW
+    )
+    assert not any(again.values())
+
+
+def test_postgres_purge_skips_styles_of_a_source_that_is_being_written(database):
+    from qym_platform.services.live_retention import purge_live
+
+    if database.dialect.name != "postgresql":
+        pytest.skip("SQLite has no row locks")
+    factory = sessionmaker(bind=database, autoflush=False)
+    with factory() as db:
+        source = LiveSource(project_id="p", key="worker", name="Worker", environment="test")
+        db.add(source)
+        db.flush()
+        db.add(_style(source.id, "orphan", NOW - timedelta(days=2)))
+        db.commit()
+        source_id = source.id
+
+    def purge():
+        return purge_live(
+            factory, retention_days=180, chart_image_retention_days=30, now=NOW
+        )["chart_styles"]
+
+    with factory() as writer:
+        # An ingest request holds this lock while it checks and stores a snapshot.
+        writer.query(LiveSource).filter_by(id=source_id).with_for_update().one()
+        assert purge() == 0
+        with factory() as db:
+            assert db.query(LiveChartStyle).count() == 1
+        writer.rollback()
+    assert purge() == 1
+    with factory() as db:
+        assert db.query(LiveChartStyle).count() == 0
+
+
+def test_sqlite_repush_after_batch_selection_survives_purge(tmp_path, monkeypatch):
     from test_live_ingest_sources import _seed_api_key
 
     from qym_platform.api.live_ingest import TurnBody
@@ -162,6 +387,8 @@ def test_sqlite_repush_after_batch_selection_survives_purge(tmp_path):
     from qym_platform.services.live_retention import purge_live
     from qym_platform.settings import PlatformSettings
 
+    # Uploads are stamped NOW, inside the image limit.
+    monkeypatch.setattr("qym_platform.services.live_ingest.utcnow", lambda: NOW)
     engine = create_engine(f"sqlite:///{tmp_path / 'live-retention-race.db'}")
     factory = sessionmaker(bind=engine, autoflush=False)
     settings = PlatformSettings()
@@ -234,7 +461,9 @@ def test_sqlite_repush_after_batch_selection_survives_purge(tmp_path):
 
         event.listen(engine, "before_cursor_execute", repush_before_children)
         try:
-            counts = purge_live(factory, retention_days=180, now=NOW)
+            counts = purge_live(
+                factory, retention_days=180, chart_image_retention_days=30, now=NOW
+            )
         finally:
             event.remove(engine, "before_cursor_execute", repush_before_children)
 
@@ -249,8 +478,119 @@ def test_sqlite_repush_after_batch_selection_survives_purge(tmp_path):
             chart = db.query(LiveChartImage).one()
             assert chart.turn_pk == kept.id and chart.image == image
         assert counts == {
-            "turns": 1, "scores": 1, "chart_images": 1, "canaries": 0, "days": 0, "jobs": 0, "events": 0
+            "turns": 1, "scores": 1, "chart_images": 1, "chart_images_expired": 0,
+            "chart_snapshots": 0, "chart_styles": 0,
+            "canaries": 0, "days": 0, "jobs": 0, "events": 0,
         }
+    finally:
+        engine.dispose()
+
+
+def test_sqlite_image_replaced_after_batch_selection_survives_expiry(
+    tmp_path, monkeypatch
+):
+    from test_live_ingest_sources import _seed_api_key
+
+    from qym_platform.api.live_ingest import TurnBody
+    from qym_platform.db.base import Base
+    from qym_platform.services.live_ingest import upsert_chart_image, upsert_turns
+    from qym_platform.services.live_retention import purge_live
+    from qym_platform.settings import PlatformSettings
+
+    clock = {"now": NOW - timedelta(days=31)}
+    monkeypatch.setattr(
+        "qym_platform.services.live_ingest.utcnow", lambda: clock["now"]
+    )
+    engine = create_engine(f"sqlite:///{tmp_path / 'live-image-expiry-race.db'}")
+    factory = sessionmaker(bind=engine, autoflush=False)
+    settings = PlatformSettings()
+    ref = "chart_20261101_abcd1234"
+    old_image, new_image = _png(), _png(width=2, height=1)
+
+    try:
+        Base.metadata.create_all(engine)
+        with factory() as db:
+            _seed_api_key(db)
+            source = LiveSource(
+                project_id="live-project-1",
+                key="worker",
+                name="Worker",
+                environment="test",
+            )
+            db.add(source)
+            db.flush()
+            source_id = source.id
+            report = upsert_turns(
+                db,
+                source,
+                [
+                    TurnBody(
+                        turn_id=name,
+                        turn_at=clock["now"],
+                        status="completed",
+                        question="Question?",
+                        summary={"charts": [{"ref": ref}]},
+                        scores=[{"metric_name": "accuracy", "score_numeric": 0.5}],
+                    )
+                    for name in ("replaced", "expired")
+                ],
+                settings,
+            )
+            assert report["accepted"] == 2
+            for name in ("replaced", "expired"):
+                upsert_chart_image(db, source, name, ref, old_image, settings)
+            db.commit()
+
+        selected = replaced = False
+
+        def replace_before_delete(
+            conn, cursor, statement, parameters, context, executemany
+        ):
+            nonlocal selected, replaced
+            if statement.startswith("SELECT live_chart_images.id"):
+                selected = True
+            if (
+                replaced
+                or not selected
+                or not statement.startswith("DELETE FROM live_chart_images")
+            ):
+                return
+            # Replace on a second connection after selection, before the DELETE.
+            replaced = True
+            clock["now"] = NOW
+            with factory() as db:
+                assert (
+                    db.connection().connection.driver_connection
+                    is not conn.connection.driver_connection
+                )
+                source = db.get(LiveSource, source_id)
+                status = upsert_chart_image(
+                    db, source, "replaced", ref, new_image, settings
+                )
+                assert status == "replaced"
+                db.commit()
+
+        event.listen(engine, "before_cursor_execute", replace_before_delete)
+        try:
+            counts = purge_live(
+                factory, retention_days=180, chart_image_retention_days=30, now=NOW
+            )
+        finally:
+            event.remove(engine, "before_cursor_execute", replace_before_delete)
+
+        assert replaced
+        assert counts == {
+            "turns": 0, "scores": 0, "chart_images": 0, "chart_images_expired": 1,
+            "chart_snapshots": 0, "chart_styles": 0,
+            "canaries": 0, "days": 0, "jobs": 0, "events": 0,
+        }
+        with factory() as db:
+            assert db.query(LiveTurn).count() == 2
+            assert db.query(LiveTurnScore).count() == 2
+            chart = db.query(LiveChartImage).one()
+            kept = db.query(LiveTurn).filter_by(turn_id="replaced").one()
+            assert chart.turn_pk == kept.id
+            assert chart.image == new_image and chart.received_at == NOW
     finally:
         engine.dispose()
 
@@ -270,7 +610,9 @@ def test_purge_keeps_day_rows_under_two_years(session_factory):
         db.commit()
         old_day_id = old_day.id
 
-    counts = purge_live(session_factory, retention_days=180, now=NOW)
+    counts = purge_live(
+        session_factory, retention_days=180, chart_image_retention_days=30, now=NOW
+    )
 
     assert counts["days"] == 1
     with session_factory() as db:
@@ -291,11 +633,12 @@ def test_maintenance_loop_calls_purge_live(session_factory, database, monkeypatc
 
     calls = []
 
-    def purge(factory, *, retention_days, now):
-        calls.append((factory, retention_days, now))
+    def purge(factory, *, retention_days, chart_image_retention_days, now):
+        calls.append((factory, retention_days, chart_image_retention_days, now))
         return {"turns": 0, "scores": 0, "chart_images": 0, "canaries": 0, "days": 0}
 
     monkeypatch.setenv("QYM_LIVE_RETENTION_DAYS", "180")
+    monkeypatch.setenv("QYM_LIVE_CHART_IMAGE_RETENTION_DAYS", "45")
     monkeypatch.setattr(datetime_utils, "utc_now_naive", lambda: NOW)
     monkeypatch.setattr(retention, "run_retention", lambda engine, **kwargs: {})
     monkeypatch.setattr(
@@ -307,7 +650,7 @@ def test_maintenance_loop_calls_purge_live(session_factory, database, monkeypatc
 
     worker._maybe_run_retention()
 
-    assert calls == ["feedback", (session_factory, 180, NOW)]
+    assert calls == ["feedback", (session_factory, 180, 45, NOW)]
 
 
 def test_purge_removes_old_jobs_and_events(session_factory, monkeypatch):
@@ -347,7 +690,9 @@ def test_purge_removes_old_jobs_and_events(session_factory, monkeypatch):
                 )
             )
         db.commit()
-    counts = purge_live(session_factory, retention_days=180, now=NOW)
+    counts = purge_live(
+        session_factory, retention_days=180, chart_image_retention_days=30, now=NOW
+    )
     assert counts["jobs"] == counts["events"] == 1
     with session_factory() as db:
         assert {job.id for job in db.query(LiveJob)} == {"boundary", "running"}

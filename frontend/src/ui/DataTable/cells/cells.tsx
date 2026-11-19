@@ -9,7 +9,7 @@ import { MoreTag, Tag } from '../../Tag';
 import { UserName } from '../../UserName';
 import { middleTruncate } from '../model';
 import styles from './cells.module.css';
-import { formatHeaderDate, toDate } from '@/lib/dates';
+import { APP_LOCALE, formatHeaderDate, toDate } from '@/lib/dates';
 
 /* ── ScoreBar ──────────────────────────────────────────────────────────── */
 
@@ -304,16 +304,19 @@ export function ProgressCell({
   total,
   failed,
   showFailed = false,
+  countFormat = 'fraction',
 }: {
   done: number;
   total: number;
   failed?: number;
   showFailed?: boolean;
+  /** Words and a fluid track for compact worker summaries; other tables keep the fraction. */
+  countFormat?: 'fraction' | 'words';
 }) {
   const pct = total > 0 ? Math.min(100, (done / total) * 100) : 0;
   const failedPct = total > 0 && failed ? Math.min(100 - pct, (failed / total) * 100) : 0;
   return (
-    <span className={styles.progress}>
+    <span className={styles.progress} data-count-format={countFormat}>
       <span
         className={styles.track}
         data-parts={failed === undefined ? undefined : ''}
@@ -333,7 +336,9 @@ export function ProgressCell({
         )}
       </span>
       <span className={failed === undefined ? styles.scoreText : styles.partsText}>
-        {done}/{total}
+        {countFormat === 'words'
+          ? `${done.toLocaleString(APP_LOCALE)} of ${total.toLocaleString(APP_LOCALE)}`
+          : `${done}/${total}`}
       </span>
       {showFailed && failed ? (
         <Tag kind="count" tone="danger">

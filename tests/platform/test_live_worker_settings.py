@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import secrets
 from copy import deepcopy
 from datetime import datetime
 
@@ -86,6 +87,65 @@ def values():
             "sslmode": "require",
         },
     }
+
+
+def test_changed_sections_compares_plaintext_not_tokens_or_hints(values):
+    # Generate synthetic secret inputs; only names are returned by the comparison.
+    key = Fernet.generate_key().decode("utf-8")
+    cipher = Fernet(key)
+    first = secrets.token_urlsafe(24) + "1234"
+    other = secrets.token_urlsafe(24) + "1234"
+
+    def encrypt(value):
+        return cipher.encrypt(value.encode()).decode()
+
+    previous = LiveWorkerSettings(values=deepcopy(values), secrets_encrypted={})
+    row = LiveWorkerSettings(values=deepcopy(values), secrets_encrypted={})
+    assert settings.changed_sections(row, None) == list(settings.SETTINGS_SECTIONS)
+    for name, section in settings.SECRET_SECTIONS.items():
+        previous.secrets_encrypted = {name: encrypt(first)}
+        row.secrets_encrypted = {name: encrypt(other)}
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setenv("QYM_LLM_CONFIG_ENCRYPTION_KEY", key)
+            assert settings.changed_sections(row, previous) == [section]
+            row.secrets_encrypted = {name: encrypt(first)}
+            assert row.secrets_encrypted != previous.secrets_encrypted
+            assert settings.changed_sections(row, previous) == []
+        row.secrets_encrypted = {}
+        assert settings.changed_sections(row, previous) == [section]
+        assert settings.changed_sections(previous, row) == [section]
+
+
+def test_changed_sections_normalizes_legacy_traces_and_ignores_notes(values):
+    previous = LiveWorkerSettings(
+        values=deepcopy(values), secrets_encrypted={}, note=None
+    )
+    previous.values.pop("evaluator_traces")
+    row = LiveWorkerSettings(
+        values=deepcopy(values), secrets_encrypted={}, note="New note"
+    )
+    assert settings.changed_sections(row, previous) == []
+    row.values["models"]["judge_a"] = "new-judge"
+    row.values["evaluation"]["poll_interval_s"] = 120
+    assert settings.changed_sections(row, previous) == ["evaluation", "models"]
+
+
+def test_history_comparison_unavailable_keeps_metadata_readable(values, monkeypatch):
+    monkeypatch.delenv("QYM_LLM_CONFIG_ENCRYPTION_KEY", raising=False)
+    previous = LiveWorkerSettings(
+        values=values, secrets_encrypted={"database_password": "old-token"}
+    )
+    row = LiveWorkerSettings(
+        version=2,
+        created_at=NOW,
+        values=values,
+        secrets_encrypted={"database_password": "unreadable-token"},
+        note="Saved settings",
+    )
+    summary = settings.version_history_summary(row, previous)
+    assert "changed_sections" not in summary
+    assert "secrets_encrypted" not in summary
+    assert summary["note"] == "Saved settings"
 
 
 @pytest.mark.parametrize("section", [None, {}, {"enabled": False}])

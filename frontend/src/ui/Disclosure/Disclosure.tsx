@@ -12,6 +12,10 @@ export interface DisclosureProps {
   title: ReactNode;
   /** One muted line shown next to the title while closed and open (e.g. "Default fields"). */
   summary?: ReactNode;
+  /** Aligned settings rows: fixed title column, body-size summary that wraps without clipping. */
+  layout?: 'inline' | 'columns';
+  /** Optional control beside the toggle, outside its button. */
+  aside?: ReactNode;
   defaultOpen?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -27,6 +31,8 @@ export interface DisclosureProps {
 export function Disclosure({
   title,
   summary,
+  layout = 'inline',
+  aside,
   defaultOpen,
   open,
   onOpenChange,
@@ -36,19 +42,26 @@ export function Disclosure({
   return (
     <AriaDisclosure
       className={[styles.disclosure, className].filter(Boolean).join(' ')}
+      data-layout={layout}
       defaultExpanded={defaultOpen}
       isExpanded={open}
       onExpandedChange={onOpenChange}
     >
-      <Heading className={styles.heading}>
-        <AriaButton slot="trigger" className={styles.trigger}>
-          <Icon name="chevron-right" size={12} className={styles.chevron} />
-          <span className={styles.title}>{title}</span>
-          {summary ? <span className={styles.summary}>{summary}</span> : null}
-        </AriaButton>
-      </Heading>
+      <div className={styles.header} data-part="disclosure-header">
+        <Heading className={styles.heading}>
+          <AriaButton slot="trigger" className={styles.trigger}>
+            <Icon name="chevron-right" size={12} className={styles.chevron} />
+            <span className={styles.title}>{title}</span>
+            {layout === 'columns' && summary != null ? ' ' : null}
+            {summary ? <span className={styles.summary}>{summary}</span> : null}
+          </AriaButton>
+        </Heading>
+        {aside}
+      </div>
       <DisclosurePanel className={styles.panel}>
-        <div className={styles.content}>{children}</div>
+        <div className={styles.content} data-part="disclosure-content">
+          {children}
+        </div>
       </DisclosurePanel>
     </AriaDisclosure>
   );

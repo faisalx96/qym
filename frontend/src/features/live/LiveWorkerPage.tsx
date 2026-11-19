@@ -18,7 +18,7 @@ import {
 import { useDocumentTitle } from '@/features/shell/hooks';
 import { fullWidth } from '@/features/shell/layout';
 import { actionErrorMessage } from '@/lib/http';
-import { ErrorState, PageHeader, Skeleton, useToast } from '@/ui';
+import { ErrorState, InlineNotice, PageHeader, Skeleton, useToast } from '@/ui';
 import { SourceControl } from './components/SourceControl';
 import { StatusStrip } from './components/worker/StatusStrip';
 import { SettingsForm } from './components/worker/SettingsForm';
@@ -29,6 +29,7 @@ import { PROBLEMS_PAGE_SIZE, ProblemsBlock, type ProblemsProps } from './compone
 import { DateRangeDialog } from './components/worker/DateRangeDialog';
 import type { WorkerBusy, WorkerCallbacks } from './components/worker/types';
 import { zoneToday } from './lib/zone';
+import { formatRelative } from '@/lib/format';
 import liveStyles from './live.module.css';
 import styles from './worker.module.css';
 
@@ -37,6 +38,7 @@ export interface WorkerPageViewProps extends ProblemsProps, WorkerCallbacks {
   modelIndex?: Record<string, number> | null;
   sourceControl?: ReactNode;
   jobsLimit?: number;
+  jobsPending?: boolean;
 }
 /** No data hooks: the same composed page is used by the app and the gallery. */
 export function WorkerPageView({
@@ -51,12 +53,13 @@ export function WorkerPageView({
   onCreateJob,
   onCancelJob,
   jobsLimit = 20,
+  jobsPending = false,
   onJobsLimit,
   ...problems
 }: WorkerPageViewProps) {
   const [range, setRange] = useState(false);
   return (
-    <div className={`${fullWidth} ${liveStyles.page}`}>
+    <div className={`${fullWidth} ${liveStyles.page} ${styles.page}`}>
       <PageHeader
         title="Worker"
         meta={sourceControl ? [sourceControl] : undefined}
@@ -64,6 +67,16 @@ export function WorkerPageView({
           <WorkerActions read={read} busy={busy} onState={onState} onBackfill={() => setRange(true)} />
         }
       />
+      {read.status.stale ? (
+        <InlineNotice tone="danger" lead="Worker is not responding.">
+          {read.status.last_poll_at || read.status.last_heartbeat_at
+            ? `The last poll was ${formatRelative(read.status.last_poll_at ?? read.status.last_heartbeat_at)}.`
+            : 'No poll has been reported.'}
+          {read.running?.running?.evaluation.poll_interval_s != null
+            ? ` The worker should poll every ${read.running.running.evaluation.poll_interval_s} seconds.`
+            : null}
+        </InlineNotice>
+      ) : null}
       <div className={styles.grid}>
         <StatusStrip read={read} />
         <ProblemsBlock {...problems} read={read} />
@@ -73,7 +86,10 @@ export function WorkerPageView({
           busy={busy}
           onCancelJob={onCancelJob}
           jobsLimit={jobsLimit}
+          jobsPending={jobsPending}
+          workerStale={read.status.stale}
           onJobsLimit={onJobsLimit}
+          source={problems.source}
         />
         <div className={styles.settingsRow}>
           <SettingsForm
@@ -183,7 +199,7 @@ function WorkerPage({ slug, source }: { slug: string; source: string }) {
   const sourceControl = <SourceControl key="source" slug={slug} source={source} status={status} />;
   if (!read)
     return (
-      <div className={`${fullWidth} ${liveStyles.page}`}>
+      <div className={`${fullWidth} ${liveStyles.page} ${styles.page}`}>
         <PageHeader title="Worker" meta={[sourceControl]} />
         {query.isError ? (
           <ErrorState
@@ -246,6 +262,7 @@ function WorkerPage({ slug, source }: { slug: string; source: string }) {
         onCreateJob={createJob.mutateAsync}
         onCancelJob={cancelJob.mutateAsync}
         jobsLimit={jobsLimit}
+        jobsPending={query.isFetching || query.isPlaceholderData}
         onJobsLimit={setJobsLimit}
       />
     </>

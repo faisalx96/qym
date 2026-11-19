@@ -8,6 +8,7 @@ import { Breadcrumbs } from './chrome/Breadcrumbs';
 import { UserMenu } from './chrome/UserMenu';
 import { CommandPalette } from './chrome/CommandPalette';
 import { GLOBAL_NAV, PLATFORM_NAV, isNavActive, parseRoute, projectNav, type NavItem } from './chrome/nav';
+import { ShellSubbarContext } from './ShellSubbar';
 import brandIcon from '@/assets/brand/qym-icon.png';
 import brandText from '@/assets/brand/qym-text.png';
 import styles from './AppShell.module.css';
@@ -34,6 +35,8 @@ export function AppShell() {
   const contentRef = useRef<HTMLElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
+  // The strip under the topbar that a page fills through <ShellSubbar> (the Live activity line).
+  const [subbar, setSubbar] = useState<HTMLDivElement | null>(null);
   useContentScrollRestoration(contentRef);
 
   const sidebarCollapsed = narrow ? !overlayOpen : collapsed;
@@ -184,8 +187,11 @@ export function AppShell() {
             </button>
           </div>
         </header>
+        <div ref={setSubbar} className={styles.subbar} data-shell-subbar />
         <main ref={contentRef} id="shell-content" className={styles.content} tabIndex={-1} data-shell-content>
-          <Outlet />
+          <ShellSubbarContext.Provider value={subbar}>
+            <Outlet />
+          </ShellSubbarContext.Provider>
         </main>
       </div>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} project={project} />
