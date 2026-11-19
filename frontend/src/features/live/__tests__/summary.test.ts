@@ -367,12 +367,16 @@ describe('live turn evidence presentation', () => {
     expect(strip).toHaveTextContent('Agent success');
   });
 
-  it('changes every bilingual explanation across all tabs and remembers the choice on reload', async () => {
-    const user = userEvent.setup();
-    const data = languageTurn();
-    const view = renderTurn(data);
-    expect(screen.getByRole('radio', { name: 'English' })).toBeChecked();
-    for (const language of ['ar', 'both', 'en'] as const) {
+  // One test per language: all three in one test clicked 21 tabs and passed the 20 s budget on a CI runner.
+  it.each(['ar', 'both', 'en'] as const)(
+    'changes every bilingual explanation across all tabs (%s)',
+    async (language) => {
+      const user = userEvent.setup();
+      const data = languageTurn();
+      const view = renderTurn(data);
+      expect(screen.getByRole('radio', { name: 'English' })).toBeChecked();
+      // English is the starting choice: leave it first, so that choosing it is a change too.
+      if (language === 'en') await user.click(screen.getByRole('radio', { name: 'Both' }));
       await user.click(
         screen.getByRole('radio', { name: { en: 'English', ar: 'العربية', both: 'Both' }[language] }),
       );
@@ -389,7 +393,13 @@ describe('live turn evidence presentation', () => {
         expect(verdict.textContent!.includes(verdictOf(data.summary)!.reasonEn!)).toBe(language !== 'ar');
         expect(verdict.textContent!.includes(verdictOf(data.summary)!.reasonAr!)).toBe(language !== 'en');
       }
-    }
+    },
+  );
+
+  it('remembers the language choice on reload', async () => {
+    const user = userEvent.setup();
+    const data = languageTurn();
+    const view = renderTurn(data);
     await user.click(screen.getByRole('radio', { name: 'Both' }));
     expect(localStorage.getItem(explanationLanguageKey)).toBe('both');
     view.unmount();

@@ -87,7 +87,12 @@ describe('overview loading and error states', () => {
         vi.fn(async (input: string) => (input.includes('/overview') ? overviewResponse(data) : sources())),
       );
       mount();
-      expect(await screen.findByRole('button', { name: `Explain Turns ${period}` })).toBeVisible();
+      // On a CI runner the first render takes over a second, and the button found first was replaced by a
+      // later render before it could be checked: wait until it is there and visible.
+      await waitFor(
+        () => expect(screen.getByRole('button', { name: `Explain Turns ${period}` })).toBeVisible(),
+        { timeout: 4000 },
+      );
       expect(screen.getByRole('heading', { name: `Average scores ${period}` })).toBeVisible();
       expect(screen.getByRole('grid', { name: `Average scores ${period}` })).toBeVisible();
       const total = Object.values(data.day.label_mix).reduce((sum, count) => sum + count, 0);

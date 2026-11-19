@@ -99,7 +99,6 @@ export function ChartSnapshot({ snapshot, alt }: { snapshot: LiveChartSnapshot; 
           compact
           error={failed.error}
           title="Couldn’t load the saved chart"
-          notFoundMessage="The saved chart is no longer in qym"
           onRetry={() => {
             if (markup.isError) void markup.refetch();
             if (style.isError) void style.refetch();
