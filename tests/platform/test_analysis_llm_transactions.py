@@ -747,11 +747,20 @@ def test_every_model_await_with_a_session_releases_its_transaction_first():
         return func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
 
     def releases(function):
+        """Calls of ``_release_transaction_for_llm``, direct or handed to ``run_in_threadpool``."""
         return [
             node.lineno
             for node in own_nodes(function)
             if isinstance(node, ast.Call)
-            and called_name(node) == "_release_transaction_for_llm"
+            and (
+                called_name(node) == "_release_transaction_for_llm"
+                or (
+                    called_name(node) == "run_in_threadpool"
+                    and node.args
+                    and isinstance(node.args[0], ast.Name)
+                    and node.args[0].id == "_release_transaction_for_llm"
+                )
+            )
         ]
 
     def visit(function, scopes):

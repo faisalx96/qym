@@ -114,6 +114,16 @@ class PlatformSettings(BaseSettings):
     db_worker_statement_timeout_ms: int = Field(default=300_000, ge=1000)
     db_lock_timeout_ms: int = Field(default=5_000, ge=100)
     db_idle_in_transaction_timeout_ms: int = Field(default=60_000, ge=1000)
+    # Async driver for the ``async def`` request handlers (db/session.py
+    # ``build_async_engine``). ``database_async_url`` names the async form of
+    # ``database_url`` outright (``postgresql+asyncpg://...``); otherwise
+    # ``db_async_driver`` derives it: ``auto`` takes ``asyncpg`` (PostgreSQL)
+    # or ``aiosqlite`` (a SQLite file) when the package is installed
+    # (``pip install qym-platform[async]``), ``off`` never builds an async
+    # engine. Without one, those handlers run their database work on the
+    # request thread pool, like the sync handlers.
+    database_async_url: str = Field(default="")
+    db_async_driver: str = Field(default="auto", pattern="^(auto|off|asyncpg|psycopg|aiosqlite)$")
 
     # Secrets
     llm_config_encryption_key: str = Field(default="")
@@ -174,6 +184,17 @@ class PlatformSettings(BaseSettings):
     # its events committed (each rebuild is a short transaction). Raise it under
     # heavy ingest to trade dashboard freshness for fewer lock collisions.
     dashboard_live_refresh_seconds: float = Field(default=2.0, gt=0, le=300)
+    # Dashboard summary worker (services/dashboard_summaries.py): the idle
+    # poll interval, how many partitions one tick serializes, how many
+    # outbox events one partition transaction applies, how many source rows
+    # one backfill transaction locks, and how often published outbox rows
+    # are pruned. Smaller batches hold the partition and bucket locks for
+    # less time (ingest waits on them); larger ones drain a backlog faster.
+    dashboard_worker_interval_seconds: float = Field(default=1.0, gt=0, le=60)
+    dashboard_worker_max_partitions: int = Field(default=20, ge=1, le=500)
+    dashboard_worker_max_events: int = Field(default=500, ge=1, le=10_000)
+    dashboard_worker_backfill_chunk: int = Field(default=200, ge=1, le=10_000)
+    dashboard_event_prune_interval_seconds: float = Field(default=60.0, ge=1, le=3600)
     # How often a run page probes a live run (``/live-status``) and the floor
     # of its row reloads. Served to the page in the run payload and the probe
     # answer, so one deployment value governs every viewer.
@@ -211,6 +232,11 @@ class PlatformSettings(BaseSettings):
     # "structural" drops item/metric bodies that already live in run_items,
     # run_item_attempts and run_item_scores, keeping ids, numbers and status.
     event_log_mode: str = Field(default="full", pattern="^(full|structural)$")
+    # Rows per statement when an ingest batch writes run_events and spans,
+    # and ids per IN-list when it looks up existing rows. Lower it when the
+    # server's work_mem or a proxy's statement size limit is tight; raise it
+    # for fewer round trips on batches of many thousand events.
+    ingest_write_batch_size: int = Field(default=400, ge=50, le=5000)
 
     # Run lifecycle. A RUNNING run with no event for this long is shown STOPPED
     # (lease_timeout) until its next event. The SDK heartbeats every 15s, but a

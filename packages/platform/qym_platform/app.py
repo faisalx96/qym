@@ -41,7 +41,7 @@ from qym_platform.services.analysis_jobs import (
     analysis_job_manager,
     rule_inference_job_manager,
 )
-from qym_platform.services.dashboard_summaries import DashboardSummaryWorker
+from qym_platform.services.dashboard_summaries import DashboardSummaryWorker, worker_options
 from qym_platform.static_files import GZipExceptStatic, PrecompressedStaticFiles
 from qym_platform.log import configure_logging, get_logger
 from qym_platform.middleware.request_context import install_request_context
@@ -122,9 +122,7 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     # Background loops get their own small pool so a backfill cannot starve requests.
     worker_engine = build_engine(settings, role="worker") if runs_loops else None
     worker_sessions = sessionmaker(bind=worker_engine, autoflush=False, autocommit=False) if worker_engine is not None else SessionLocal
-    dashboard_worker = DashboardSummaryWorker(
-        worker_sessions, live_refresh_interval=settings.dashboard_live_refresh_seconds
-    )
+    dashboard_worker = DashboardSummaryWorker(worker_sessions, **worker_options(settings))
     app.state.dashboard_summary_worker = dashboard_worker
     maintenance_worker = MaintenanceWorker(worker_sessions, worker_engine if worker_engine is not None else SessionLocal.kw["bind"])
     app.state.maintenance_worker = maintenance_worker

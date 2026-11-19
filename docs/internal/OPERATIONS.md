@@ -52,6 +52,9 @@ sure one process runs a given job.
 | `QYM_FEEDBACK_MESSAGES_PER_HOUR` / `QYM_FEEDBACK_DRAFTS_PER_DAY` | `30` / `5` | Feedback assistant limits per user (0 disables); see "Feedback assistant" |
 | `QYM_PRODUCT_EVAL_MAX_RETAINED_JOBS` | `100` | Finished product evals kept in each process's memory; older ones are served from `background_jobs` |
 | `QYM_DB_WORKER_POOL_SIZE` / `QYM_DB_WORKER_MAX_OVERFLOW` | `3` / `2` | Worker pool |
+| `QYM_DB_ASYNC_DRIVER` / `QYM_DATABASE_ASYNC_URL` | `auto` / empty | The async engine behind the `async def` request handlers (environment create/test/refresh, versioning details and tasks, feedback turns, orphan cancel, analysis document upload). `auto` derives the async URL from `QYM_DATABASE_URL` with `asyncpg` (or `psycopg` v3) when the package is installed (the image installs the `[async]` extra); `off`, or no driver, makes those handlers run their database work on the request thread pool instead, like the sync handlers. The async pool uses the API pool sizes and timeouts and reports `application_name=qym-api-async`. `QYM_DATABASE_ASYNC_URL` names the URL outright (same database, async driver). See "Async database driver" |
+| `QYM_INGEST_WRITE_BATCH_SIZE` | `400` | Rows per statement when one ingest batch writes `run_events` and `spans`, and ids per IN-list when it looks up existing rows. Lower it when a proxy or `work_mem` limits statement size; raise it for fewer round trips on very large batches |
+| `QYM_DASHBOARD_WORKER_INTERVAL_SECONDS` / `QYM_DASHBOARD_WORKER_MAX_PARTITIONS` / `QYM_DASHBOARD_WORKER_MAX_EVENTS` / `QYM_DASHBOARD_WORKER_BACKFILL_CHUNK` / `QYM_DASHBOARD_EVENT_PRUNE_INTERVAL_SECONDS` | `1` / `20` / `500` / `200` / `60` | The summary worker: idle poll interval, partitions serialized per tick, outbox events applied per partition transaction, source rows locked per backfill transaction, seconds between outbox prune passes. Ingest waits on the partition and bucket locks a partition transaction holds, so under heavy ingest lower `MAX_EVENTS` and `BACKFILL_CHUNK` (shorter locks) and raise the interval; to drain a backlog faster raise `MAX_PARTITIONS` and `MAX_EVENTS` |
 | `QYM_DB_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement guard on API connections |
 | `QYM_DB_LOCK_TIMEOUT_MS` | `5000` | Lock-wait guard (all roles) |
 | `QYM_DASHBOARD_LIVE_REFRESH_SECONDS` | `2` | How often the summary worker rebuilds a live run's dashboard numbers after its events committed. A rebuild never waits for a row held by another transaction (`NOWAIT`): it is skipped and retried after this interval, counted in the worker's `live_refresh_busy`. Raise it under heavy ingest |
@@ -490,6 +493,40 @@ autovacuum_naptime = 15s        autovacuum_vacuum_cost_limit = 1000
 ALTER TABLE run_events, dashboard_change_events, dashboard_record_state SET (autovacuum_vacuum_scale_factor = 0.02, autovacuum_analyze_scale_factor = 0.01);
 ```
 
+## Async database driver
+
+The data layer is synchronous SQLAlchemy on `psycopg2`: every sync request
+handler runs on the request thread pool (capped at the API pool size) with one
+pooled connection for its duration. A few handlers are `async def` because they
+await another service (an Evaluation Service probe, the feedback model, a model
+call) between their database phases. Those take their database handle from
+`deps.get_async_db` and run each database phase with `await db.run_sync(fn)`:
+
+- with an async driver, `fn` runs against the async engine
+  (`db/session.py` `build_async_engine`; `asyncpg` for PostgreSQL, from the
+  `[async]` extra the image installs) and the request loop never blocks on the
+  database;
+- without one (`QYM_DB_ASYNC_DRIVER=off`, the package missing, or a test that
+  overrides `get_db`), the same `fn` runs on the request thread pool.
+
+Either way the handler ends its transaction (`await db.rollback()`) before
+awaiting the remote call, so no connection sits idle in transaction for the
+call's duration (the `idle_in_transaction_session_timeout` of 60 s used to kill
+the connection under a slow probe, and the pool slot was held meanwhile).
+
+The async pool is sized like the API pool (`QYM_DB_POOL_SIZE` +
+`QYM_DB_MAX_OVERFLOW`) and connects with `application_name=qym-api-async`, so
+`pg_stat_activity` shows both. Count it when sizing `max_connections`: a web
+process can now hold up to twice the API pool, though the async pool only grows
+with concurrent async handlers.
+
+The analysis aggregation and the rule writer are coroutines that interleave
+model calls with synchronous database work (the same code runs inside analysis
+jobs). Their request handlers run them through
+`services/loop_offload.run_blocking_coroutine`: a worker thread with its own
+event loop, separate from the request thread pool, so one model call lasting
+minutes neither stalls the request loop nor takes one of the request threads.
+
 ## Backups
 
 A deployment recovery backup must include all table data. A dump that excludes
@@ -840,6 +877,7 @@ main:
 | `QYM_PROXY_SHARED_SECRET` | with `proxy_headers` | — | The value the proxy sends in `X-Qym-Proxy-Secret`; main does not start without it outside dev/test/local |
 | `QYM_WEB_WORKERS` | no | `1` | 2 recommended; no loop process is started for `main` |
 | `QYM_DB_POOL_SIZE` / `QYM_DB_MAX_OVERFLOW` / `QYM_HTTP_THREADPOOL_SIZE` | no | `10` / `10` / `0` | Per web process |
+| `QYM_DB_ASYNC_DRIVER` / `QYM_DATABASE_ASYNC_URL` | no | `auto` / empty | Async engine for the async handlers; a second pool of the same size per web process (count it against `max_connections`). See "Async database driver" |
 | `QYM_MAX_UPLOAD_BYTES` | no | 100 MB | Dataset uploads |
 | `QYM_MAIN_INCLUDE_INGEST` | no | `true` | Keep the ingest routes (works without the ingress rules) |
 | `QYM_PRODUCT_EVAL_MAX_QUEUED` | no | `0` | Queue cap for product evals (0 = `QYM_PRODUCT_EVAL_MAX_WORKERS`) |
@@ -856,6 +894,7 @@ ingestion:
 | `QYM_MAX_INGEST_BODY_BYTES` | no | 20 MB | Per events POST |
 | `QYM_MAX_UPLOAD_BYTES` | no | 100 MB | `POST /v1/runs:upload` |
 | `QYM_EVENT_LOG_MODE` | no | `full` | `structural` after rollout |
+| `QYM_INGEST_WRITE_BATCH_SIZE` | no | `400` | Rows per `run_events` / `spans` INSERT in one batch |
 | `QYM_SPAN_MAX_BYTES` | no | 1 MiB | |
 | `QYM_WEB_WORKERS`, `QYM_DB_POOL_SIZE`, `QYM_DB_MAX_OVERFLOW` | no | `1`, `10`, `10` | Per process; scale with replicas |
 | `QYM_RUN_STALE_TIMEOUT_SECONDS` | no | `180` | Same value as main |
@@ -872,6 +911,7 @@ workers:
 | `QYM_PRODUCT_EVAL_MAX_WORKERS`, `QYM_PRODUCT_EVAL_*` (concurrency, timeout, run count, default dataset, `MAX_RETAINED_JOBS`) | no | `3`, … | Per workers process |
 | `QYM_JOB_POLL_INTERVAL_SECONDS`, `QYM_SERVICE_HEARTBEAT_SECONDS` | no | `1`, `10` | |
 | `QYM_DASHBOARD_LIVE_REFRESH_SECONDS` | no | `2` | Live dashboard rebuild interval (see the single-server table) |
+| `QYM_DASHBOARD_WORKER_INTERVAL_SECONDS`, `QYM_DASHBOARD_WORKER_MAX_PARTITIONS`, `QYM_DASHBOARD_WORKER_MAX_EVENTS`, `QYM_DASHBOARD_WORKER_BACKFILL_CHUNK`, `QYM_DASHBOARD_EVENT_PRUNE_INTERVAL_SECONDS` | no | `1`, `20`, `500`, `200`, `60` | Summary worker batch sizes (see the single-server table) |
 | `QYM_RUN_LIVE_REFRESH_SECONDS` | no | `15` | Run page probe interval for live runs (see the single-server table) |
 | `QYM_EVAL_JOB_TIMEOUT_SECONDS`, `QYM_EVAL_*` | no | `8100` | Evaluation Service dispatcher |
 | `QYM_SPAN_RETENTION_DAYS`, `QYM_DELETED_RUN_GRACE_DAYS`, `QYM_SPAN_PARTITION_DAYS_AHEAD` | no | `60`, `30`, `14` | Retention runs here |

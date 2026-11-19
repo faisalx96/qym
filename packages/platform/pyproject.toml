@@ -43,6 +43,14 @@ dependencies = [
     "sqlglot>=23.0.0",
 ]
 
+[project.optional-dependencies]
+# Async database driver for the async request handlers (db/session.py
+# ``build_async_engine``): asyncpg for PostgreSQL, aiosqlite for a SQLite file.
+async = [
+    "asyncpg>=0.29.0",
+    "aiosqlite>=0.20.0",
+]
+
 [project.scripts]
 qym-platform = "qym_platform.cli:main"
 
