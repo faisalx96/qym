@@ -87,22 +87,24 @@ describe('overview loading and error states', () => {
         vi.fn(async (input: string) => (input.includes('/overview') ? overviewResponse(data) : sources())),
       );
       mount();
-      // On a CI runner the first render takes over a second, and the button found first was replaced by a
-      // later render before it could be checked: wait until it is there and visible.
+      const total = Object.values(data.day.label_mix).reduce((sum, count) => sum + count, 0);
+      // On a slow runner the skeleton timer (useDelayedPending, 300 ms) can fire just as the data arrives,
+      // and the skeleton then covers the page for its 400 ms minimum: all checks pass together on the settled page.
       await waitFor(
-        () => expect(screen.getByRole('button', { name: `Explain Turns ${period}` })).toBeVisible(),
+        () => {
+          expect(screen.getByRole('button', { name: `Explain Turns ${period}` })).toBeVisible();
+          expect(screen.getByRole('heading', { name: `Average scores ${period}` })).toBeVisible();
+          expect(screen.getByRole('grid', { name: `Average scores ${period}` })).toBeVisible();
+          expect(screen.getByText(`${total} turns with a diagnosis ${period}`)).toBeVisible();
+          expect(screen.getByRole('columnheader', { name: `Health ${period}` })).toBeVisible();
+          expect(
+            screen.getByText(
+              `Health is the share of ${period === 'today' ? "today's" : "that day's"} turns where the service was OK`,
+            ),
+          ).toBeVisible();
+        },
         { timeout: 4000 },
       );
-      expect(screen.getByRole('heading', { name: `Average scores ${period}` })).toBeVisible();
-      expect(screen.getByRole('grid', { name: `Average scores ${period}` })).toBeVisible();
-      const total = Object.values(data.day.label_mix).reduce((sum, count) => sum + count, 0);
-      expect(screen.getByText(`${total} turns with a diagnosis ${period}`)).toBeVisible();
-      expect(screen.getByRole('columnheader', { name: `Health ${period}` })).toBeVisible();
-      expect(
-        screen.getByText(
-          `Health is the share of ${period === 'today' ? "today's" : "that day's"} turns where the service was OK`,
-        ),
-      ).toBeVisible();
     },
   );
 
