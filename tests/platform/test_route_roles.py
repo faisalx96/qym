@@ -26,8 +26,8 @@ ALLOWED_FOR = {
     "outsider": set(),
     "member": {"member"},
     "owner": {"member", "owner_or_manager"},
-    "mgr": {"member", "owner_or_manager", "manager"},
-    "admin": {"member", "owner_or_manager", "manager", "admin"},
+    "mgr": {"member", "owner_or_manager", "manager", "factory_approver"},
+    "admin": {"member", "owner_or_manager", "manager", "admin", "factory_approver"},
 }
 HEADERS = {"outsider": arch.OUTSIDER, "member": arch.MEMBER, "owner": arch.MEMBER, "mgr": arch.MGR, "admin": arch.ADMIN}
 

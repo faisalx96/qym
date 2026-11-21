@@ -34,6 +34,7 @@ const DatasetsRoutes = lazyPage(() => import('@/features/datasets/DatasetsRoutes
 const ReviewsPage = lazyPage(() => import('@/features/reviews/ReviewsPage'), 'ReviewsPage');
 const TrashPage = lazyPage(() => import('@/features/trash/TrashPage'), 'TrashPage');
 const BookmarksPage = lazyPage(() => import('@/features/bookmarks/BookmarksPage'), 'BookmarksPage');
+const FactoryRoutes = lazyPage(() => import('@/features/factory/FactoryRoutes'), 'FactoryRoutes');
 const AdminPage = lazyPage(() => import('@/features/admin/AdminPage'), 'AdminPage');
 const DocsPage = lazyPage(() => import('@/features/docs/DocsPage'), 'DocsPage');
 // The experiments area is the heaviest (launch form, editors).
@@ -76,6 +77,8 @@ const projectChildren: RouteObject[] = [
   { path: C.analysis, element: <AnalyzerPage /> },
   { path: C.reviews, element: <ReviewsPage /> },
   { path: C.bookmarks, element: <BookmarksPage /> },
+  { path: C.factory, element: <FactoryRoutes /> },
+  { path: C.factorySplat, element: <FactoryRoutes /> },
   { path: C.compare, element: <ComparePage /> },
   { path: C.settings, element: <ProjectSettingsPage /> },
   // A run URL trimmed to its list (C209); ranks above the run page's splat.

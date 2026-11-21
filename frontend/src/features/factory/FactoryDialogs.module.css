@@ -1,0 +1,24 @@
+/* Factory dialogs: stacked fields, one row of short fields side by side. */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-md);
+  align-items: start;
+}
+
+.chips {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  align-items: flex-start;
+}
+
+.help {
+  margin: 0;
+}

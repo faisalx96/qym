@@ -81,6 +81,7 @@ export type IconName =
   | 'zap'
   | 'diamond'
   | 'bookmark'
+  | 'factory'
   | 'pin'
   | 'pin-off';
 
@@ -141,6 +142,8 @@ const PATHS: Record<IconName, string> = {
   star: 'M12 3l2.8 5.6 6.2.9-4.5 4.4 1.1 6.1L12 17.1 6.4 20l1.1-6.1L3 9.5l6.2-.9z',
   /* a ribbon bookmark: the run bookmarks (header button, Bookmarks nav) */
   bookmark: 'M6 3h12v18l-6-4-6 4z',
+  /* a plant with a sawtooth roof: the data factory (nav, Generate data) */
+  factory: 'M3 21V9l6 4V9l6 4V9l6 4v8zM3 21h18M8 17h2M14 17h2',
   /* a push pin: a bookmark pinned to the top; pin-off strikes it through */
   pin: 'M9 3h6l-1 6 3 3v2H7v-2l3-3zM12 14v7',
   'pin-off': 'M9 3h6l-1 6 3 3v2H7v-2l3-3zM12 14v7M4 4l16 16',
