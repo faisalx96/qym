@@ -12,6 +12,7 @@ import { useRunsPage } from '@/api/dashboard';
 import type { RunRow } from '@/api/dashboardTypes';
 import { runKeys, useReviewHistoryQuery } from '@/api/runs';
 import { useAuth, useProjectContext } from '@/features/shell';
+import { BookmarkButton } from '@/features/bookmarks/BookmarkButton';
 import { AnalysisSpark } from '@/features/runs-list/AnalyzeAction';
 import { isActiveRun } from '@/features/runs-list/polling';
 import { RunDialogs, type DialogState } from '@/features/runs-list/RunDialogs';
@@ -142,6 +143,7 @@ export function RunHeaderActions({ run, slug }: { run: Run; slug: string }) {
   const refresh = () => void queryClient.invalidateQueries({ queryKey: runKeys.all(run.run_id) });
   return (
     <>
+      <BookmarkButton runId={run.run_id} runName={run.external_run_id || run.run_name || run.run_id} />
       {reference ? (
         <LinkButton
           variant="accent"

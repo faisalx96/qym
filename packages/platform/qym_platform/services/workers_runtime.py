@@ -159,6 +159,7 @@ class WorkersRuntime:
         from qym_platform.services.eval_dispatcher import EvalDispatcher
         from qym_platform.services.eval_remote_queue import RemoteQueueSnapshotter
         from qym_platform.services.job_executor import JobExecutor
+        from qym_platform.services.data_factory import FactoryWorker
         from qym_platform.services.maintenance import MaintenanceWorker
         from qym_platform.settings import PlatformSettings
 
@@ -185,6 +186,7 @@ class WorkersRuntime:
             "maintenance": MaintenanceWorker(sessions, self.engine),
             "eval_dispatcher": EvalDispatcher(sessions),
             "remote_queue_snapshotter": RemoteQueueSnapshotter(sessions),
+            "data_factory": FactoryWorker(sessions),
         }
         self.executor = JobExecutor(
             job_engine, poll_interval=self.settings.job_poll_interval_seconds

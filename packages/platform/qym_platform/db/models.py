@@ -1354,6 +1354,329 @@ class Run(Base):
         }
 
 
+class BookmarkVisibility(str, enum.Enum):
+    """Who sees a run bookmark: its author only, or every member of the project."""
+
+    PRIVATE = "private"
+    PUBLIC = "public"
+
+
+class RunBookmark(Base):
+    """A user's bookmark of a run, with a markdown note (api/bookmarks.py).
+
+    One per user and run. A ``public`` bookmark shows to every member of the
+    project, a ``private`` one to its author only; ``pinned`` bookmarks lead
+    the project's bookmark list, newest pin first. Rows go with the run
+    (ON DELETE CASCADE, so retention's purge needs no extra step) and with
+    the user. The unique key doubles as the run index.
+    """
+
+    __tablename__ = "run_bookmarks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    visibility: Mapped[BookmarkVisibility] = mapped_column(
+        _string_enum(BookmarkVisibility, 10),
+        default=BookmarkVisibility.PRIVATE,
+        server_default=BookmarkVisibility.PRIVATE.value,
+        nullable=False,
+    )
+    note: Mapped[str] = mapped_column(Text, default="", server_default="", nullable=False)
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
+    pinned_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    __table_args__ = (UniqueConstraint("run_id", "user_id", name="uq_run_bookmarks_run_user"),)
+
+
+class FactoryJobKind(str, enum.Enum):
+    ANALYSIS = "analysis"
+    GENERATION = "generation"
+
+
+# Data factory job states, as the maintenance jobs (services/data_factory.py).
+FACTORY_JOB_STATUSES = (
+    "queued",
+    "running",
+    "succeeded",
+    "failed",
+    "cancel_requested",
+    "cancelled",
+)
+FACTORY_ACTIVE_JOB_STATUSES = ("queued", "running", "cancel_requested")
+
+# Factory access levels, lowest first (permissions.factory_access_levels).
+FACTORY_LEVELS = ("none", "view", "modify", "approve", "manage")
+FACTORY_GRANT_LEVELS = ("view", "modify", "approve")
+# "rule" constrains an item; a "bridge" extends it into other categories (a join in SQL, a
+# cross-sell in a FAQ) so generation can combine rules of those categories next.
+FACTORY_RULE_KINDS = ("rule", "bridge")
+
+
+class DataFactory(Base):
+    """A project dataset connected to the data factory.
+
+    The factory extracts business rules from the dataset's items (``FactoryRule``,
+    grouped by the value of ``group_metadata_key`` in each item's metadata and
+    sorted into ``FactoryRuleCategory`` rows) and generates new items from the
+    rules into new datasets (``FactoryJob``). One factory per dataset. Access is
+    its own, like a dataset's: ``project`` (every member may modify) or
+    ``restricted`` (grants only); the ``approve`` grant level is who may make a
+    rule official.
+    """
+
+    __tablename__ = "data_factories"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id"), nullable=False, index=True
+    )
+    dataset_id: Mapped[str] = mapped_column(
+        ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    # The item metadata key whose value groups the rules; NULL = one global group.
+    group_metadata_key: Mapped[Optional[str]] = mapped_column(
+        String(200), nullable=True
+    )
+    llm_connection_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("project_llm_connections.id", ondelete="SET NULL"), nullable=True
+    )
+    access_mode: Mapped[str] = mapped_column(
+        String(16), default="project", server_default="project", nullable=False
+    )
+    # Optional extra instructions appended to the agent prompts.
+    analysis_instructions: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
+    )
+    generation_instructions: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
+    )
+    created_by_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id"), nullable=False
+    )
+    last_analyzed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
+class FactoryGrant(Base):
+    """A per-user access grant on a factory (``view``, ``modify`` or ``approve``)."""
+
+    __tablename__ = "factory_grants"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    factory_id: Mapped[str] = mapped_column(
+        ForeignKey("data_factories.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    level: Mapped[str] = mapped_column(String(16), nullable=False)
+    granted_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("factory_id", "user_id", name="uq_factory_grant_user"),
+    )
+
+
+class FactoryRuleCategory(Base):
+    """A kind of rule the agent extracts: a description and an optional strict JSON schema for the rule body."""
+
+    __tablename__ = "factory_rule_categories"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    factory_id: Mapped[str] = mapped_column(
+        ForeignKey("data_factories.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    key: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
+    )
+    json_schema: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSON(none_as_null=True), nullable=True, default=None
+    )
+    position: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("factory_id", "key", name="uq_factory_category_key"),
+    )
+
+
+class FactoryRule(Base):
+    """One business rule of a factory, in a category and a metadata group.
+
+    ``official`` rules were approved by a person with the ``approve`` level;
+    the agent's proposals and hand-written rules start non-official. ``body``
+    follows the category's JSON schema when it has one. ``evidence`` lists the
+    item ids the agent derived the rule from.
+    """
+
+    __tablename__ = "factory_rules"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    factory_id: Mapped[str] = mapped_column(
+        ForeignKey("data_factories.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    category_id: Mapped[str] = mapped_column(
+        ForeignKey("factory_rule_categories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # The item metadata value this rule applies to; "" is the ungrouped / global group.
+    group_value: Mapped[str] = mapped_column(
+        String(500), default="", server_default="", nullable=False
+    )
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    description: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
+    )
+    body: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSON(none_as_null=True), nullable=True, default=None
+    )
+    official: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
+    # "rule" | "bridge" (FACTORY_RULE_KINDS); a bridge's target categories are its "bridge" links.
+    kind: Mapped[str] = mapped_column(
+        String(16), default="rule", server_default="rule", nullable=False
+    )
+    source: Mapped[str] = mapped_column(
+        String(16), default="agent", server_default="agent", nullable=False
+    )
+    evidence: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    job_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_factory_rules_factory_group", "factory_id", "group_value"),
+    )
+
+
+class FactoryRuleLink(Base):
+    """A rule's further categories, and a bridge rule's target categories.
+
+    ``category_id`` on the rule is its primary category (the one whose JSON
+    schema its body follows); ``role`` ``"category"`` links list the other
+    categories the rule belongs to, ``"bridge"`` links the categories a bridge
+    rule opens for the next generation layer.
+    """
+
+    __tablename__ = "factory_rule_links"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    rule_id: Mapped[str] = mapped_column(
+        ForeignKey("factory_rules.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    category_id: Mapped[str] = mapped_column(
+        ForeignKey("factory_rule_categories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "rule_id",
+            "category_id",
+            "role",
+            name="uq_factory_rule_links_rule_category_role",
+        ),
+    )
+
+
+class FactoryJob(Base):
+    """A factory job (rule analysis or data generation) run by the workers loop.
+
+    Queued by the API, claimed under a lease and driven in committed steps by
+    ``services.data_factory.FactoryWorker``; progress lives in the row so a
+    restart resumes the report, not the paid calls. A generation job records
+    the dataset it writes to in ``output_dataset_id``.
+    """
+
+    __tablename__ = "factory_jobs"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    factory_id: Mapped[str] = mapped_column(
+        ForeignKey("data_factories.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), default="queued", server_default="queued", nullable=False
+    )
+    params: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    progress: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    log: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
+    )
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    output_dataset_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    requested_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    lease_owner: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    lease_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    __table_args__ = (Index("ix_factory_jobs_status_created", "status", "created_at"),)
+
+
 class RunDataset(Base):
     """One dataset version a union run evaluated (runs with two or more only)."""
 

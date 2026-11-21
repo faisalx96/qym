@@ -43,6 +43,13 @@ from qym_platform.db.models import (
     ApiKey,
     Approval,
     AuditLog,
+    DataFactory,
+    Dataset,
+    DatasetVersion,
+    DatasetVersionStatus,
+    FactoryJob,
+    FactoryRule,
+    FactoryRuleCategory,
     Project,
     ProjectLlmConnection,
     ProjectMembership,
@@ -129,6 +136,8 @@ def session_factory(monkeypatch):
                     scopes=[],
                 ),
                 ProjectLlmConnection(id="llm1", project_id="pa", name="default", is_default=True),
+                Dataset(id="ds1", project_id="pa", name="Faq", slug="faq", created_by_user_id="mgr"),
+                Dataset(id="ds2", project_id="pa", name="Spare", slug="spare", created_by_user_id="mgr"),
                 AnalyzerDocument(
                     id="doc1",
                     project_id="pa",
@@ -142,6 +151,29 @@ def session_factory(monkeypatch):
         db.flush()
         db.add_all(
             [
+                DatasetVersion(
+                    id="dsv1",
+                    dataset_id="ds1",
+                    version="v1",
+                    status=DatasetVersionStatus.PUBLISHED,
+                    item_count=0,
+                    created_by_user_id="mgr",
+                ),
+                DataFactory(id="f1", project_id="pa", dataset_id="ds1", access_mode="project", created_by_user_id="mgr"),
+            ]
+        )
+        db.flush()
+        db.add_all(
+            [
+                FactoryRuleCategory(id="fc1", factory_id="f1", key="general", name="General"),
+                FactoryRuleCategory(id="fc2", factory_id="f1", key="format", name="Format"),
+                FactoryJob(id="fj1", factory_id="f1", kind="analysis", status="queued", params={}, progress={}),
+            ]
+        )
+        db.flush()
+        db.add_all(
+            [
+                FactoryRule(id="fr1", factory_id="f1", category_id="fc1", title="Answer in one sentence", evidence=[]),
                 RunItem(run_id="r1", item_id="i1", index=0, input="q", output="a"),
                 RunItemScore(run_id="r1", item_id="i1", metric_name="m", score_numeric=0.5),
                 Approval(run_id="r-review", submitted_by_user_id="mgr"),
@@ -237,6 +269,24 @@ REFUSED = [
     ("POST", "/api/runs/delete", "/api/runs/delete", {"json": {"file_path": "r1"}}, MGR),
     ("POST", "/api/runs/restore", "/api/runs/restore", {"json": {"run_id": "r-trash"}}, ADMIN),
     ("POST", "/api/runs/{run_id}/force-stop", "/api/runs/r1/force-stop", None, ADMIN),
+    # Bookmarks are project content: an archived project takes none and gives none back.
+    # Data factory: connecting, configuring, categories, rules, approvals and jobs change the project.
+    ("POST", "/api/projects/{project_slug}/factories", "/api/projects/pa/factories", {"json": {"dataset_ref": "spare"}}, MEMBER),
+    ("PATCH", "/api/factories/{factory_id}", "/api/factories/f1", {"json": {"group_metadata_key": "topic"}}, MEMBER),
+    ("DELETE", "/api/factories/{factory_id}", "/api/factories/f1", None, MGR),
+    ("PUT", "/api/factories/{factory_id}/access", "/api/factories/f1/access", {"json": {"access_mode": "project", "grants": []}}, MGR),
+    ("POST", "/api/factories/{factory_id}/categories", "/api/factories/f1/categories", {"json": {"name": "Tone"}}, MEMBER),
+    ("PATCH", "/api/factories/{factory_id}/categories/{category_id}", "/api/factories/f1/categories/fc2", {"json": {"name": "Format rules"}}, MEMBER),
+    ("DELETE", "/api/factories/{factory_id}/categories/{category_id}", "/api/factories/f1/categories/fc2", None, MEMBER),
+    ("POST", "/api/factories/{factory_id}/rules", "/api/factories/f1/rules", {"json": {"category_id": "fc1", "title": "Keep it short"}}, MEMBER),
+    ("PATCH", "/api/factories/{factory_id}/rules/{rule_id}", "/api/factories/f1/rules/fr1", {"json": {"title": "Answer briefly"}}, MEMBER),
+    ("DELETE", "/api/factories/{factory_id}/rules/{rule_id}", "/api/factories/f1/rules/fr1", None, MEMBER),
+    ("POST", "/api/factories/{factory_id}/rules/{rule_id}:approve", "/api/factories/f1/rules/fr1:approve", None, MGR),
+    ("POST", "/api/factories/{factory_id}/rules/{rule_id}:revoke", "/api/factories/f1/rules/fr1:revoke", None, MGR),
+    ("POST", "/api/factories/{factory_id}/jobs", "/api/factories/f1/jobs", {"json": {"kind": "analysis", "params": {}}}, MEMBER),
+    ("POST", "/api/factories/{factory_id}/jobs/{job_id}:cancel", "/api/factories/f1/jobs/fj1:cancel", None, MEMBER),
+    ("PUT", "/api/runs/{run_id}/bookmark", "/api/runs/r1/bookmark", {"json": {"visibility": "public", "note": "keep"}}, MEMBER),
+    ("DELETE", "/api/runs/{run_id}/bookmark", "/api/runs/r1/bookmark", None, MEMBER),
     ("DELETE", "/api/runs/{run_id}/passes/{pass_number}", "/api/runs/r1/passes/1", None, MGR),
     ("DELETE", "/api/runs/{run_id}/passes", "/api/runs/r1/passes", {"json": {"pass_numbers": [1]}}, MGR),
     # Analysis and diagnosis writes addressed by run id.

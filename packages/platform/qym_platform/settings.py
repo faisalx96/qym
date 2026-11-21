@@ -243,6 +243,8 @@ class PlatformSettings(BaseSettings):
     # heartbeat can wait behind a slow upload, so keep a wide margin.
     run_stale_timeout_seconds: int = Field(default=180, ge=5)
     analysis_job_max_workers: int = Field(default=2, ge=1)
+    # Data factory: model calls in flight per job (generation and analysis batches).
+    factory_llm_concurrency: int = Field(default=4, ge=1, le=16)
     analysis_max_concurrency: int = Field(default=20, ge=1, le=20)
     analysis_max_retries: int = Field(default=1, ge=0, le=5)
 
