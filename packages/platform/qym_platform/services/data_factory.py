@@ -36,18 +36,32 @@ from uuid import uuid4
 import jsonschema
 from qym_platform.auth import Principal
 from qym_platform.datetime_utils import utc_now_naive
-from qym_platform.db.models import (FACTORY_ACTIVE_JOB_STATUSES,
-                                    FACTORY_LEVELS, DataFactory, Dataset,
-                                    DatasetAlias, DatasetGrant, DatasetItem,
-                                    DatasetVersion, DatasetVersionChange,
-                                    DatasetVersionStatus, FactoryGrant,
-                                    FactoryJob, FactoryJobKind, FactoryRule,
-                                    FactoryRuleCategory, FactoryRuleLink,
-                                    ProjectLlmConnection, ProjectMembership,
-                                    ProjectRole)
+from qym_platform.db.models import (
+    FACTORY_ACTIVE_JOB_STATUSES,
+    FACTORY_LEVELS,
+    DataFactory,
+    Dataset,
+    DatasetAlias,
+    DatasetGrant,
+    DatasetItem,
+    DatasetVersion,
+    DatasetVersionChange,
+    DatasetVersionStatus,
+    FactoryGrant,
+    FactoryJob,
+    FactoryJobKind,
+    FactoryRule,
+    FactoryRuleCategory,
+    FactoryRuleLink,
+    ProjectLlmConnection,
+    ProjectMembership,
+    ProjectRole,
+)
 from qym_platform.item_identity import build_identity_fingerprint
-from qym_platform.llm_endpoint_security import (create_llm_http_client,
-                                                validate_llm_base_url)
+from qym_platform.llm_endpoint_security import (
+    create_llm_http_client,
+    validate_llm_base_url,
+)
 from qym_platform.log import get_logger
 from qym_platform.openai_compat import create_chat_completion_compat
 from qym_platform.permissions import is_platform_admin
@@ -61,6 +75,9 @@ from sqlalchemy.orm import Session
 logger = get_logger(__name__)
 
 LEASE_SECONDS = 120
+# While a runner awaits model calls, the lease is renewed (and the log flushed, a cancel
+# request honoured) this often, from the job's own event loop.
+HEARTBEAT_SECONDS = LEASE_SECONDS / 3
 LOG_LINES = 200
 # Items of one group sent in one model call, and the most items read per group.
 ANALYSIS_BATCH_ITEMS = 25
@@ -345,6 +362,10 @@ def build_client(conn: ProjectLlmConnection) -> Tuple[Any, str]:
         http_client=create_llm_http_client(
             allow_private=settings.allow_private_llm_base_urls
         ),
+        # Without these the library waits 600 s per attempt and retries twice: a
+        # dead endpoint held one call for half an hour.
+        timeout=float(settings.factory_llm_timeout_seconds),
+        max_retries=1,
     )
     return client, conn.llm_model
 
@@ -686,6 +707,8 @@ class JobContext:
         self.output_dataset_id = job.output_dataset_id
         self.requested_by_user_id = job.requested_by_user_id
         self._log: List[str] = []
+        # Set by the heartbeat when a commit raised; the cancelled runner re-raises it.
+        self.interrupt: Optional[Exception] = None
 
     def log(self, message: str) -> None:
         stamp = utc_now_naive().strftime("%H:%M:%S")
@@ -711,6 +734,43 @@ class JobContext:
             db.commit()
         if cancelled:
             raise JobCancelled()
+
+
+async def run_with_heartbeat(ctx: JobContext, runner: Any) -> None:
+    """Run ``runner`` (a coroutine) while a heartbeat commits every HEARTBEAT_SECONDS.
+
+    A model call can take minutes; renewing the lease only after a batch of
+    calls let another worker claim the job meanwhile, and a cancel request
+    waited for the batch. The heartbeat commits progress and log from the
+    same event loop (a few milliseconds while the runner awaits the network);
+    when the commit raises (cancelled, lease lost) the runner's task is
+    cancelled and the exception re-raised here.
+    """
+    main = asyncio.ensure_future(runner)
+
+    async def beat() -> None:
+        while True:
+            await asyncio.sleep(HEARTBEAT_SECONDS)
+            try:
+                ctx.commit()
+            except (JobCancelled, JobLeaseLost) as exc:
+                ctx.interrupt = exc
+                main.cancel()
+                return
+
+    beater = asyncio.ensure_future(beat())
+    try:
+        await main
+    except asyncio.CancelledError:
+        if ctx.interrupt is not None:
+            raise ctx.interrupt from None
+        raise
+    finally:
+        beater.cancel()
+        try:
+            await beater
+        except asyncio.CancelledError:
+            pass
 
 
 def claim_job(db: Session, owner: str) -> Optional[FactoryJob]:
@@ -789,9 +849,9 @@ def run_job(job_id: str, session_factory: Callable[[], Session], *, owner: str) 
     error: Optional[str] = None
     try:
         if ctx.kind == FactoryJobKind.ANALYSIS.value:
-            asyncio.run(_run_analysis(ctx))
+            asyncio.run(run_with_heartbeat(ctx, _run_analysis(ctx)))
         elif ctx.kind == FactoryJobKind.GENERATION.value:
-            asyncio.run(_run_generation(ctx))
+            asyncio.run(run_with_heartbeat(ctx, _run_generation(ctx)))
         else:
             raise FactoryConfigError(f"Unknown factory job kind: {ctx.kind}")
     except JobLeaseLost:
@@ -1069,12 +1129,13 @@ async def _run_analysis(ctx: JobContext) -> None:
     if wanted_groups:
         groups = {g: rows for g, rows in groups.items() if g in set(wanted_groups)}
     sample = int(ctx.params.get("sample_per_group") or ANALYSIS_SAMPLE_DEFAULT)
+    batch_items = int(settings.factory_analysis_batch_items or ANALYSIS_BATCH_ITEMS)
     batches: Dict[str, List[List[DatasetItem]]] = {}
     for group, rows in groups.items():
         rows = rows[:sample]
         batches[group] = [
-            rows[start : start + ANALYSIS_BATCH_ITEMS]
-            for start in range(0, len(rows), ANALYSIS_BATCH_ITEMS)
+            rows[start : start + batch_items]
+            for start in range(0, len(rows), batch_items)
         ]
     # One extraction call per batch, then one consolidation call per group.
     total = sum(len(b) for b in batches.values()) + len(batches)
@@ -1098,9 +1159,12 @@ async def _run_analysis(ctx: JobContext) -> None:
     skipped = 0
     done = 0
 
+    answered = 0
+
     async def extract(
         group: str, rows: List[DatasetItem], existing: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
+        nonlocal answered
         prompt = analysis_prompt(
             categories=categories,
             group_key=key,
@@ -1110,7 +1174,13 @@ async def _run_analysis(ctx: JobContext) -> None:
             instructions=instructions,
         )
         async with semaphore:
-            return await complete_json(client, model, ANALYSIS_SYSTEM, prompt)
+            answer = await complete_json(client, model, ANALYSIS_SYSTEM, prompt)
+        answered += 1
+        ctx.log(
+            f"{group or 'ungrouped'}: call {answered} of {len(batches[group])} answered "
+            f"({len(rows)} items)"
+        )
+        return answer
 
     async def consolidate(
         existing: List[Dict[str, Any]], candidates: List[Dict[str, Any]]
@@ -1756,6 +1826,7 @@ __all__ = [
     "request_cancel",
     "resolve_source_version",
     "run_job",
+    "run_with_heartbeat",
     "slugify_key",
     "source_items",
     "validate_params",

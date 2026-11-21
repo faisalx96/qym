@@ -11,15 +11,28 @@ function and the client build by a stub.
 
 from __future__ import annotations
 
+import asyncio
+import inspect
+from types import SimpleNamespace
+
 import pytest
 import sqlalchemy as sa
 import test_archived_project_read_only as arch
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from qym_platform.db.models import (Base, DataFactory, Dataset, DatasetItem,
-                                    DatasetVersion, FactoryJob, FactoryRule,
-                                    ProjectMembership, ProjectRole, User,
-                                    UserRole)
+from qym_platform.db.models import (
+    Base,
+    DataFactory,
+    Dataset,
+    DatasetItem,
+    DatasetVersion,
+    FactoryJob,
+    FactoryRule,
+    ProjectMembership,
+    ProjectRole,
+    User,
+    UserRole,
+)
 from qym_platform.services import data_factory as svc
 from test_archived_project_read_only import client  # noqa: F401 (fixtures)
 from test_archived_project_read_only import session_factory  # noqa: F401 (fixtures)
@@ -80,7 +93,10 @@ def fake_llm(monkeypatch):
 
     async def complete_json(client, model, system, user, *, temperature=0.2):
         calls.append({"system": system, "user": user, "temperature": temperature})
-        return state["script"](system, user)
+        result = state["script"](system, user)
+        if inspect.isawaitable(result):
+            result = await result
+        return result
 
     monkeypatch.setattr(svc, "complete_json", complete_json)
 
@@ -1216,6 +1232,87 @@ def test_a_running_job_stops_at_the_next_batch_when_cancelled(
     )
     assert cancelled.status_code == 200 and cancelled.json()["status"] == "cancelled"
     assert _run_jobs(session_factory) == []
+
+
+def test_the_heartbeat_renews_the_lease_and_a_cancel_interrupts_a_call_in_flight(
+    client, session_factory, fake_llm, monkeypatch
+):
+    monkeypatch.setattr(svc, "HEARTBEAT_SECONDS", 0.05)
+    _seed_items(session_factory, [("i1", "", "Hi", "Hello")])
+    with session_factory() as db:
+        db.get(FactoryJob, "fj1").status = "cancelled"
+        db.commit()
+    started = client.post(
+        "/api/factories/f1/jobs", json={"kind": "analysis"}, headers=MEMBER
+    )
+    assert started.status_code == 202, started.text
+    job_id = started.json()["id"]
+    seen = {}
+
+    async def script(system, user):
+        with session_factory() as db:
+            seen["lease_at_start"] = db.get(FactoryJob, job_id).lease_until
+        await asyncio.sleep(0.25)
+        with session_factory() as db:
+            job = db.get(FactoryJob, job_id)
+            seen["lease_later"] = job.lease_until
+            job.status = "cancel_requested"
+            db.commit()
+        # The heartbeat sees the request and cancels this task long before it returns.
+        await asyncio.sleep(10)
+        return {"rules": []}
+
+    fake_llm(script)
+    assert _run_jobs(session_factory) == ["cancelled"]
+    assert seen["lease_later"] > seen["lease_at_start"]
+    job = client.get(f"/api/factories/f1/jobs/{job_id}", headers=MEMBER).json()
+    assert job["status"] == "cancelled" and "Cancelled" in job["log"]
+    assert "answered" not in job["log"]
+
+
+def test_the_model_client_gets_the_timeout_and_one_retry(monkeypatch):
+    import openai
+
+    captured = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(openai, "AsyncOpenAI", FakeClient)
+    monkeypatch.setattr(svc, "resolve_llm_api_key", lambda row, settings: "k")
+    monkeypatch.setattr(svc, "validate_llm_base_url", lambda url, allow_private: url)
+    monkeypatch.setattr(svc, "create_llm_http_client", lambda allow_private: None)
+    monkeypatch.setenv("QYM_FACTORY_LLM_TIMEOUT_SECONDS", "45")
+    conn = SimpleNamespace(
+        llm_api_key_encrypted="x", llm_base_url="https://m.example/v1", llm_model="m1"
+    )
+    client_obj, model = svc.build_client(conn)
+    assert isinstance(client_obj, FakeClient) and model == "m1"
+    assert captured["timeout"] == 45.0 and captured["max_retries"] == 1
+
+
+def test_the_analysis_batch_size_is_a_setting_and_every_call_is_logged(
+    client, session_factory, fake_llm, monkeypatch
+):
+    monkeypatch.setenv("QYM_FACTORY_ANALYSIS_BATCH_ITEMS", "5")
+    _seed_items(session_factory, [(f"i{n}", "", f"q{n}", f"a{n}") for n in range(7)])
+    with session_factory() as db:
+        db.get(FactoryJob, "fj1").status = "cancelled"
+        db.commit()
+    calls = fake_llm(lambda system, user: {"rules": []})
+    started = client.post(
+        "/api/factories/f1/jobs", json={"kind": "analysis"}, headers=MEMBER
+    )
+    assert started.status_code == 202, started.text
+    assert _run_jobs(session_factory) == ["succeeded"]
+    # 7 items in batches of 5: two extraction calls; nothing proposed, so no consolidation call.
+    assert len(calls) == 2
+    job = client.get(
+        f"/api/factories/f1/jobs/{started.json()['id']}", headers=MEMBER
+    ).json()
+    assert job["progress"]["total"] == 3 and job["progress"]["done"] == 3
+    assert "ungrouped: call 2 of 2 answered" in job["log"]
 
 
 def test_an_expired_lease_is_taken_over(session_factory):
