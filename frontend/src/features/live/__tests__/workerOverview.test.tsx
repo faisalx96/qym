@@ -9,7 +9,7 @@ import {
   liveWorkerFailed,
   liveWorkerEvents,
 } from '@/features/dev/liveFixtures';
-import { formatTableDate } from '@/lib/dates';
+import { formatAgo, formatTableDate } from '@/lib/dates';
 import { setup, writes, openField, refetchWorker, source } from './workerHarness';
 
 // Live worker page: status, problems and the settings form state.
@@ -26,14 +26,14 @@ it('renders status, problems, jobs and settings in the specified DOM order', asy
       ...container.querySelectorAll('[data-live-block^="worker-"]:not([data-live-block="worker-history"])'),
     ].map((node) => node.getAttribute('data-live-block')),
   ).toEqual(['worker-status', 'worker-problems', 'worker-jobs', 'worker-settings']);
-  expect(screen.getByText('Running v3')).toBeVisible();
+  expect(within(screen.getByRole('region', { name: 'Worker status' })).getByText('v3')).toBeVisible();
   expect(await openField('Models', 'Judge A')).toHaveAttribute('list');
 });
-it('shows waiting state, key warning and waiting section tags', async () => {
+it('shows waiting state, key warning and one settings status', async () => {
   setup(liveWorkerWaiting);
   expect(await screen.findByText('Waiting')).toBeVisible();
   expect(screen.getByText('no settings version')).toBeVisible();
-  expect(screen.getAllByText('Waiting for version 1')).toHaveLength(6);
+  expect(screen.getAllByText('Waiting for version 1')).toHaveLength(1);
   expect(screen.getByText('Choose the worker key before saving settings')).toBeVisible();
 });
 it('shows the status strip values and matching job update from the fixture', async () => {
@@ -41,7 +41,8 @@ it('shows the status strip values and matching job update from the fixture', asy
   vi.setSystemTime(new Date('2026-11-03T14:22:00Z'));
   setup();
   const status = await screen.findByRole('region', { name: 'Worker status' });
-  expect(within(status).getByText('Running v3')).toBeVisible();
+  expect(within(status).getByText('Running')).toBeVisible();
+  expect(within(status).getByText('v3')).toBeVisible();
   expect(within(status).getByText(`since ${formatTableDate('2026-11-03T14:20:00Z')} by Ali`)).toBeVisible();
   expect(within(status).getByText('3m ago')).toBeVisible();
   expect(within(status).getByText('every 60s')).toBeVisible();
@@ -50,7 +51,7 @@ it('shows the status strip values and matching job update from the fixture', asy
   const problems = within(status).getByRole('link', { name: '19 problems in the last hour' });
   expect(problems).toHaveAttribute('href', '/projects/demo/live/worker?source=worker#problems');
   expect(within(problems).getByText('19')).not.toHaveAttribute('data-tone');
-  expect(within(status).getByText('Backfill · 12 of 22 turns')).toBeVisible();
+  expect(within(status).getByText('12 of 22')).toBeVisible();
   expect(within(status).getByText('updated 2m ago')).toBeVisible();
 });
 it('uses the poll timestamp before the heartbeat and marks a stale worker', async () => {
@@ -61,8 +62,11 @@ it('uses the poll timestamp before the heartbeat and marks a stale worker', asyn
     running: { ...liveWorkerRead.running!, reason: 'verifying version 4', job: null },
   });
   const status = await screen.findByRole('region', { name: 'Worker status' });
-  expect(status).toHaveTextContent(formatTableDate('2026-11-03T15:19:00+01:00'));
-  expect(status).toHaveTextContent(/not reporting/i);
+  expect(within(status).getByText(formatAgo('2026-11-03T15:19:00+01:00'))).toHaveAttribute(
+    'data-tone',
+    'danger',
+  );
+  expect(screen.getByText('Worker is not responding.')).toBeVisible();
   expect(within(status).getByText('verifying version 4')).toBeVisible();
   expect(within(status).getByText('None')).toBeVisible();
 });
@@ -79,7 +83,9 @@ it('falls back to the heartbeat when the worker has no poll timestamp', async ()
 it('resumes a paused worker through the state endpoint', async () => {
   const { fetch } = setup(liveWorkerPaused);
   const user = userEvent.setup();
-  expect(await screen.findByText('Paused v3')).toBeVisible();
+  expect(
+    within(await screen.findByRole('region', { name: 'Worker status' })).getByText('Paused'),
+  ).toBeVisible();
   await user.click(screen.getByRole('button', { name: 'Resume evaluation' }));
   await waitFor(() => expect(writes(fetch)).toHaveLength(1));
   expect(writes(fetch)[0]![0]).toContain('/state?source=');
@@ -96,7 +102,10 @@ it('collapses settings with current summaries and disables Save until values or 
   const evaluation = screen.getByRole('region', { name: 'Evaluation' });
   const trigger = within(evaluation).getByRole('button');
   expect(trigger).toHaveAttribute('aria-expanded', 'false');
-  expect(trigger).toHaveTextContent('Chart vision on · Dataiku replay on · 3 lanes · poll 60s · lookback 1h');
+  expect(trigger).toHaveTextContent(
+    'Chart vision on · Dataiku replay on · 3 lanes · poll every 60s · look back 1h',
+  );
+  await openField('Models', 'Judge A');
   expect(
     screen.getByText(`gateway listed 5 models at ${formatTableDate('2026-11-03T14:20:00Z')}`),
   ).toBeVisible();
@@ -106,8 +115,10 @@ it('collapses settings with current summaries and disables Save until values or 
   await user.type(screen.getByRole('textbox', { name: 'Note' }), 'A note alone');
   expect(save).toBeDisabled();
   await user.click(trigger);
-  await user.click(within(evaluation).getByRole('switch', { name: 'Chart vision' }));
-  expect(trigger).toHaveTextContent('differs from running v3 · Chart vision off');
+  await user.click(within(evaluation).getByText('Chart vision', { selector: 'label' }));
+  expect(trigger).toHaveTextContent('Changed');
+  expect(trigger).toHaveTextContent('Chart vision off');
+  expect(screen.getByText('Unsaved changes since v3')).toBeVisible();
   expect(save).toBeEnabled();
   await user.click(trigger);
   expect(trigger).toHaveAttribute('aria-expanded', 'true');
@@ -115,8 +126,8 @@ it('collapses settings with current summaries and disables Save until values or 
   expect(save).toBeDisabled();
   await user.type(await openField('Langfuse', 'Langfuse secret key'), 'replacement');
   expect(save).toBeEnabled();
-  expect(within(screen.getByRole('region', { name: 'Langfuse' })).getByRole('button')).not.toHaveTextContent(
-    'differs from running',
+  expect(within(screen.getByRole('region', { name: 'Langfuse' })).getByRole('button')).toHaveTextContent(
+    'Changed',
   );
 });
 it('keeps a draft matching running collapsed while enabling Save against the latest version', async () => {
@@ -136,7 +147,8 @@ it('opens a saved section that differs from running while disabling Save for unc
   const database = await screen.findByRole('region', { name: 'Database' });
   const trigger = within(database).getByRole('button', { name: /^Database / });
   expect(trigger).toHaveAttribute('aria-expanded', 'true');
-  expect(trigger).toHaveTextContent('differs from running v3 ·');
+  expect(trigger).not.toHaveTextContent('Changed');
+  expect(screen.getByText('Saved as v4, the worker is still running v3')).toBeVisible();
   expect(screen.getByRole('button', { name: 'Save as v5' })).toBeDisabled();
   expect(
     screen.getByText('No changes since v4', { selector: '[data-save-footer] > div:first-child > span' }),
@@ -149,7 +161,7 @@ it('opens a saved section that differs from running while disabling Save for unc
       running: liveWorkerPending.settings!.values,
     },
   });
-  await waitFor(() => expect(trigger).not.toHaveTextContent('differs from running'));
+  await screen.findByText('The worker is running these settings (v4)');
   expect(trigger).toHaveAttribute('aria-expanded', 'false');
 });
 it('opens failed verification without a difference prefix when values match running', async () => {
@@ -185,7 +197,7 @@ it.each([
   const view = setup(liveWorkerRead, undefined, [route]);
   await screen.findByRole('button', { name: 'Save as v4' });
   act(() => {
-    view.client.setQueryData(['project', 'demo', 'live', 'worker-events', source, { page: 1, limit: 10 }], {
+    view.client.setQueryData(['project', 'demo', 'live', 'worker-events', source, { page: 1, limit: 5 }], {
       events: [
         {
           ...liveWorkerEvents[0]!,
@@ -236,8 +248,9 @@ it('uses the viewer clock for status and settings times with a Riyadh source', a
   });
   const status = await screen.findByRole('region', { name: 'Worker status' });
   expect(within(status).getByText(`since ${formatTableDate('2026-11-03T14:20:00Z')} by Ali`)).toBeVisible();
-  expect(within(status).getByText(formatTableDate('2026-11-03T14:19:00Z'))).toBeVisible();
+  expect(within(status).getByText(formatAgo('2026-11-03T14:19:00Z'))).toBeVisible();
   expect(within(status).getByText(formatTableDate('2026-11-03T14:18:00Z'))).toBeVisible();
+  await openField('Models', 'Judge A');
   expect(
     screen.getByText(`gateway listed 5 models at ${formatTableDate('2026-11-03T14:20:00Z')}`),
   ).toBeVisible();
@@ -253,6 +266,24 @@ it('shows an advisory evaluator trace failure on its section while evaluation st
   expect(section.getByText('Failed').closest('[data-kind="state"]')).toHaveAttribute('data-tone', 'danger');
   expect(section.getByText('Trace authentication failed')).toBeVisible();
   expect(section.getByRole('button')).toHaveAttribute('aria-expanded', 'true');
-  expect(within(screen.getByRole('region', { name: 'Langfuse' })).getByText('Running')).toBeVisible();
+  expect(within(screen.getByRole('region', { name: 'Langfuse' })).queryByText('Running')).toBeNull();
+  expect(screen.getByText('The worker is running these settings (v3)')).toBeVisible();
   expect(screen.getByRole('button', { name: 'Pause evaluation' })).toBeVisible();
+});
+
+it('uses the stale flag for the notice, last poll and current job without an extra ago', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-16T14:20:00Z'));
+  setup({
+    ...liveWorkerRead,
+    stale: true,
+    status: { ...liveWorkerRead.status, stale: true, last_poll_at: '2026-11-03T14:20:00Z' },
+  });
+  const status = await screen.findByRole('region', { name: 'Worker status' });
+  expect(screen.getByText('Worker is not responding.').parentElement).toHaveTextContent(
+    'The last poll was 13d ago. The worker should poll every 60 seconds.',
+  );
+  expect(within(status).getByText('13d ago')).toHaveAttribute('data-tone', 'danger');
+  expect(within(status).getByText('no update for 13d')).toHaveAttribute('data-tone', 'danger');
+  expect(status).not.toHaveTextContent('no update for 13d ago');
 });

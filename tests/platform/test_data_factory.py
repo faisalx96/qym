@@ -1266,12 +1266,12 @@ def test_params_and_group_helpers():
     assert svc.body_problem([1], None) is not None
 
 
-def test_migration_0104_matches_the_models_and_downgrades(
+def test_migration_0105_matches_the_models_and_downgrades(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from alembic.autogenerate import compare_metadata
 
-    migration = _load_migration("0104_data_factory.py")
+    migration = _load_migration("0105_data_factory.py")
     engine = sa.create_engine("sqlite://")
     Base.metadata.create_all(
         engine,

@@ -27,7 +27,7 @@ export function LiveTurnsPage({ slug, source }: { slug: string; source: string }
   const rangeLabel = dateChips.find((chip) => chip.key === 'from')?.label;
   const description = turns.data
     ? dayLabel && overview.data
-      ? `${turns.data.total} of ${overview.data.day.in_qym} turns on ${dayLabel}`
+      ? `${turns.data.total} turns on ${dayLabel}`
       : `${turns.data.total} turns${rangeLabel ? ` · ${rangeLabel}` : ''}`
     : undefined;
 
@@ -74,6 +74,7 @@ export function LiveTurnsPage({ slug, source }: { slug: string; source: string }
             facets={turns.data.facets}
             specs={overview.data.specs}
             dayCount={overview.data.day.in_qym}
+            days={overview.data.days.rows}
           />
           <TurnsTable
             zone={overview.data.status.day_key_timezone}

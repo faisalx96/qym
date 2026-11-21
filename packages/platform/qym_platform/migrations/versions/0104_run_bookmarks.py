@@ -5,8 +5,8 @@ bookmark of a run with a markdown note, private to its author or public to
 the project's members, optionally pinned to the top of the project's
 bookmark list. Rows go with their run (``ON DELETE CASCADE``) and user.
 
-Revision ID: 0103
-Revises: 0102
+Revision ID: 0104
+Revises: 0103
 """
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0103"
-down_revision = "0102"
+revision = "0104"
+down_revision = "0103"
 branch_labels = None
 depends_on = None
 

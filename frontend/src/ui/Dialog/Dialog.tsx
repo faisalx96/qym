@@ -3,8 +3,8 @@ import { Dialog as AriaDialog, Heading, Modal, ModalOverlay } from 'react-aria-c
 import { IconButton } from '../IconButton';
 import styles from './Dialog.module.css';
 
-/** sm 360, md 440, lg 600, data 760, wide 1100 (a full editor or a large value, cv4 X9). */
-export type DialogSize = 'sm' | 'md' | 'lg' | 'data' | 'wide' | 'xl';
+/** sm 360, md 440, lg 600, data 760, wide 1100, xl 1200, viewport 95vw × 90vh. */
+export type DialogSize = 'sm' | 'md' | 'lg' | 'data' | 'wide' | 'xl' | 'viewport';
 
 export interface DialogProps {
   open: boolean;
@@ -60,6 +60,7 @@ export function Dialog({
       isDismissable={dismissOnBackdrop}
       isKeyboardDismissDisabled={isKeyboardDismissDisabled}
       className={styles.backdrop}
+      data-size={size}
     >
       <Modal className={[styles.modal, className].filter(Boolean).join(' ')} data-size={size}>
         <AriaDialog

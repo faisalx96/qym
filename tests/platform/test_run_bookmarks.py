@@ -252,14 +252,14 @@ def test_the_rows_go_with_their_run(session_factory):  # noqa: F811
         )
 
 
-def test_migration_0103_matches_the_model_and_downgrades(
+def test_migration_0104_matches_the_model_and_downgrades(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from alembic.autogenerate import compare_metadata
 
-    migration = _load_migration("0103_run_bookmarks.py")
+    migration = _load_migration("0104_run_bookmarks.py")
     engine = sa.create_engine("sqlite://")
-    # Everything but the new table, as the chain before 0103 leaves it.
+    # Everything but the new table, as the chain before 0104 leaves it.
     Base.metadata.create_all(
         engine,
         tables=[t for t in Base.metadata.sorted_tables if t.name != "run_bookmarks"],

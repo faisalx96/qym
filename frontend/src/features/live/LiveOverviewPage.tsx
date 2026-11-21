@@ -4,6 +4,7 @@ import { useProjectContext } from '@/features/shell/ProjectContext';
 import { useDocumentTitle } from '@/features/shell/hooks';
 import { fullWidth } from '@/features/shell/layout';
 import { useDelayedPending } from '@/lib/pending';
+import { formatShortDayKey } from '@/lib/dates';
 import { useSearchParamsState } from '@/lib/url-state';
 import { projectPath } from '@/app/routes';
 import { ErrorState, InlineNotice, LinkButton, PageHeader, Skeleton } from '@/ui';
@@ -15,7 +16,6 @@ import { DayNumbers } from './components/DayNumbers';
 import { DiagnosisMix } from './components/DiagnosisMix';
 import { MetricMeans } from './components/MetricMeans';
 import { ServiceHealth } from './components/ServiceHealth';
-import { Canaries } from './components/Canaries';
 import { TrendChart } from './components/TrendChart';
 import { DaysTable } from './components/DaysTable';
 import { zoneToday } from './lib/zone';
@@ -44,13 +44,15 @@ export function LiveOverviewPage({
   const showSkeleton = useDelayedPending(query.isPending);
   const overview = query.data;
   const zone = overview?.status.day_key_timezone ?? sourceZone;
+  const today = overview?.status.today ?? zoneToday(zone);
+  const period = day === today ? 'today' : `on ${formatShortDayKey(day)}`;
   const cachedOverview = useCachedOverview(slug, source);
   const linkTo = (filters: Record<string, string> = {}) =>
     `/projects/${encodeURIComponent(slug)}/live/turns?${new URLSearchParams({ day, source, ...filters })}`;
 
   return (
     <div className={`${fullWidth} ${styles.page}`}>
-      <div data-live-block="header">
+      <div className={styles.overviewHeader} data-live-block="header">
         <PageHeader
           title="Live evaluation"
           description="Every real user turn, evaluated as it happens"
@@ -58,7 +60,7 @@ export function LiveOverviewPage({
             // cv5 Y4: the source and the day are controls side by side, one meta item: no "·" separator between them
             <span key="controls" className={styles.headerControls}>
               <SourceControl slug={slug} source={source} status={overview?.status} />
-              <DaySwitcher day={day} today={overview?.status.today ?? zoneToday(zone)} />
+              <DaySwitcher day={day} today={today} />
             </span>,
           ]}
           actions={
@@ -86,7 +88,7 @@ export function LiveOverviewPage({
           <Skeleton kind="chart" height="var(--live-tiles-height)" label="Loading day numbers" />
           <div className={styles.mixRow}>
             <Skeleton kind="chart" height="var(--live-mix-height)" label="Loading diagnosis mix" />
-            <Skeleton kind="chart" height="var(--live-means-height)" label="Loading metric means" />
+            <Skeleton kind="chart" height="var(--live-means-height)" label="Loading average scores" />
           </div>
           <Skeleton
             kind="chart"
@@ -104,14 +106,18 @@ export function LiveOverviewPage({
             </InlineNotice>
           ) : null}
           <StatusLine status={overview.status} slug={slug} source={source} modelIndex={modelIndex} />
-          <DayNumbers overview={overview} linkTo={linkTo} />
+          <DayNumbers overview={overview} linkTo={linkTo} period={period} />
           <div className={styles.mixRow}>
-            <DiagnosisMix overview={overview} linkTo={linkTo} />
-            <MetricMeans overview={overview} />
+            <DiagnosisMix overview={overview} linkTo={linkTo} period={period} />
+            <MetricMeans overview={overview} period={period} />
           </div>
-          <ServiceHealth services={overview.day.services} specs={overview.specs} linkTo={linkTo}>
-            <Canaries canaries={overview.canaries} specs={overview.specs} />
-          </ServiceHealth>
+          <ServiceHealth
+            services={overview.day.services}
+            canaries={overview.canaries}
+            specs={overview.specs}
+            linkTo={linkTo}
+            period={period}
+          />
           <TrendChart
             zone={zone}
             trend={overview.trend}

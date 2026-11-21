@@ -1,13 +1,15 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LiveMetricSpec, LiveOverview } from '@/api/live';
 import { formatTableDate } from '@/lib/dates';
 import { DayNumbers } from '../components/DayNumbers';
+import { DaysTable } from '../components/DaysTable';
 import { DaySwitcher } from '../components/DaySwitcher';
 import { DiagnosisMix } from '../components/DiagnosisMix';
 import { MetricMeans } from '../components/MetricMeans';
 import { StatusLine } from '../components/StatusLine';
+import { TrendChart } from '../components/TrendChart';
 
 const metric = (values: Partial<LiveMetricSpec>): LiveMetricSpec => ({
   metric_name: 'quality',
@@ -51,8 +53,8 @@ const overview: LiveOverview = {
     product: null,
     stale: false,
     seconds_since_heartbeat: 42,
-    last_heartbeat_at: '2026-11-01T09:00:00Z',
-    last_poll_at: null,
+    last_heartbeat_at: '2026-11-01T08:00:00Z',
+    last_poll_at: '2026-11-01T09:00:00Z',
     last_turn_at: null,
     worker: { judges: { a: 'Judge A', b: 'Judge B' }, eval_code_version: 'v1', manifest_hash: 'hash1' },
   },
@@ -100,18 +102,108 @@ const linkTo = (filters: Record<string, string> = {}) =>
 afterEach(() => vi.useRealTimers());
 
 describe('overview blocks', () => {
-  it('links all six numbers and selects the largest problem labels using the spec tones', () => {
+  it('treats success and accent diagnoses as OK outcomes and clamps the received backlog', () => {
+    const data = {
+      ...overview,
+      specs: [
+        {
+          ...specs[1]!,
+          values: [
+            { value: 'good', label: 'OK', tone: 'success' },
+            { value: 'agent_ok', label: 'Agent OK', tone: 'accent' },
+            { value: 'inconclusive', label: 'Inconclusive', tone: 'neutral' },
+          ],
+        },
+      ],
+      day: { ...overview.day, in_qym: 3, label_mix: { good: 16, agent_ok: 3, inconclusive: 15 } },
+    };
+    const { container, rerender } = render(<DayNumbers overview={data} linkTo={linkTo} />, {
+      wrapper: MemoryRouter,
+    });
+    expect(container.querySelector('[data-live-stat="not-ok"]')).toHaveTextContent('15');
+    expect(container.querySelector('[data-live-stat="waiting"]')).toHaveTextContent('0');
+    rerender(<DayNumbers overview={{ ...data, day: { ...data.day, row: null } }} linkTo={linkTo} />);
+    expect(container.querySelector('[data-live-stat="waiting"]')).toHaveTextContent('—');
+    expect(container.querySelector('[data-live-stat="evaluated"]')).toHaveTextContent('—');
+  });
+
+  it('uses the same six distinct colours in the mix, legend table, trend and compact day mix', () => {
+    const values = ['success', 'warning', 'danger', 'info', 'meta', 'neutral'].map((tone) => ({
+      value: tone,
+      label: tone,
+      tone,
+    }));
+    const colors = [
+      'var(--success)',
+      'var(--warning)',
+      'var(--error)',
+      'var(--chart-1)',
+      'var(--accent-tertiary)',
+      'var(--text-muted)',
+    ];
+    const counts = Object.fromEntries(values.map(({ value }) => [value, 1]));
+    const allSpecs = [{ ...specs[1]!, values }];
+    const data = { ...overview, specs: allSpecs, day: { ...overview.day, label_mix: counts } };
+    const { container } = render(
+      <MemoryRouter>
+        <DiagnosisMix overview={data} linkTo={linkTo} />
+        <TrendChart
+          trend={[
+            { day: '2026-11-01', turns: 6, counts_by_label: counts, primary_rate: null, worker_gap: false },
+          ]}
+          specs={allSpecs}
+          primaryMetric={null}
+          days={14}
+          onDays={() => {}}
+        />
+        <DaysTable
+          days={{
+            ...overview.days,
+            total: 1,
+            rows: [
+              { ...overview.day.row!, in_qym: 6, primary_rate: null, label_mix: counts, worker_gap: false },
+            ],
+          }}
+          slug="demo"
+          source="worker"
+          specs={allSpecs}
+          primaryMetric={null}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('heading', { name: /^Turns over time/, level: 2 })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Days', level: 2 })).toBeVisible();
+    const trend = container.querySelector('[data-live-block="trend"]') as HTMLElement;
+    values.forEach(({ value }, index) => {
+      const color = colors[index]!;
+      expect(container.querySelector(`[data-live-label="${value}"]`)).toHaveStyle({ background: color });
+      expect(container.querySelector(`[data-live-diagnosis="${value}"] [aria-hidden="true"]`)).toHaveStyle({
+        background: color,
+      });
+      expect(
+        within(trend).getByText(value, { exact: true }).parentElement?.querySelector('[aria-hidden="true"]'),
+      ).toHaveStyle({ background: color });
+      expect(trend.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain(color);
+      expect(container.querySelector(`[data-live-day] [aria-label="${value}: 1 turns"]`)).toHaveStyle({
+        background: color,
+      });
+    });
+    expect(trend.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain('var(--bg-surface)');
+  });
+
+  it('shows the six approved numbers and keeps existing number links', () => {
     const { container } = render(
       <MemoryRouter>
         <DayNumbers overview={overview} linkTo={linkTo} />
       </MemoryRouter>,
     );
     expect(container.querySelectorAll('[data-live-stat]')).toHaveLength(6);
-    expect(container.querySelector('[data-live-stat="major"] a')).toHaveAttribute(
-      'href',
-      linkTo({ label: 'major' }),
-    );
-    expect(container.querySelector('[data-live-stat="watch"]')).toHaveTextContent('2');
+    expect(container.querySelector('[role="group"] > [data-variant] > [aria-hidden="true"]')).toBeNull();
+    expect(
+      [...container.querySelectorAll('[data-live-stat]')].map((el) => el.getAttribute('data-live-stat')),
+    ).toEqual(['turns', 'evaluated', 'waiting', 'primary', 'not-ok', 'latency']);
+    expect(container.querySelector('[data-live-stat="waiting"]')).toHaveTextContent('4');
+    expect(container.querySelector('[data-live-stat="not-ok"]')).toHaveTextContent('12');
     expect(container.querySelector('[data-live-stat="unknown"]')).toBeNull();
     expect(container.querySelector('[data-live-stat="turns"]')).toHaveTextContent('14');
     expect(container.querySelector('[data-live-stat="evaluated"] a')).toHaveAttribute(
@@ -120,6 +212,15 @@ describe('overview blocks', () => {
     );
     expect(container.querySelector('[data-live-stat="primary"]')).toHaveTextContent('71.0%');
     expect(container.querySelector('[data-live-stat="latency"]')).toHaveTextContent('6.5s');
+    expect(container.querySelector('[data-live-stat="turns"] a')).toHaveAttribute('href', linkTo());
+    expect(container.querySelector('[data-live-stat="primary"] a')).toHaveAttribute(
+      'href',
+      linkTo({ metric: 'quality', min: '0.8' }),
+    );
+    expect(container.querySelector('[data-live-stat="latency"] a')).toHaveAttribute(
+      'href',
+      linkTo({ sort: '-latency_ms' }),
+    );
   });
 
   it('keeps an all-skipped metric as a dash, formats types, and orders rows by the spec', () => {
@@ -132,13 +233,22 @@ describe('overview blocks', () => {
     const skipped = container.querySelector('[data-live-metric="skipped"]')!;
     expect(skipped).toHaveTextContent('Skipped metric—');
     expect(skipped.querySelector('[data-band]')).toBeNull();
+    expect(screen.getByText('Average scores today')).toBeVisible();
+    expect(container.querySelector('[data-live-block="means"]')).toHaveAttribute('data-flush');
+    expect(screen.getByRole('heading', { name: 'Average scores today', level: 2 })).toBeVisible();
+    expect(screen.getByTestId('data-table')).toHaveAttribute('data-padding', 'card');
+    expect(container.querySelector('[data-live-metric="quality"] [aria-hidden="true"] > span')).toHaveStyle({
+      inlineSize: '71%',
+    });
+    expect(container.querySelector('[data-live-metric="duration"] [aria-hidden="true"]')).toBeNull();
     fireEvent.focus(skipped.querySelector('[data-mark]')!);
     expect(screen.getByRole('tooltip')).toHaveTextContent('0 non-skipped scores');
   });
 
-  it('links each diagnosis segment and reports the gap between worker counters and received rows', () => {
+  it('links each diagnosis segment and table row and reports received turns awaiting evaluation', () => {
     const { container } = render(
       <MemoryRouter>
+        <DayNumbers overview={overview} linkTo={linkTo} />
         <DiagnosisMix overview={overview} linkTo={linkTo} />
       </MemoryRouter>,
     );
@@ -147,8 +257,25 @@ describe('overview blocks', () => {
       linkTo({ label: 'major' }),
     );
     expect(container.querySelector('[data-live-note="not-in-qym"]')).toHaveTextContent(
-      '2 turns not yet in qym',
+      '4 turns received but not evaluated yet',
     );
+    expect(screen.getByText('12 turns with a diagnosis today')).toBeVisible();
+    expect(container.querySelector('[data-live-stat="evaluated"]')).toHaveTextContent('8');
+    expect(container.querySelector('[data-live-stat="waiting"]')).toHaveTextContent('4');
+    expect(screen.getByRole('heading', { name: 'Diagnosis mix', level: 2 })).toBeVisible();
+    expect(container.querySelector('[data-live-block="mix"]')).toHaveAttribute('data-flush');
+    expect(screen.getByTestId('data-table')).toHaveAttribute('data-padding', 'card');
+    const row = container.querySelector('[data-live-diagnosis="major"]') as HTMLElement;
+    expect(within(row).getByRole('link', { name: 'View turns for Major issue' })).toHaveAttribute(
+      'href',
+      linkTo({ label: 'major' }),
+    );
+    expect(within(row).getByRole('rowheader')).toHaveTextContent('Major issue');
+    expect(
+      within(row)
+        .getAllByRole('gridcell')
+        .map((cell) => cell.textContent),
+    ).toEqual(['4', '33%', 'View turns']);
   });
 
   it('distinguishes a measured zero duration from an absent mean', () => {
@@ -175,11 +302,20 @@ describe('overview blocks', () => {
       <StatusLine slug="demo" source="worker" status={overview.status} />,
       { wrapper: MemoryRouter },
     );
-    expect(screen.getByText('last poll just now')).toBeVisible();
+    expect(screen.getByText('just now')).toBeVisible();
+    expect([...container.querySelectorAll('dt')].map((el) => el.textContent)).toEqual([
+      'State',
+      'Last poll',
+      'Last turn',
+      'Judges',
+      'Worker version',
+      'Rules version',
+    ]);
+    expect(screen.getByText('Running').closest('[data-shape]')).toHaveAttribute('data-shape', 'orbit');
     expect(screen.getByText('Judge A')).toBeVisible();
     expect(screen.getByText('hash1')).toBeVisible();
     act(() => vi.advanceTimersByTime(10_000));
-    expect(screen.getByText('last poll 1m ago')).toBeVisible();
+    expect(screen.getByText('1m ago')).toBeVisible();
     rerender(<StatusLine slug="demo" source="worker" status={{ ...overview.status, stale: true }} />);
     expect(container.querySelector('[data-live-block="status"]')).toHaveAttribute('data-live-stale', 'true');
     expect(screen.queryByText(/Worker not heard from since/)).toBeNull();
@@ -201,7 +337,7 @@ describe('overview blocks', () => {
       { wrapper: MemoryRouter },
     );
     expect(screen.queryByText(/Worker not heard from since/)).toBeNull();
-    expect(screen.getByText(expected).parentElement).toHaveTextContent(`Last turn ${expected}`);
+    expect(screen.getByText(expected).parentElement).toHaveTextContent(`Last turn${expected}`);
     expect(expected).not.toContain('UTC');
   });
 

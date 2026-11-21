@@ -78,6 +78,9 @@ export function filterChips(
       });
     }
     if (filters.min === undefined && filters.max === undefined) add('metric', `Metric: ${filters.metric}`);
+  } else {
+    if (filters.min !== undefined) add('min', `Minimum: ${filters.min}`);
+    if (filters.max !== undefined) add('max', `Maximum: ${filters.max}`);
   }
   if (filters.service) {
     add(
@@ -85,6 +88,8 @@ export function filterChips(
       `${filters.service}${filters.service_status ? ` ${filters.service_status.replaceAll('_', ' ')}` : ''}`,
       'service_status',
     );
+  } else if (filters.service_status) {
+    add('service_status', `Service status: ${filters.service_status.replaceAll('_', ' ')}`);
   }
   if (filters.charts) add('charts', `Charts: ${filters.charts}`);
   if (filters.user) add('user', `User: ${filters.user}`);

@@ -411,6 +411,19 @@
   vertical-align: middle;
 }
 
+/* A table of multi-line previews aligns each cell's first baseline, including tags and the expand control.
+   Native baseline alignment keeps smaller tag text and taller script line boxes on that same first line. */
+.table[data-cell-align='first-line'] > .tbody > .tr > td {
+  vertical-align: baseline;
+  padding-block: var(--space-xs);
+}
+
+/* Multiline records share a first line and keep space above and below the tallest cell. */
+.table[data-vertical-align='top'] > .tbody > tr > .td {
+  vertical-align: top;
+  padding-block: var(--space-sm);
+}
+
 /* The frame closes the last row: its own line would double the frame's bottom edge at the rounded corners. */
 .tbody > tr:last-child > td {
   border-bottom-color: transparent;
@@ -488,6 +501,15 @@
 
 .td[data-align='center'] {
   text-align: center;
+}
+
+/* A flush Card keeps full-width rows while their content lines up with its header. */
+.card[data-padding='card'] :is(.th, .td, .bandCell):first-child {
+  padding-inline-start: var(--space-lg);
+}
+
+.card[data-padding='card'] :is(.th, .td, .bandCell):last-child {
+  padding-inline-end: var(--space-lg);
 }
 
 .td[data-mono] {
@@ -1143,6 +1165,29 @@
 
 .footerEnd {
   justify-content: flex-end;
+}
+
+.card[data-padding='card'] > .footer {
+  padding-inline: var(--space-lg);
+}
+
+.footer[data-layout='spread'] {
+  display: flex;
+}
+
+.footer[data-layout='spread'] > :empty {
+  display: none;
+}
+
+.footer[data-layout='spread'] > .footerPagination {
+  flex: 1;
+  min-width: 0;
+  justify-content: space-between;
+}
+
+/* Keep the controls at the end when the summary wraps onto its own line. */
+.footer[data-layout='spread'] > .footerPagination > :last-child {
+  margin-inline-start: auto;
 }
 
 /* Narrow screens keep the flex footer: the note, the pager and the end items wrap. */

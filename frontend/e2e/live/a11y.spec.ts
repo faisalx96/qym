@@ -87,7 +87,7 @@ for (const viewport of [
               ? '[data-live-chart-image]'
               : surface === 'worker'
                 ? '[data-live-block="worker-settings"] form'
-                : '[data-live-answer]';
+                : '[data-live-block="diagnosis-steps"]';
       await expect(page.locator(ready).first()).toBeVisible();
       await page.evaluate(() => document.fonts.ready);
       await page.addScriptTag({ path: AXE_PATH });

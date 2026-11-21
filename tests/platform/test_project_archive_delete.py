@@ -46,6 +46,8 @@ from qym_platform.db.models import (
     DatasetVersionStatus,
     LiveCanaryResult,
     LiveChartImage,
+    LiveChartSnapshot,
+    LiveChartStyle,
     LiveDay,
     LiveMetricSpec,
     LiveSource,
@@ -360,6 +362,19 @@ def test_delete_removes_live_rows_only_for_the_project(client, session_factory, 
                     sha256=hashlib.sha256(image).hexdigest(), image=image, received_at=now,
                 )
             )
+            db.add(
+                LiveChartSnapshot(
+                    turn_pk=turn.id, ref="chart_20261101_ffff0000", html=b"x", html_size=1,
+                    byte_size=1, sha256="0" * 64, style_sha256="1" * 64, viewport_width=1248,
+                    box_x=0, box_y=0, box_width=1248, box_height=462, received_at=now,
+                )
+            )
+            db.add(
+                LiveChartStyle(
+                    source_id=source.id, sha256="1" * 64, css=b"x", css_size=1, byte_size=1,
+                    received_at=now,
+                )
+            )
             projects[slug] = (project_id, source.id, turn.id)
             db.commit()
 
@@ -382,10 +397,11 @@ def test_delete_removes_live_rows_only_for_the_project(client, session_factory, 
             project_id, source_id, turn_pk = projects[slug]
             assert db.query(Project).filter(Project.id == project_id).count() == expected
             assert db.query(LiveSource).filter(LiveSource.project_id == project_id).count() == expected
-            for model in (LiveMetricSpec, LiveDay, LiveTurn, LiveCanaryResult):
+            for model in (LiveMetricSpec, LiveDay, LiveTurn, LiveCanaryResult, LiveChartStyle):
                 assert db.query(model).filter(model.source_id == source_id).count() == expected
             assert db.query(LiveTurnScore).filter(LiveTurnScore.turn_pk == turn_pk).count() == expected
             assert db.query(LiveChartImage).filter(LiveChartImage.turn_pk == turn_pk).count() == expected
+            assert db.query(LiveChartSnapshot).filter(LiveChartSnapshot.turn_pk == turn_pk).count() == expected
 
 
 def test_delete_accepts_the_slug_as_confirmation(client, session_factory):

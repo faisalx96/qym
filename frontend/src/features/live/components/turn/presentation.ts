@@ -52,3 +52,8 @@ export function traceHref(value: string | null): string | null {
 export function turnHref(slug: string, source: string, turnId: string, list?: string): string {
   return `/projects/${encodeURIComponent(slug)}/live/turns/${encodeURIComponent(turnId)}?${new URLSearchParams({ source, ...(list ? { list } : {}) })}`;
 }
+
+/** Readable fallback labels retain familiar acronyms. */
+export function sentenceLabel(key: string): string {
+  return humanizeKey(key).replace(/\b(sql|api|url|id|pii)\b/gi, (word) => word.toUpperCase());
+}

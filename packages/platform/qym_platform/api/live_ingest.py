@@ -12,7 +12,14 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
@@ -40,6 +47,13 @@ live_ingest_router = APIRouter(
 )
 _SOURCE_KEY_PATTERN = r"^[A-Za-z0-9_.:-]{1,100}$"
 _CHART_REF_PATTERN = r"^[A-Za-z0-9_.:-]{1,100}$"
+_SHA256_PATTERN = r"^[0-9a-f]{64}$"
+# CSS pixels; far beyond any drawn chart, small enough for an integer column.
+_CHART_BOX_MAX = 100_000
+# The page shows the box at the column's width, so its shape sets the page's
+# height: a box may be tall, but not a sliver that is millions of pixels long.
+_CHART_BOX_HEIGHT_MAX = 32_768
+_CHART_BOX_HEIGHT_PER_WIDTH = 20
 _BODY_SCHEMAS: dict[str, Any] = {}
 
 
@@ -227,6 +241,40 @@ class TurnBody(BaseModel):
         return value
 
 
+class ChartBoxBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    x: float = Field(..., ge=0, le=_CHART_BOX_MAX, allow_inf_nan=False)
+    y: float = Field(..., ge=0, le=_CHART_BOX_MAX, allow_inf_nan=False)
+    width: float = Field(..., gt=0, le=_CHART_BOX_MAX, allow_inf_nan=False)
+    height: float = Field(..., gt=0, le=_CHART_BOX_HEIGHT_MAX, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def _not_a_sliver(self) -> "ChartBoxBody":
+        if self.height > _CHART_BOX_HEIGHT_PER_WIDTH * self.width:
+            raise ValueError("box height must be at most 20 times its width")
+        return self
+
+
+class ChartSnapshotBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    format: Literal[1]
+    html: str
+    style_sha256: str = Field(..., pattern=_SHA256_PATTERN)
+    viewport_width: int = Field(..., ge=1, le=8192)
+    # Absent from producers that do not report the height the page was laid out at.
+    viewport_height: Optional[int] = Field(default=None, ge=1, le=32768)
+    box: ChartBoxBody
+
+    @model_validator(mode="after")
+    def _box_inside_the_page(self) -> "ChartSnapshotBody":
+        # One pixel of slack for a box measured in fractions of a pixel.
+        if self.box.x + self.box.width > self.viewport_width + 1:
+            raise ValueError("box must lie within viewport_width")
+        return self
+
+
 class TurnsBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -365,6 +413,29 @@ async def _chart_image_body(request: Request) -> bytes:
     )
 
 
+async def _chart_style_body(request: Request) -> bytes:
+    """Read a bounded raw stylesheet body before the synchronous ingest handler."""
+    content_type = (
+        request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    )
+    if content_type != "text/css":
+        raise HTTPException(status_code=415, detail="unsupported content type")
+    return await _read_ingest_body(
+        request, ingest_settings().live_chart_style_max_bytes
+    )
+
+
+async def _chart_snapshot_body(request: Request) -> BaseModel:
+    """Cap the JSON at the largest allowed html in its longest JSON encoding."""
+    settings = ingest_settings()
+    # A JSON string spends at most six bytes (\uXXXX) on one byte of UTF-8.
+    limit = min(
+        settings.live_ingest_max_body_bytes,
+        6 * settings.live_chart_snapshot_max_bytes + 4096,
+    )
+    return await _validated_body(ChartSnapshotBody, max_bytes=limit)(request)
+
+
 def _source_scope(
     project_id: str,
     principal: Principal = Depends(require_api_key_principal),
@@ -470,6 +541,57 @@ def put_chart_image(
         raise HTTPException(status_code=exc.status, detail=exc.detail) from None
     except ValueError:
         raise HTTPException(status_code=422, detail="invalid PNG") from None
+    _commit(db)
+    return Response(status_code=204)
+
+
+# Like the image path, both chart PUTs below stay ahead of the greedy source key.
+@live_ingest_router.put(
+    "/sources/{key}/turns/{turn_id:path}/charts/{ref}/snapshot",
+    status_code=204,
+    openapi_extra=_body_openapi(ChartSnapshotBody),
+)
+def put_chart_snapshot(
+    scope: tuple[Project, Principal] = Depends(_source_scope),
+    key: str = Path(..., pattern=_SOURCE_KEY_PATTERN),
+    turn_id: str = Path(..., min_length=1, max_length=200),
+    ref: str = Path(..., pattern=_CHART_REF_PATTERN),
+    body: ChartSnapshotBody = Depends(_chart_snapshot_body),
+    db: Session = Depends(get_db),
+) -> Response:
+    source = _source(db, scope[0].id, key)
+    try:
+        live_ingest.upsert_chart_snapshot(
+            db, source, turn_id, ref, body, ingest_settings()
+        )
+    except live_ingest.ChartImageError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from None
+    _commit(db)
+    return Response(status_code=204)
+
+
+@live_ingest_router.put(
+    "/sources/{key}/chart-styles/{sha256}",
+    status_code=204,
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {"text/css": {"schema": {"type": "string"}}},
+        }
+    },
+)
+def put_chart_style(
+    scope: tuple[Project, Principal] = Depends(_source_scope),
+    key: str = Path(..., pattern=_SOURCE_KEY_PATTERN),
+    sha256: str = Path(..., pattern=_SHA256_PATTERN),
+    data: bytes = Depends(_chart_style_body),
+    db: Session = Depends(get_db),
+) -> Response:
+    source = _source(db, scope[0].id, key)
+    try:
+        live_ingest.store_chart_style(db, source, sha256, data)
+    except live_ingest.ChartImageError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from None
     _commit(db)
     return Response(status_code=204)
 

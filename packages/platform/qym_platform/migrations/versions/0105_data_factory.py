@@ -10,8 +10,8 @@ bridge's target categories) and ``factory_jobs`` (rule analysis and data generat
 workers loop). Rows go with their factory (``ON DELETE CASCADE``); a factory
 goes with its dataset.
 
-Revision ID: 0104
-Revises: 0103
+Revision ID: 0105
+Revises: 0104
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0104"
-down_revision = "0103"
+revision = "0105"
+down_revision = "0104"
 branch_labels = None
 depends_on = None
 

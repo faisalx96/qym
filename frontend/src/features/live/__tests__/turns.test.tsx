@@ -87,16 +87,18 @@ function Harness({
   rows = [row],
   total = 120,
   filtersOnly = false,
+  days,
 }: {
   rows?: LiveTurnRow[];
   total?: number;
   filtersOnly?: boolean;
+  days?: { day: string; in_qym: number }[];
 }) {
   const location = useLocation();
   const filters = parseLiveFilters(new URLSearchParams(location.search));
   return (
     <>
-      <TurnFilters filters={filters} facets={facets} specs={specs} />
+      <TurnFilters filters={filters} facets={facets} specs={specs} days={days} />
       {!filtersOnly ? (
         <TurnsTable
           slug="demo"
@@ -122,7 +124,8 @@ afterEach(() => {
 });
 
 describe('Turns filters and table', () => {
-  it.each([false, true])('shows one bar trigger per filter (selected: %s)', (selected) => {
+  it.each([false, true])('groups secondary filters behind More filters (selected: %s)', async (selected) => {
+    const user = userEvent.setup();
     render(
       <MemoryRouter>
         <TurnFilters
@@ -147,20 +150,40 @@ describe('Turns filters and table', () => {
       </MemoryRouter>,
     );
     const bar = within(screen.getByRole('group', { name: 'Turn filters' }));
-    for (const name of [
-      /^Diagnosis filter/,
-      /^Mode filter/,
-      /^Status filter/,
-      /^Outcome filter/,
-      /^Metric/,
-      /^Service/,
-    ])
-      expect(bar.getByRole('button', { name })).toBeVisible();
-    expect(bar.getAllByRole('button', { name: /Charts/ }).length).toBeGreaterThan(0);
+    expect(bar.getByRole('searchbox')).toBeVisible();
+    const day = bar.getByRole('button', { name: /^(Day: .*|All days) filter/ });
+    expect(day).toBeVisible();
+    expect(day).toHaveAttribute('data-selection', 'neutral');
+    const moreButton = bar.getByRole('button', { name: /^More filters/ });
+    expect(day.compareDocumentPosition(moreButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      moreButton.compareDocumentPosition(bar.getByRole('button', { name: 'All' })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(bar.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', String(!selected));
+    expect(bar.getByRole('button', { name: 'Agent problem 2' })).toHaveAttribute(
+      'aria-pressed',
+      String(selected),
+    );
+    for (const name of ['All', 'Agent problem 2']) {
+      expect(bar.getByRole('button', { name })).toHaveAttribute('data-selection', 'neutral');
+    }
+    expect(bar.getByRole('button', { name: 'All' }).querySelector('[data-chip-mark]')).toBeNull();
+    expect(
+      bar.getByRole('button', { name: 'Agent problem 2' }).querySelector('[data-chip-mark]'),
+    ).toHaveAttribute('data-tone', 'danger');
+    expect(bar.queryByRole('button', { name: /^Diagnosis filter/ })).toBeNull();
+    expect(bar.queryByRole('button', { name: /^Mode/ })).toBeNull();
+    await user.click(bar.getByRole('button', { name: /^More filters/ }));
+    const more = within(screen.getByRole('dialog', { name: 'More filters' }));
+    for (const name of [/^Mode/, /^Status/, /^Outcome/, /Metric$/, /Service$/, /Charts/]) {
+      expect(more.getByRole('button', { name })).toBeVisible();
+    }
+    await user.keyboard('{Escape}');
     if (selected) {
-      expect(bar.getByRole('button', { name: /^Metric/ })).toHaveTextContent('Quality ≥ 0.5');
-      expect(bar.getByRole('button', { name: 'Clear 7 filters' })).toBeVisible();
-    } else expect(bar.queryByTestId('filters-clear')).toBeNull();
+      expect(screen.getByRole('group', { name: 'Active filters' })).toHaveTextContent('quality ≥ 0.5');
+      expect(screen.getByRole('button', { name: 'Clear 7 filters' })).toBeVisible();
+    } else expect(screen.queryByTestId('filters-clear')).toBeNull();
   });
 
   it('clears the diagnosis filter, preserves source/day and resets the page', async () => {
@@ -170,12 +193,119 @@ describe('Turns filters and table', () => {
         <Harness filtersOnly />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: 'Diagnosis filter, 1 selected' }));
-    await user.click(screen.getByRole('button', { name: 'None' }));
+    await user.click(screen.getByRole('button', { name: 'All' }));
     expect(currentUrl().searchParams.get('day')).toBe('2026-11-01');
     expect(currentUrl().searchParams.get('source')).toBe('worker');
     expect(currentUrl().searchParams.has('label')).toBe(false);
     expect(currentUrl().searchParams.has('page')).toBe(false);
+  });
+
+  it.each([
+    [{}, 'All days'],
+    [{ day: '2026-11-16' }, 'Day: Nov 16'],
+    [{ from: '2026-11-01', to: '2026-11-16' }, 'Day: Nov 1, 2026 – Nov 16, 2026'],
+    [{ from: '2026-11-01' }, 'Day: From Nov 1, 2026'],
+    [{ to: '2026-11-16' }, 'Day: Until Nov 16, 2026'],
+  ])('shows the date selection in the Day trigger (%j)', (filters, label) => {
+    render(
+      <MemoryRouter>
+        <TurnFilters filters={filters} facets={facets} specs={specs} />
+      </MemoryRouter>,
+    );
+    const button = screen.getByRole('button', { name: new RegExp(`^${label} filter`) });
+    expect(button).toHaveTextContent(label);
+  });
+
+  it('keeps Clear available without repeating the day, diagnosis or search as removable chips', () => {
+    render(
+      <MemoryRouter initialEntries={[`${initial}&q=question`]}>
+        <Harness filtersOnly />
+      </MemoryRouter>,
+    );
+    expect(
+      within(screen.getByRole('group', { name: 'Active filters' })).queryByRole('button', {
+        name: /^Remove /,
+      }),
+    ).toBeNull();
+    expect(screen.getByRole('button', { name: 'Clear 3 filters' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Day: Nov 1 filter, 1 selected' })).toHaveAttribute(
+      'data-active',
+    );
+  });
+
+  it('shows removable secondary filters and keeps Clear as a reset of the whole filter bar', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter
+        initialEntries={[
+          `${initial}&q=question&mode=chat&status=completed&outcome=ok&metric=quality&min=0.5&service=service-a&charts=failed&conversation=conv-1&user=user-1`,
+        ]}
+      >
+        <Harness filtersOnly />
+      </MemoryRouter>,
+    );
+    const active = within(screen.getByRole('group', { name: 'Active filters' }));
+    for (const label of [
+      'Mode: chat',
+      'Status: Completed',
+      'Outcome: Ok',
+      'quality ≥ 0.5',
+      'service-a',
+      'Charts: failed',
+      'Conversation: conv-1',
+      'User: user-1',
+    ]) {
+      expect(active.getByRole('button', { name: `Remove ${label}` })).toBeVisible();
+    }
+    expect(active.getAllByRole('button', { name: /^Remove / })).toHaveLength(8);
+    await user.click(active.getByRole('button', { name: 'Remove Conversation: conv-1' }));
+    expect(currentUrl().searchParams.has('conversation')).toBe(false);
+    expect(currentUrl().searchParams.get('day')).toBe('2026-11-01');
+    expect(currentUrl().searchParams.get('label')).toBe('agent_problem');
+    expect(currentUrl().searchParams.get('user')).toBe('user-1');
+    await user.click(screen.getByTestId('filters-clear'));
+    expect([...currentUrl().searchParams.keys()]).toEqual(['source']);
+    expect(screen.queryByRole('group', { name: 'Active filters' })).toBeNull();
+  });
+
+  it.each([
+    ['user=user-1', 'User: user-1'],
+    ['min=0', 'Minimum: 0'],
+    ['max=0.5', 'Maximum: 0.5'],
+    ['service_status=not_ok', 'Service status: not ok'],
+  ])('shows and removes a lone URL filter (%s)', async (query, label) => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={[`?source=worker&sort=-latency_ms&page_size=100&page=3&${query}`]}>
+        <Harness filtersOnly />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('button', { name: 'Clear 1 filter' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: `Remove ${label}` }));
+    expect(Object.fromEntries(currentUrl().searchParams)).toEqual({
+      source: 'worker',
+      sort: '-latency_ms',
+      page_size: '100',
+    });
+    expect(screen.queryByTestId('filters-clear')).toBeNull();
+  });
+
+  it.each([
+    'day=2026-11-01',
+    'from=2026-10-30&to=2026-11-01',
+    'label=agent_problem',
+    'q=question',
+    'user=user-1',
+  ])('clears a lone filter group (%s)', async (query) => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={[`?source=worker&${query}`]}>
+        <Harness filtersOnly />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Clear 1 filter' }));
+    expect(Object.fromEntries(currentUrl().searchParams)).toEqual({ source: 'worker' });
+    expect(screen.queryByTestId('filters-clear')).toBeNull();
   });
 
   it('unticks the day without writing default pagination or sort to the URL', async () => {
@@ -185,13 +315,32 @@ describe('Turns filters and table', () => {
         <Harness filtersOnly />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: 'Day filter, 1 selected' }));
-    await user.click(within(screen.getByRole('dialog', { name: 'Day options' })).getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: 'Day: Nov 1 filter, 1 selected' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Day: Nov 1 options' })).getByRole('checkbox'),
+    );
     for (const key of ['day', 'page', 'page_size', 'sort']) {
       expect(currentUrl().searchParams.has(key)).toBe(false);
     }
     expect(currentUrl().searchParams.get('source')).toBe('worker');
     expect(currentUrl().searchParams.get('label')).toBe('agent_problem');
+  });
+
+  it('selects one available day and clears range bounds without changing the other filters', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={[`${initial}&from=2026-10-01&to=2026-11-01`]}>
+        <Harness filtersOnly days={[{ day: '2026-11-02', in_qym: 7 }]} />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Day: Nov 1 filter, 1 selected' }));
+    await user.click(screen.getByRole('checkbox', { name: /Nov 2, 2026/ }));
+    expect(currentUrl().searchParams.get('day')).toBe('2026-11-02');
+    expect(currentUrl().searchParams.get('label')).toBe('agent_problem');
+    expect(currentUrl().searchParams.get('source')).toBe('worker');
+    for (const key of ['from', 'to', 'page']) expect(currentUrl().searchParams.has(key)).toBe(false);
+    expect(screen.getByRole('checkbox', { name: /Nov 2, 2026/ })).toBeChecked();
+    expect(screen.queryByRole('checkbox', { name: /Nov 1, 2026/ })).toBeNull();
   });
 
   it('debounces Arabic search for 300 ms and preserves the other filters', () => {
@@ -218,13 +367,12 @@ describe('Turns filters and table', () => {
         <Harness filtersOnly />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: /^Status filter/ }));
+    await user.click(screen.getByRole('button', { name: /^More filters/ }));
+    await user.click(screen.getByRole('button', { name: /^Status/ }));
     await user.click(screen.getByRole('button', { name: 'Only Failed' }));
     expect(currentUrl().searchParams.getAll('status')).toEqual(['failed']);
     expect(currentUrl().searchParams.has('page')).toBe(false);
     await user.keyboard('{Escape}');
-    expect(screen.queryByRole('textbox', { name: 'Minimum' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: /^Metric/ }));
     expect(screen.getByRole('textbox', { name: 'Minimum' })).toBeDisabled();
   });
 
@@ -238,7 +386,8 @@ describe('Turns filters and table', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search questions and answers' }), {
       target: { value: 'إجمالي' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /^Status filter/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^More filters/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Status/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Only Failed' }));
     expect(currentUrl().searchParams.get('status')).toBe('failed');
     act(() => vi.advanceTimersByTime(300));
@@ -257,14 +406,15 @@ describe('Turns filters and table', () => {
         />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: /^Status filter/ }));
-    const status = within(screen.getByRole('dialog', { name: 'Status options' }));
+    await user.click(screen.getByRole('button', { name: /^More filters/ }));
+    await user.click(screen.getByRole('button', { name: /^Status/ }));
+    const status = within(screen.getByRole('group', { name: 'Status options' }));
     expect(status.getByRole('checkbox', { name: /^Failed\s*3$/ })).not.toBeChecked();
     expect(status.getByRole('checkbox', { name: /^Incomplete ingest\s*0$/ })).toBeChecked();
     expect(status.queryByRole('checkbox', { name: /Completed/ })).toBeNull();
     await user.keyboard('{Escape}');
-    await user.click(screen.getByRole('button', { name: /^Outcome filter/ }));
-    const outcome = within(screen.getByRole('dialog', { name: 'Outcome options' }));
+    await user.click(screen.getByRole('button', { name: /^Outcome/ }));
+    const outcome = within(screen.getByRole('group', { name: 'Outcome options' }));
     expect(outcome.getByRole('checkbox', { name: /^custom result\s*4$/ })).not.toBeChecked();
     expect(outcome.getByRole('checkbox', { name: /^absent\s*0$/ })).toBeChecked();
     expect(outcome.queryByRole('checkbox', { name: /cancelled/ })).toBeNull();
@@ -277,8 +427,9 @@ describe('Turns filters and table', () => {
         <Harness filtersOnly />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: 'Mode filter, 1 selected' }));
-    const mode = within(screen.getByRole('dialog', { name: 'Mode options' }));
+    await user.click(screen.getByRole('button', { name: /^More filters/ }));
+    await user.click(screen.getByRole('button', { name: /^Mode/ }));
+    const mode = within(screen.getByRole('group', { name: 'Mode options' }));
     expect(mode.getByRole('checkbox', { name: /^chat\s*2$/ })).toBeChecked();
     await user.click(mode.getByRole('checkbox', { name: /^report\s*3$/ }));
     expect(currentUrl().searchParams.has('mode')).toBe(false);
@@ -286,20 +437,37 @@ describe('Turns filters and table', () => {
     expect(currentUrl().searchParams.has('page')).toBe(false);
   });
 
-  it('uses one diagnosis list with counts and no repeated active-chip line', async () => {
+  it('toggles diagnoses directly without a duplicate removable chip', async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={[initial]}>
         <Harness filtersOnly />
       </MemoryRouter>,
     );
-    expect(screen.queryByRole('group', { name: 'Active filters' })).toBeNull();
-    expect(screen.queryByRole('group', { name: 'Diagnosis' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Diagnosis filter, 1 selected' }));
-    expect(screen.getByRole('checkbox', { name: /^Agent problem\s*2$/ })).toBeChecked();
-    await user.click(screen.getByRole('button', { name: 'None' }));
+    await user.click(screen.getByRole('button', { name: 'Agent problem 2' }));
+    expect(currentUrl().searchParams.has('label')).toBe(false);
+    await user.click(screen.getByRole('button', { name: 'Agent problem 2' }));
+    expect(currentUrl().searchParams.getAll('label')).toEqual(['agent_problem']);
+    expect(screen.queryByRole('button', { name: 'Remove Diagnosis: Agent problem' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Agent problem 2' }));
     expect(currentUrl().searchParams.has('label')).toBe(false);
     expect(currentUrl().searchParams.has('page')).toBe(false);
+  });
+
+  it('adds a diagnosis without replacing selected unknown or zero-count diagnoses', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={[`${initial}&label=custom`]}>
+        <Harness filtersOnly />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('button', { name: 'custom 0' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: 'Agent problem 2' }));
+    expect(currentUrl().searchParams.getAll('label')).toEqual(['custom']);
+    await user.click(screen.getByRole('button', { name: 'Agent problem 2' }));
+    expect(currentUrl().searchParams.getAll('label')).toEqual(['custom', 'agent_problem']);
+    await user.click(screen.getByRole('button', { name: 'All' }));
+    expect(currentUrl().searchParams.has('label')).toBe(false);
   });
 
   it('uses the same list when a facet has more than five values', async () => {
@@ -316,8 +484,9 @@ describe('Turns filters and table', () => {
         />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: 'Mode filter, 1 selected' }));
-    const mode = within(screen.getByRole('dialog', { name: 'Mode options' }));
+    await user.click(screen.getByRole('button', { name: /^More filters/ }));
+    await user.click(screen.getByRole('button', { name: /^Mode/ }));
+    const mode = within(screen.getByRole('group', { name: 'Mode options' }));
     expect(mode.getAllByRole('checkbox')).toHaveLength(6);
     expect(mode.getByRole('checkbox', { name: /^mode-1\s*1$/ })).toBeVisible();
   });
@@ -329,7 +498,7 @@ describe('Turns filters and table', () => {
         <Harness filtersOnly />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: /^Metric/ }));
+    await user.click(screen.getByRole('button', { name: /^More filters/ }));
     await user.click(screen.getByRole('button', { name: /Any metric.*Metric/ }));
     await user.click(screen.getByRole('option', { name: 'Quality' }));
     const min = screen.getByRole('textbox', { name: 'Minimum' });
@@ -338,10 +507,10 @@ describe('Turns filters and table', () => {
     expect(currentUrl().searchParams.get('metric')).toBe('quality');
     expect(currentUrl().searchParams.get('min')).toBe('0.5');
     expect(currentUrl().searchParams.has('page')).toBe(false);
-    await user.click(screen.getByRole('button', { name: /^Metric/ }));
-    expect(screen.getByRole('button', { name: /^Metric/ })).toHaveTextContent('Quality ≥ 0.5');
-    expect(screen.queryByRole('textbox', { name: 'Minimum' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: /^Metric/ }));
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('button', { name: /^More filters/ })).toHaveTextContent('1');
+    expect(screen.getByRole('group', { name: 'Active filters' })).toHaveTextContent('quality ≥ 0.5');
+    await user.click(screen.getByRole('button', { name: /^More filters/ }));
     await user.click(screen.getByRole('button', { name: /Quality.*Metric/ }));
     await user.click(screen.getByRole('option', { name: 'Any metric' }));
     expect(currentUrl().searchParams.has('metric')).toBe(false);
@@ -356,14 +525,14 @@ describe('Turns filters and table', () => {
         <Harness filtersOnly />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: /^Service/ }));
+    await user.click(screen.getByRole('button', { name: /^More filters/ }));
     await user.click(screen.getByRole('button', { name: /Any service.*Service/ }));
     await user.click(screen.getByRole('option', { name: 'service-a 1' }));
     await user.click(screen.getByRole('button', { name: /Any status.*Service status/ }));
     await user.click(screen.getByRole('option', { name: 'Not OK' }));
     expect(currentUrl().searchParams.get('service')).toBe('service-a');
     expect(currentUrl().searchParams.get('service_status')).toBe('not_ok');
-    expect(screen.getByRole('button', { name: /^Service/ })).toHaveTextContent('service-a · not ok');
+    expect(screen.getByRole('button', { name: /service-a.*Service$/ })).toHaveTextContent('service-a');
     await user.click(screen.getByRole('button', { name: /Charts/ }));
     await user.click(screen.getByRole('option', { name: 'Failed charts' }));
     expect(currentUrl().searchParams.get('charts')).toBe('failed');
@@ -382,12 +551,14 @@ describe('Turns filters and table', () => {
         <Harness filtersOnly />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: /^Service/ }));
+    await user.click(screen.getByRole('button', { name: /^More filters/ }));
     await user.click(screen.getByRole('button', { name: /Any service.*Service/ }));
     expect(screen.getByRole('option', { name: 'service-a 1' })).toBeVisible();
     await user.click(screen.getByRole('option', { name: 'Visualization 2' }));
     expect(currentUrl().searchParams.get('service')).toBe('viz_agent');
-    expect(screen.getByRole('button', { name: /^Service/ })).toHaveTextContent('Visualization');
+    expect(screen.getByRole('button', { name: /Visualization.*Service$/ })).toHaveTextContent(
+      'Visualization',
+    );
   });
 
   it('keeps the full long question in its title and visible text', () => {
@@ -400,7 +571,12 @@ describe('Turns filters and table', () => {
     const cell = container.querySelector('[data-live-question]')!;
     expect(cell).toHaveAttribute('title', question);
     expect(cell).toHaveTextContent(question);
-    expect(cell).toHaveAttribute('dir', 'auto');
+    expect(cell).toHaveAttribute('dir', 'rtl');
+    expect(cell).toHaveAttribute('lang', 'ar');
+    expect(screen.getByRole('treegrid', { name: 'Live turns' })).toHaveAttribute(
+      'data-cell-align',
+      'first-line',
+    );
   });
 
   it('labels not-ok services from the spec and preserves unknown names and faults', () => {
@@ -413,21 +589,142 @@ describe('Turns filters and table', () => {
         />
       </MemoryRouter>,
     );
-    const cell = container.querySelector('[data-live-turn-row] [data-col="services"]')!;
+    const cell = container.querySelector('[data-live-turn-row] [data-col="problems"]')!;
     expect(cell).toHaveTextContent('Visualization · agent');
     expect(cell).toHaveTextContent('service-a · agent');
     expect(cell).not.toHaveTextContent('viz_agent');
   });
 
-  it('renders the full user reference in the turns table', () => {
+  it('expands metadata without navigating and shows full user, conversation and reason', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={[initial]}>
+        <Harness />
+      </MemoryRouter>,
+    );
+    const before = currentUrl().href;
+    await user.click(screen.getByRole('button', { name: 'Expand row' }));
+    expect(currentUrl().href).toBe(before);
+    expect(screen.getByText(row.user_ref!)).toBeVisible();
+    expect(screen.getByRole('link', { name: row.conversation_id! })).toBeVisible();
+    expect(screen.getByText('Why this diagnosis')).toBeVisible();
+    expect(screen.getByText('Charts')).toBeVisible();
+    expect(screen.getAllByText(row.label_reason!)).toHaveLength(2);
+    await user.click(screen.getByRole('button', { name: 'Collapse row' }));
+    expect(screen.queryByText(row.user_ref!)).toBeNull();
+  });
+
+  it('limits six problems to two tags and a count with all problems in its title', () => {
+    const services = Array.from({ length: 5 }, (_, i) => ({ name: `service-${i}`, fault: 'agent' }));
+    const { container } = render(
+      <MemoryRouter>
+        <Harness rows={[{ ...row, services_not_ok: services }]} />
+      </MemoryRouter>,
+    );
+    const cell = container.querySelector('[data-col="problems"][role="gridcell"]')!;
+    expect(cell.querySelectorAll('[data-tone]')).toHaveLength(2);
+    const more = within(cell as HTMLElement).getByText('+4 more');
+    expect(more.previousElementSibling).toHaveAttribute('data-live-problem-tag');
+    for (const service of services) expect(more.getAttribute('title')).toContain(`${service.name} · agent`);
+    expect(more.getAttribute('title')).toContain('1 chart failed');
+    expect(cell).not.toHaveTextContent('service-4');
+  });
+
+  it('keeps Arabic direction and language on the reason, problems and full metadata values', async () => {
+    const user = userEvent.setup();
+    const values = {
+      label_reason: 'لم يتم العثور على نتيجة مناسبة',
+      mode: 'محادثة',
+      user_ref: 'مستخدم الاختبار',
+      conversation_id: 'معرف المحادثة الكامل',
+      services_not_ok: [{ name: 'خدمة البحث', fault: 'عطل' }],
+    };
+    render(
+      <MemoryRouter>
+        <Harness rows={[{ ...row, ...values }]} />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Expand row' }));
+    for (const text of [
+      values.label_reason,
+      values.mode,
+      values.user_ref,
+      values.conversation_id,
+      'خدمة البحث · عطل',
+    ]) {
+      for (const block of screen.getAllByText(text, { exact: true })) {
+        expect(block).toHaveAttribute('dir', 'rtl');
+        expect(block).toHaveAttribute('lang', 'ar');
+      }
+    }
+  });
+
+  it('uses short score headers and puts only returned additional metrics in details', async () => {
+    const user = userEvent.setup();
+    const metrics = [
+      primary,
+      ...['compliance_a', 'compliance_b', 'error_detection', 'not_returned'].map((name, i) => ({
+        ...primary,
+        metric_name: name,
+        label: name === 'error_detection' ? 'Error detection' : `Full ${name}`,
+        is_primary: false,
+        position: i + 1,
+      })),
+    ];
+    const { container } = render(
+      <MemoryRouter>
+        <TurnsTable
+          slug="demo"
+          source="worker"
+          filters={{}}
+          specs={metrics}
+          data={{
+            rows: [
+              {
+                ...row,
+                scores: {
+                  ...row.scores,
+                  error_detection: { score_numeric: 0.9, skipped: false, label: null },
+                },
+              },
+            ],
+            total: 1,
+            facets,
+          }}
+        />
+      </MemoryRouter>,
+    );
+    for (const [label, short] of [
+      ['Quality', 'Success'],
+      ['Full compliance_a', 'Judge A'],
+      ['Full compliance_b', 'Judge B'],
+    ]) {
+      expect(screen.getByRole('columnheader', { name: label })).toHaveTextContent(short!);
+      expect(screen.getByTitle(label!)).toBeVisible();
+    }
+    expect(container.querySelectorAll('thead th')).toHaveLength(10);
+    expect(container.querySelector('[data-col="metric:error_detection"]')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Expand row' }));
+    expect(screen.getByText('Error detection')).toBeVisible();
+    expect(screen.getByText('90.0%')).toBeVisible();
+    expect(screen.queryByText('Full not_returned')).toBeNull();
+  });
+
+  it('a mouse row click opens the turn instead of expanding it', async () => {
+    const user = userEvent.setup();
     const { container } = render(
       <MemoryRouter initialEntries={[initial]}>
         <Harness />
       </MemoryRouter>,
     );
-    const user = container.querySelector('[data-live-turn-row] [data-col="user"] [title]')!;
-    expect(user).toHaveTextContent(row.user_ref!);
-    expect(user).toHaveAttribute('title', row.user_ref);
+    await user.click(container.querySelector('[data-live-question]')!);
+    await screen.findByText(
+      (_, element) =>
+        element?.tagName === 'OUTPUT' &&
+        element.textContent?.includes(encodeURIComponent(row.turn_id)) === true,
+    );
+    expect(currentUrl().pathname).toBe(`/projects/demo/live/turns/${encodeURIComponent(row.turn_id)}`);
+    expect(screen.queryByText('Why this diagnosis')).toBeNull();
   });
 
   it('renders the full user reference in the turn header', () => {
@@ -448,7 +745,7 @@ describe('Turns filters and table', () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
-    expect(screen.getByTitle(row.user_ref!)).toHaveTextContent(row.user_ref!);
+    expect(screen.getByText(row.user_ref!)).toBeVisible();
   });
 
   it('uses the spec tone, keeps question text and skips scores without showing a value', () => {
@@ -458,7 +755,7 @@ describe('Turns filters and table', () => {
       </MemoryRouter>,
     );
     const question = container.querySelector('[data-live-question]')!;
-    expect(question).toHaveAttribute('dir', 'auto');
+    expect(question).toHaveAttribute('dir', 'rtl');
     expect(question).toHaveAttribute('title', row.question);
     expect(question).toHaveTextContent(row.question);
     const turn = container.querySelector('[data-live-turn-row]')!;
@@ -466,8 +763,8 @@ describe('Turns filters and table', () => {
     expect(turn.querySelector('[data-col="label"] [data-tone]')).toHaveAttribute('data-tone', 'danger');
     expect(turn.querySelector('[data-col="metric:quality"]')).toHaveTextContent('50.0%');
     expect(turn.querySelector('[data-col="metric:compliance"]')).toHaveTextContent('—');
-    expect(turn.querySelector('[data-col="charts"] [data-tone="danger"]')).toHaveTextContent('1 failed');
-    expect(turn.querySelector('[data-col="services"] [data-tone]')).toHaveAttribute('data-tone', 'danger');
+    expect(turn.querySelector('[data-col="problems"]')).toHaveTextContent('1 chart failed');
+    expect(turn.querySelector('[data-col="problems"] [data-tone]')).toHaveAttribute('data-tone', 'danger');
   });
 
   it('writes backend metric/latency sort keys and pages in the URL', async () => {
@@ -482,7 +779,7 @@ describe('Turns filters and table', () => {
     expect(currentUrl().searchParams.has('page')).toBe(false);
     await user.click(screen.getByRole('button', { name: 'Latency' }));
     expect(currentUrl().searchParams.get('sort')).toBe('latency_ms');
-    await user.click(screen.getByRole('button', { name: 'Quality' }));
+    await user.click(screen.getByRole('button', { name: 'Success' }));
     expect(currentUrl().searchParams.get('sort')).toBe('-metric:quality');
     await user.click(screen.getByRole('button', { name: 'Next page' }));
     expect(currentUrl().searchParams.get('page')).toBe('2');
@@ -511,7 +808,7 @@ describe('Turns filters and table', () => {
         <Harness />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('link', { name: 'conversation 123 · turn 1' }));
+    await user.click(screen.getByRole('link', { name: 'Conversation conversation/123 · turn 1' }));
     expect(currentUrl().pathname).toBe('/projects/demo/live/turns');
     expect(currentUrl().searchParams.get('conversation')).toBe(row.conversation_id);
     expect(currentUrl().searchParams.get('label')).toBe('agent_problem');
@@ -529,7 +826,7 @@ describe('Turns filters and table', () => {
         <Harness rows={[{ ...row, conversation_id: 'conversation-c76', turn_index: null }]} />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('link', { name: 'conversation c76' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Conversation conversation-c76' })).toBeVisible();
     expect(screen.queryByText(/turn —/)).toBeNull();
   });
 
@@ -574,7 +871,7 @@ describe('LiveTurnsPage', () => {
       }),
     );
     renderPage();
-    expect(await screen.findByText('2 of 12 turns on Nov 1, 2026')).toBeVisible();
+    expect(await screen.findByText('2 turns on Nov 1, 2026')).toBeVisible();
     expect(document.title).toBe('Turns · Live · Demo project · قيِّم');
     expect(screen.getByText(liveOverview.status.name)).toBeVisible();
     // cv5 M2: the environment is a state tag in sentence case (preprod -> Preprod, a pre-production tone)
@@ -646,7 +943,7 @@ it.each([['Asia/Riyadh'], ['UTC'], [undefined], ['Invalid/Zone']])(
     renderPage();
     expect(await screen.findByText(row.question)).toBeVisible();
     expect(screen.getByRole('button', { name: 'Time' })).toBeVisible();
-    expect(screen.getByRole('button', { name: /Day filter/ })).toBeVisible();
+    expect(screen.getByRole('button', { name: /^Day: .* filter/ })).toBeVisible();
     expect(document.querySelector('[data-live-turn-row] [data-col="turn_at"]')).toHaveTextContent(
       formatTableDate('2026-11-01T09:00:00'),
     );

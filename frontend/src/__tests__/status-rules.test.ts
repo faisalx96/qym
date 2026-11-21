@@ -32,7 +32,10 @@ function grep(files: string[], re: RegExp): string[] {
 }
 const none = (list: string[], why: string) => expect(list, [why, ...list].join('\n')).toEqual([]);
 
-/** Places that show only a condition, a result, an on/off exception or a save state: no status mark at all. */
+/** Places that show only a condition, a result, an on/off exception or a save state: no status mark at all.
+ * The approved Live overview redesign (2026-11-16) explicitly uses StatusMark in StatusLine and the service canary cells.
+ * The approved Live turn redesign uses StatusMark for Error detection, chart issues, conversation diagnoses, and service/tool results.
+ */
 const NO_STATUS_MARK = [
   'features/admin/feedback/FeedbackAgentTab.tsx',
   'features/admin/projects/ProjectsTable.tsx',
@@ -48,23 +51,16 @@ const NO_STATUS_MARK = [
   'features/experiments/detail/Credentials.tsx',
   'features/experiments/launch/entry/EnvironmentPicker.tsx',
   'features/experiments/launch/review/ReviewParts.tsx',
-  'features/live/components/Canaries.tsx',
   'features/live/components/DaysTable.tsx',
-  'features/live/components/StatusLine.tsx',
-  'features/live/components/TurnsTable.tsx',
-  'features/live/components/turn/AnswerSqlTab.tsx',
-  'features/live/components/turn/ChartsTab.tsx',
-  'features/live/components/turn/ConversationTab.tsx',
+  // Approved Live layouts use StatusMark in StatusLine, Canaries, TurnsTable and turn results.
   'features/live/components/turn/DiagnosisTab.tsx',
   'features/live/components/turn/EvaluatorTab.tsx',
   'features/live/components/turn/JudgesTab.tsx',
-  'features/live/components/turn/ServicesTab.tsx',
   'features/live/components/turn/TurnHeader.tsx',
   'features/live/components/turn/TurnTiles.tsx',
   'features/live/components/worker/HistoryBlock.tsx',
-  'features/live/components/worker/ProblemsBlock.tsx',
-  'features/live/components/worker/SettingsForm.tsx',
-  'features/live/components/worker/StatusStrip.tsx',
+  // The approved worker redesign (2026-11-16) uses marks for State, problem Level
+  // and the single Settings status. History retains its Running state tag.
   'features/run-detail/components/items/pane/Frame.tsx',
   'features/run-detail/components/items/ItemsTable.tsx',
   'features/run-detail/components/items/pane/blocks.tsx',
@@ -94,6 +90,12 @@ describe('status rules (2026-11-12)', () => {
       hits,
       'These places show a health, a result, an on/off state or a save state: use StateTag, Flag or text.',
     );
+  });
+
+  it('turns layout A uses a diagnosis mark without a stretched tag', () => {
+    const turns = src('features/live/components/TurnsTable.tsx');
+    expect(turns).toContain('<StatusMark');
+    expect(turns).not.toContain('<StateTag');
   });
 
   it('S-03: blue means working now: an info status mark is always the orbit', () => {

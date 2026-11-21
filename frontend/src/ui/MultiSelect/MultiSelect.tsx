@@ -40,6 +40,8 @@ export interface MultiSelectProps<T extends MultiSelectItem> {
   inline?: boolean;
   /** 'bar' = compact filter-bar trigger: the label, then `· value` once something is selected. */
   triggerVariant?: 'field' | 'bar';
+  /** Selected bar trigger surface. Existing filters use the accent by default. */
+  selectionStyle?: 'accent' | 'neutral';
   /** Text after the label on a 'bar' trigger (default: the single label, or the count). */
   summary?: (selected: Set<Key>) => string;
   /** `data-testid` of the popover panel (e2e hook). */
@@ -82,6 +84,7 @@ export function MultiSelect<T extends MultiSelectItem>({
   isDisabled,
   inline,
   triggerVariant = 'field',
+  selectionStyle,
   summary: summaryOf,
   panelTestId,
   nameSuffix,
@@ -274,6 +277,7 @@ export function MultiSelect<T extends MultiSelectItem>({
       {triggerVariant === 'bar' ? (
         <BarTrigger
           label={label}
+          selectionStyle={selectionStyle}
           value={
             selectedCount
               ? summaryOf
@@ -329,6 +333,8 @@ export type BarTriggerProps = {
   value?: string;
   /** A set filter: accent tint. */
   active?: boolean;
+  /** Neutral pressed styling when the selection is already expressed by the label/value. */
+  selectionStyle?: 'accent' | 'neutral';
   className?: string;
 } & Omit<AriaButtonProps, 'children' | 'className'> & { [key: `data-${string}`]: string | undefined };
 
@@ -336,13 +342,14 @@ export type BarTriggerProps = {
  * The 24px filter-bar trigger (D-16): the label inside the button, then `· value` when set, accent tint when active.
  * The trigger of a 'bar' MultiSelect or Select, or of a filter Popover with its own fields.
  */
-export function BarTrigger({ label, value, active, className, ...rest }: BarTriggerProps) {
+export function BarTrigger({ label, value, active, selectionStyle, className, ...rest }: BarTriggerProps) {
   return (
     <AriaButton
       {...rest}
       className={[styles.trigger, className].filter(Boolean).join(' ')}
       data-variant="bar"
       data-active={active ? '' : undefined}
+      data-selection={selectionStyle}
     >
       <span className={styles.triggerLabel}>{label}</span>
       {/* cv5 Y13: the dot is its own flex item, so the same gap sits on both sides of it */}

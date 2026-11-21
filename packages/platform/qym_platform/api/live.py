@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import csv
 import io
+import zlib
 from datetime import date
 from typing import Any, Callable, Iterator, Literal, NoReturn, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import Response, StreamingResponse
-from pydantic import BaseModel, Field
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -38,6 +39,7 @@ from qym_platform.permissions import (
     require_project_writable,
 )
 from qym_platform.services import (
+    live_activity,
     live_control,
     live_events,
     live_jobs,
@@ -232,6 +234,90 @@ def project_live_chart_image(
     return Response(content=row.image, media_type=row.content_type, headers=headers)
 
 
+# Stored chart markup and stylesheets are data for the page to place in its
+# sandboxed frame. Opened on their own they are inert: no script, no loading.
+_CHART_DATA_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "sandbox; default-src 'none'",
+}
+
+
+def _etag_matches(request: Request, etag: str) -> bool:
+    """Compare a strong ETag with every If-None-Match candidate."""
+    return any(
+        value.strip().removeprefix("W/") == etag
+        for value in request.headers.get("if-none-match", "").split(",")
+    )
+
+
+@live_router.get(
+    "/api/projects/{project_slug}/live/chart-snapshot",
+    response_class=JSONResponse,
+)
+def project_live_chart_snapshot(
+    project_slug: str,
+    request: Request,
+    turn_id: str = Query(..., min_length=1, max_length=200),
+    ref: str = Query(..., pattern=r"^[A-Za-z0-9_.:-]{1,100}$"),
+    source: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Response:
+    """Return a chart snapshot as JSON after checking the project's read permission."""
+    selected = _selected_source(db, principal, project_slug, source)
+    row = live_turns.chart_snapshot(db, selected, turn_id, ref)
+    if row is None:
+        raise HTTPException(status_code=404, detail="chart snapshot not found")
+    etag = f'"{live_turns.snapshot_version(row.sha256, row.style_sha256)}"'
+    headers = {
+        "ETag": etag,
+        "Cache-Control": "private, max-age=86400",
+        **_CHART_DATA_HEADERS,
+    }
+    if _etag_matches(request, etag):
+        return Response(status_code=304, headers=headers)
+    # The stored markup is untrusted: it leaves qym as a JSON string, never as
+    # text/html, and the page draws it only inside a sandboxed frame.
+    return JSONResponse(
+        {
+            "html": zlib.decompress(row.html).decode("utf-8"),
+            "style_sha256": row.style_sha256,
+        },
+        headers=headers,
+    )
+
+
+@live_router.get(
+    "/api/projects/{project_slug}/live/chart-style",
+    response_class=Response,
+)
+def project_live_chart_style(
+    project_slug: str,
+    request: Request,
+    sha256: str = Query(..., pattern=r"^[0-9a-f]{64}$"),
+    source: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Response:
+    """Return a snapshot stylesheet after checking the project's read permission."""
+    selected = _selected_source(db, principal, project_slug, source)
+    row = live_turns.chart_style(db, selected, sha256)
+    if row is None:
+        raise HTTPException(status_code=404, detail="chart style not found")
+    etag = f'"{row.sha256}"'
+    # The hash names the content, so a stored stylesheet never changes.
+    headers = {
+        "ETag": etag,
+        "Cache-Control": "private, max-age=31536000, immutable",
+        **_CHART_DATA_HEADERS,
+    }
+    if _etag_matches(request, etag):
+        return Response(status_code=304, headers=headers)
+    return Response(
+        content=zlib.decompress(row.css), media_type="text/css", headers=headers
+    )
+
+
 @live_router.get("/api/projects/{project_slug}/live/turns/{turn_id:path}")
 def project_live_turn_detail(
     project_slug: str,
@@ -249,6 +335,8 @@ def project_live_turn_detail(
         turn_id,
         _specs(db, selected),
         project_slug=project_slug,
+        chart_image_retention_days=PlatformSettings().live_chart_image_retention_days,
+        now=live_overview.utcnow(),
         root_path=request.scope.get("root_path", ""),
     )
     if payload is None:
@@ -276,6 +364,51 @@ class WorkerJobBody(BaseModel):
     until_day: date
     limit: int
     redo: Optional[list[Literal["failed", "inconclusive", "all"]]] = None
+
+
+class WorkerReevaluateBody(BaseModel):
+    """Re-evaluate one turn; the turn is named by its trace id."""
+
+    kind: Literal["reevaluate"]
+    trace_id: str = Field(..., min_length=1, max_length=live_jobs.TRACE_ID_MAX_LENGTH)
+
+    @field_validator("trace_id")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("trace_id must not be blank")
+        return value
+
+
+def _job_body(body: dict[str, Any]) -> BaseModel:
+    """Validate a job request by its kind, with the field paths of a typed body."""
+    model = WorkerReevaluateBody if body.get("kind") == "reevaluate" else WorkerJobBody
+    try:
+        return model.model_validate(body)
+    except ValidationError as exc:
+        raise RequestValidationError(
+            [
+                {**error, "loc": ("body", *error["loc"])}
+                for error in exc.errors(include_url=False)
+            ]
+        ) from None
+
+
+_JOB_BODY_OPENAPI = {
+    "requestBody": {
+        "required": True,
+        "content": {
+            "application/json": {
+                "schema": {
+                    "oneOf": [
+                        WorkerJobBody.model_json_schema(),
+                        WorkerReevaluateBody.model_json_schema(),
+                    ]
+                }
+            }
+        },
+    }
+}
 
 
 def _worker_project(db: Session, principal: Principal, project_slug: str) -> Project:
@@ -396,7 +529,9 @@ def project_live_worker(
     selected: LiveSource = Depends(_worker_source),
     db: Session = Depends(get_db),
 ) -> dict:
-    versions = live_worker_settings.list_versions(db, selected)
+    # Read one predecessor beyond the visible history for its last comparison.
+    history = live_worker_settings.list_versions(db, selected, limit=51)
+    versions = history[:50]
     jobs = (
         db.query(LiveJob)
         .filter_by(source_id=selected.id)
@@ -468,7 +603,12 @@ def project_live_worker(
             else None
         ),
         "versions": [
-            live_worker_settings.version_summary(row, names.get) for row in versions
+            live_worker_settings.version_history_summary(
+                row,
+                history[index + 1] if index + 1 < len(history) else None,
+                names.get,
+            )
+            for index, row in enumerate(versions)
         ],
         "jobs": [live_control.job_dict(job, names.get) for job in jobs],
         "connections": [
@@ -482,6 +622,17 @@ def project_live_worker(
         ],
         "model_ids": model_ids,
     }
+
+
+@live_router.get("/api/projects/{project_slug}/live/worker/activity")
+def project_live_worker_activity(
+    selected: LiveSource = Depends(_worker_source),
+    db: Session = Depends(get_db),
+) -> dict:
+    """What the worker last reported it is doing, for the line on every Live page."""
+    return live_activity.activity_payload(
+        db, selected, PlatformSettings(), live_overview.utcnow()
+    )
 
 
 @live_router.put("/api/projects/{project_slug}/live/worker/state")
@@ -611,26 +762,41 @@ def project_live_worker_restore(
     return payload
 
 
-@live_router.post("/api/projects/{project_slug}/live/worker/jobs", status_code=201)
+@live_router.post(
+    "/api/projects/{project_slug}/live/worker/jobs",
+    status_code=201,
+    openapi_extra=_JOB_BODY_OPENAPI,
+)
 def project_live_worker_job(
-    body: WorkerJobBody,
+    raw: dict[str, Any] = Body(...),
     selected: LiveSource = Depends(_writable_worker_source),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> dict:
+    body = _job_body(raw)
     try:
-        job = live_jobs.create_job(
-            db,
-            selected,
-            body.kind,
-            body.since_day,
-            body.until_day,
-            body.limit,
-            PlatformSettings(),
-            principal.user.id,
-            live_overview.utcnow(),
-            redo=body.redo,
-        )
+        if isinstance(body, WorkerReevaluateBody):
+            job = live_jobs.create_reevaluate_job(
+                db,
+                selected,
+                body.trace_id,
+                principal.user.id,
+                live_overview.utcnow(),
+            )
+        else:
+            assert isinstance(body, WorkerJobBody)
+            job = live_jobs.create_job(
+                db,
+                selected,
+                body.kind,
+                body.since_day,
+                body.until_day,
+                body.limit,
+                PlatformSettings(),
+                principal.user.id,
+                live_overview.utcnow(),
+                redo=body.redo,
+            )
     except live_jobs.JobError as exc:
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
     _worker_audit(db, principal, selected, "live.worker.job", {}, job.params)

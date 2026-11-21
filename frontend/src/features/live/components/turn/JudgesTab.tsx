@@ -1,7 +1,7 @@
-import type { CSSProperties, ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import type { LiveTurnDetail } from '@/api/live';
-import { EmptyState, Card, InlineNotice, KeyValueGrid, ModelTag, StateTag, Text, TextBlock } from '@/ui';
+import { formatPercentValue } from '@/lib/format';
+import { EmptyState, Card, InlineNotice, KeyValueGrid, Tag, StateTag, Text, TextBlock } from '@/ui';
 import {
   booleanOf,
   crossReviewOf,
@@ -12,28 +12,43 @@ import {
   servicesOf,
   verdictOf,
 } from '../../lib/summary';
-import { Bilingual, EvidenceCard, MetricValue } from './Evidence';
+import { Bilingual, BooleanTag, EvidenceCard, MetricValue, TurnCardTitle } from './Evidence';
 import { deviationEvidence } from './deviationEvidence';
 import { JudgeDeviations } from './JudgeDeviations';
-import { modelSeriesOf } from '@/features/runs-list/model';
+import { useExplanationLanguage } from '../../ExplanationLanguage';
 import styles from './JudgesTab.module.css';
 
-function Check({ value }: { value: boolean | null | undefined }) {
-  return (
-    <StateTag tone={value == null ? 'neutral' : value ? 'success' : 'danger'}>
-      {value == null ? 'Unknown' : value ? 'Yes' : 'No'}
-    </StateTag>
-  );
-}
-
-export function JudgesTab({
-  data,
-  modelIndex = null,
-}: {
-  data: LiveTurnDetail;
-  modelIndex?: Record<string, number> | null;
-}) {
-  const location = useLocation();
+export function JudgesTab({ data }: { data: LiveTurnDetail; modelIndex?: Record<string, number> | null }) {
+  const language = useExplanationLanguage();
+  const columnsRef = useRef<HTMLDivElement>(null);
+  // Measure natural content, not the stretched sections, so shorter translations can shrink again.
+  useLayoutEffect(() => {
+    const root = columnsRef.current;
+    if (!root || typeof ResizeObserver === 'undefined') return;
+    const sections = [...root.querySelectorAll<HTMLElement>('[data-judge-facet]')];
+    const measure = () => {
+      const wide = root.getBoundingClientRect().width >= 900;
+      const heights = new Map<string, number[]>();
+      for (const section of sections) {
+        const key = section.dataset.judgeFacet!;
+        const height = section.firstElementChild?.getBoundingClientRect().height ?? 0;
+        heights.set(key, [...(heights.get(key) ?? []), height]);
+      }
+      for (const section of sections) {
+        const values = heights.get(section.dataset.judgeFacet!)!;
+        section.style.setProperty(
+          '--judge-facet-height',
+          `${wide && values.length === 2 ? Math.max(...values) : 0}px`,
+        );
+      }
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(root);
+    for (const section of sections)
+      if (section.firstElementChild) observer.observe(section.firstElementChild);
+    measure();
+    return () => observer.disconnect();
+  }, [data, language]);
   const agreement = booleanOf(data.summary.judges_agree);
   const confidence =
     verdictOf(data.summary)?.confidence ??
@@ -75,7 +90,7 @@ export function JudgesTab({
                   : numberOf(meta?.[`${axis}_score`]));
             return {
               key: axis,
-              label: `${axis === 'sql' ? 'SQL' : axis === 'response' ? 'Response' : 'Overall'} compliance`,
+              label: axis === 'sql' ? 'SQL' : axis === 'response' ? 'Response' : 'Overall',
               value: <MetricValue value={value} spec={spec} />,
             };
           })}
@@ -83,18 +98,26 @@ export function JudgesTab({
       ),
       checks: checks.some(([, , value]) => value !== null) ? (
         <KeyValueGrid
-          columns={1}
+          columns={3}
           dense
-          items={checks.map(([key, label, value]) => ({ key, label, value: <Check value={value} /> }))}
+          items={checks.map(([key, label, value]) => ({ key, label, value: <BooleanTag value={value} /> }))}
         />
       ) : null,
       against: judge?.vsAgent ? (
         <KeyValueGrid
-          columns={1}
+          columns={3}
           dense
           items={[
-            { key: 'equivalent', label: 'Equivalent', value: <Check value={judge.vsAgent.equivalent} /> },
-            { key: 'results', label: 'Results match', value: <Check value={judge.vsAgent.resultSetMatch} /> },
+            {
+              key: 'equivalent',
+              label: 'Equivalent',
+              value: <BooleanTag value={judge.vsAgent.equivalent} />,
+            },
+            {
+              key: 'results',
+              label: 'Results match',
+              value: <BooleanTag value={judge.vsAgent.resultSetMatch} />,
+            },
             ...(coverage
               ? [
                   {
@@ -126,9 +149,7 @@ export function JudgesTab({
             <Bilingual en={route.reasoningEn || null} ar={route.reasoningAr || null} />
           </>
         ) : null,
-      deviations: deviationEvidence(data.summary, side).length ? (
-        <JudgeDeviations summary={data.summary} side={side} />
-      ) : null,
+      deviations: <JudgeDeviations summary={data.summary} side={side} />,
       reasoning:
         judge?.reasoningEn || judge?.reasoningAr ? (
           <Bilingual en={judge.reasoningEn || null} ar={judge.reasoningAr || null} />
@@ -140,11 +161,17 @@ export function JudgesTab({
           <>
             {review.agreement !== null || review.betterSql ? (
               <KeyValueGrid
-                columns={1}
+                columns={3}
                 dense
                 items={[
                   ...(review.agreement !== null
-                    ? [{ key: 'agreement', label: 'Agreement', value: <Check value={review.agreement} /> }]
+                    ? [
+                        {
+                          key: 'agreement',
+                          label: 'Agreement',
+                          value: <BooleanTag value={review.agreement} />,
+                        },
+                      ]
                     : []),
                   ...(review.betterSql
                     ? [
@@ -160,93 +187,94 @@ export function JudgesTab({
                 ]}
               />
             ) : null}
-            <Bilingual en={review.textEn || null} ar={review.textAr || null} />
-          </>
-        ) : null,
-      sql:
-        judge?.sqlParts.length || judge?.sqlReasoningEn || judge?.sqlReasoningAr ? (
-          <>
-            {judge.sqlParts.length ? (
-              <ol className={styles.statements}>
-                {judge.sqlParts.map((part, index) => {
-                  const params = new URLSearchParams(location.search);
-                  params.set('tab', 'answer');
-                  params.set('vs', side);
-                  return (
-                    <li key={index}>
-                      <div className={styles.facetBody}>
-                        {part.subQuestion ? (
-                          <TextBlock text={part.subQuestion} dir="auto" code={false} />
-                        ) : null}
-                        <div className={styles.inline}>
-                          <StateTag
-                            tone={
-                              part.executed === true
-                                ? 'success'
-                                : part.executed === false
-                                  ? 'warning'
-                                  : 'neutral'
-                            }
-                          >
-                            {part.executed === true
-                              ? 'Executed'
-                              : part.executed === false
-                                ? 'Not executed'
-                                : 'Execution unknown'}
-                          </StateTag>
-                          <Text as="span">{part.rows ?? '—'} rows</Text>
-                        </div>
-                        {part.error ? (
-                          <InlineNotice tone="danger">
-                            <span dir="auto">{part.error}</span>
-                          </InlineNotice>
-                        ) : null}
-                        <Link
-                          to={{
-                            pathname: location.pathname,
-                            search: `?${params}`,
-                            hash: `#part-${index + 1}`,
-                          }}
-                        >
-                          Compare with the agent's SQL
-                        </Link>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ol>
+            {review.textEn || review.textAr ? (
+              <div className={styles.reviewReasoning}>
+                <Text as="h4" variant="base" weight={600}>
+                  Reasoning
+                </Text>
+                <Bilingual en={review.textEn || null} ar={review.textAr || null} />
+              </div>
             ) : null}
-            <Bilingual en={judge.sqlReasoningEn || null} ar={judge.sqlReasoningAr || null} />
           </>
         ) : null,
     };
     return { side, judge, facets };
   });
   const facets = [
-    ['scores', 'Scores'],
+    ['scores', null],
+    ['reasoning', 'Reasoning'],
+    ['deviations', 'Deviations'],
     ['checks', 'Checks'],
     ['against', 'Against the agent'],
     ['privacy', 'Privacy'],
     ['route', 'Route review'],
-    ['deviations', 'Deviations'],
-    ['reasoning', 'Reasoning'],
     ['review', 'Review of the other judge'],
-    ['sql', 'Own SQL'],
-  ].filter(([key]) => columns.some((column) => column.facets[key!]));
+  ] as const;
   return (
-    <>
-      <KeyValueGrid
-        columns={3}
-        dense
-        aria-label="Judge comparison"
-        items={[
-          { key: 'agreement', label: 'Judges agree', value: <Check value={agreement} /> },
-          ...(confidence !== null
-            ? [{ key: 'confidence', label: 'Diagnosis confidence', value: confidence, mono: true }]
-            : []),
-          ...(delta !== null ? [{ key: 'gap', label: 'SQL score gap', value: delta, mono: true }] : []),
-        ]}
-      />
+    <div className={styles.stack}>
+      <div className={styles.columns} ref={columnsRef}>
+        {columns.map(({ side, judge, facets: contents }) => (
+          <Card
+            key={side}
+            flush
+            className={styles.judge}
+            data-live-block={`judge-${side}`}
+            data-live-card={`judge-${side}`}
+            header={
+              <div className={styles.aligned} data-judge-facet="identity">
+                <TurnCardTitle
+                  as="h2"
+                  title={`Judge ${side.toUpperCase()}`}
+                  aside={
+                    judge?.model ? (
+                      <Tag kind="data" dir="auto">
+                        {judge.model}
+                      </Tag>
+                    ) : undefined
+                  }
+                />
+              </div>
+            }
+          >
+            {facets.map(([key, title]) =>
+              contents[key] ? (
+                <section key={key} className={styles.facet} data-judge-facet={key}>
+                  <div className={styles.facetInner}>
+                    {title ? (
+                      <Text as="h3" variant="base" weight={600}>
+                        {title}
+                        {key === 'deviations' ? ` · ${deviationEvidence(data.summary, side).length}` : ''}
+                      </Text>
+                    ) : null}
+                    <div className={styles.facetBody}>{contents[key]}</div>
+                  </div>
+                </section>
+              ) : null,
+            )}
+          </Card>
+        ))}
+      </div>
+      <EvidenceCard title="Judge comparison">
+        <KeyValueGrid
+          columns={3}
+          dense
+          aria-label="Judge comparison"
+          items={[
+            { key: 'agreement', label: 'Judges agree', value: <BooleanTag value={agreement} /> },
+            ...(confidence !== null
+              ? [
+                  {
+                    key: 'confidence',
+                    label: 'Diagnosis confidence',
+                    value: formatPercentValue(confidence, 1),
+                    mono: true,
+                  },
+                ]
+              : []),
+            ...(delta !== null ? [{ key: 'gap', label: 'SQL score gap', value: delta, mono: true }] : []),
+          ]}
+        />
+      </EvidenceCard>
       {facts.length ? (
         <EvidenceCard title="Facts given to both judges" block="judge-facts">
           <ul className={styles.facts}>
@@ -263,43 +291,6 @@ export function JudgesTab({
           </ul>
         </EvidenceCard>
       ) : null}
-      <div className={styles.columns}>
-        {columns.map(({ side, judge, facets: contents }) => (
-          <Card
-            key={side}
-            className={styles.judge}
-            style={{ '--judge-rows': facets.length + 1 } as CSSProperties}
-            data-live-block={`judge-${side}`}
-            data-live-card={`judge-${side}`}
-          >
-            <div className={styles.identity}>
-              <Text as="h2" variant="md" weight={600}>
-                Judge {side.toUpperCase()}
-              </Text>
-              {judge?.model ? (
-                <ModelTag name={judge.model} series={modelSeriesOf(modelIndex, judge.model, false)} />
-              ) : null}
-            </div>
-            {facets.map(([key, title]) => (
-              <section
-                key={key}
-                className={styles.facet}
-                data-judge-facet={key}
-                data-empty={!contents[key!] ? 'true' : undefined}
-              >
-                {contents[key!] ? (
-                  <>
-                    <Text as="h3" variant="md" weight={600}>
-                      {title}
-                    </Text>
-                    <div className={styles.facetBody}>{contents[key!]}</div>
-                  </>
-                ) : null}
-              </section>
-            ))}
-          </Card>
-        ))}
-      </div>
-    </>
+    </div>
   );
 }

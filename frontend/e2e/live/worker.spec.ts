@@ -31,7 +31,7 @@ test.beforeEach(async ({ request }) => {
   seed = await seedLive(request, uniqueSlug('live-worker'), { days: 1 });
 });
 
-test('waiting for the first version becomes Running v1 in the status strip and every settings section', async ({
+test('waiting for the first version becomes Running v1 with one settings status', async ({
   page,
   request,
 }) => {
@@ -44,7 +44,7 @@ test('waiting for the first version becomes Running v1 in the status strip and e
   const state = page.locator('[data-live-block="worker-status"]');
   await expect(state).toContainText('Waiting for settings version 1');
   const settings = page.locator('[data-live-block="worker-settings"]');
-  await expect(settings.getByText('Waiting for version 1', { exact: true })).toHaveCount(6);
+  await expect(settings.getByText('Waiting for version 1', { exact: true })).toHaveCount(1);
 
   const configured = await seedWorkerControl(request, seed.projectId, seed.apiKey, seed.sourceKey, seed);
   expect(configured.version).toBe(1);
@@ -55,13 +55,12 @@ test('waiting for the first version becomes Running v1 in the status strip and e
     applied_at: new Date().toISOString(),
   });
   await page.reload();
-  await expect(state).toContainText('Running v1');
-  await expect(state.locator('[data-shape="orbit"][data-tone="info"]')).toHaveText('Running v1');
-  for (const name of ['Evaluation', 'Models', 'Langfuse', 'Evaluator traces', 'Dataiku', 'Database']) {
-    await expect(
-      settings.getByRole('region', { name, exact: true }).locator('[data-tone="info"]'),
-    ).toHaveText('Running');
-  }
+  await expect(state.getByText('v1', { exact: true })).toBeVisible();
+  await expect(state.locator('[data-shape="orbit"][data-tone="info"]')).toHaveText('Running');
+  await expect(settings.getByText('The worker is running these settings (v1)', { exact: true })).toHaveCount(
+    1,
+  );
+  await expect(settings.locator('[data-kind="state"]')).toHaveCount(0);
   const response = await request.get(apiPath());
   expect(response.ok(), await response.text()).toBeTruthy();
   expect(await response.json()).toMatchObject({
@@ -86,7 +85,7 @@ test('a failed database verification shows the failed chip and worker error', as
   const database = page
     .locator('[data-live-block="worker-settings"]')
     .getByRole('region', { name: 'Database', exact: true });
-  await expect(database.locator('[data-shape="cross"][data-tone="danger"]')).toHaveText('Failed');
+  await expect(database.locator('[data-kind="state"][data-tone="danger"]')).toHaveText('Failed');
   await expect(database.getByText('could not translate host name', { exact: true })).toBeVisible();
 });
 
@@ -208,8 +207,13 @@ test('date range preview, run, progress and cancellation use the worker jobs API
     .locator('[data-live-block="worker-jobs"]')
     .getByRole('row')
     .filter({ has: page.getByText('Backfill', { exact: true }) });
-  await expect(row).toContainText('1/2');
-  await row.getByRole('button', { name: 'Cancel job', exact: true }).click();
+  await expect(row).toContainText('1 of 2');
+  await expect(row.locator('[data-col="progress"]')).toHaveText('1 of 2');
+  for (const cell of await row.locator('td').all()) {
+    await expect(cell).toHaveCSS('vertical-align', 'top');
+    expect(await cell.evaluate((node) => parseFloat(getComputedStyle(node).paddingTop))).toBeGreaterThan(0);
+  }
+  await row.getByRole('button', { name: 'Cancel', exact: true }).click();
   const cancel = page.getByRole('dialog', { name: 'Cancel job?' });
   const cancelled = page.waitForResponse(
     (response) =>
@@ -220,6 +224,41 @@ test('date range preview, run, progress and cancellation use the worker jobs API
   expect(response.ok(), await response.text()).toBeTruthy();
   expect(await response.json()).toMatchObject({ id: job.id, cancel_requested: true });
   await expect(row.getByRole('button', { name: 'Cancel requested', exact: true })).toBeDisabled();
+  const error = 'Dataiku did not answer for 10 minutes; the job stopped after 46 of 91 turns.';
+  await postJobProgress(request, seed.projectId, seed.apiKey, seed.sourceKey, job.id, {
+    status: 'cancelled',
+    progress: { evaluated: 46, found: 91 },
+    error,
+  });
+  await page.reload();
+  const jobs = page.getByRole('treegrid', { name: 'Worker jobs' });
+  await expect(row.locator('[data-col="status"]')).toHaveText('Cancelled');
+  await expect(row).not.toContainText(error);
+  const detail = row.locator('xpath=following-sibling::tr[1]');
+  await expect(detail).toHaveAttribute('data-detail-row', '');
+  await expect(detail.locator('td')).toHaveAttribute('colspan', '10');
+  await expect(jobs.locator('[data-detail-row]')).toHaveCount(1);
+  const message = detail.getByText(error, { exact: true });
+  await expect(message).toBeVisible();
+  await expect(message).toHaveAttribute('data-tone', 'danger');
+  await expect(message).toHaveCSS('overflow-wrap', 'anywhere');
+  await expect(message).toHaveCSS('white-space', 'normal');
+  const firstCell = (await row.getByText('Backfill', { exact: true }).boundingBox())!;
+  const messageBox = (await message.boundingBox())!;
+  expect(Math.abs(messageBox.x - firstCell.x)).toBeLessThanOrEqual(1);
+  expect(messageBox.width).toBeGreaterThan((await row.locator('[data-col="status"]').boundingBox())!.width);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const cards = page.getByRole('list', { name: 'Worker jobs' });
+  const jobCard = cards.locator(`[data-row-key="${job.id}"]`);
+  const cardError = jobCard.locator('xpath=following-sibling::li[1]').getByText(error, { exact: true });
+  await expect(cardError).toBeVisible();
+  await expect(jobCard).not.toContainText(error);
+  await expect(cards.getByRole('button', { name: /Expand row|Collapse row/ })).toHaveCount(0);
+  const cardLabelBox = (await jobCard.getByText('Backfill', { exact: true }).boundingBox())!;
+  const cardErrorBox = (await cardError.boundingBox())!;
+  expect(Math.abs(cardErrorBox.x - cardLabelBox.x)).toBeLessThanOrEqual(1);
+  expect(await cardError.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 });
 
 test('a 32-day range is refused before submitting either job kind', async ({ page, request }) => {
@@ -282,7 +321,7 @@ test('Problems groups repeated errors, copies a source report and links from the
   const problems = page.locator('[data-live-block="worker-problems"]');
   await expect(problems.locator('[data-worker-event]')).toHaveCount(2);
   const row = problems.locator('[data-worker-event]').filter({ hasText: langfuse.code });
-  await expect(row).toContainText('×3');
+  await expect(row).toContainText('3 times');
   await row.getByRole('button', { name: 'Copy report', exact: true }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(langfuse.code);
   expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(seed.sourceKey);
@@ -307,4 +346,47 @@ test('Problems groups repeated errors, copies a source report and links from the
       url.hash === '#problems',
   );
   await expect(problems).toBeInViewport();
+});
+
+test('Problems pages five rows and expands a long raw error within its column', async ({ page, request }) => {
+  await seedWorkerControl(request, seed.projectId, seed.apiKey, seed.sourceKey, seed);
+  const raw = 'warehouse-error-'.repeat(40);
+  await postWorkerEvents(
+    request,
+    seed.projectId,
+    seed.apiKey,
+    seed.sourceKey,
+    Array.from({ length: 7 }, (_, i) => ({
+      at: new Date().toISOString(),
+      level: 'error' as const,
+      component: 'dataiku',
+      code: `sql_error_${i}`,
+      message: `Query failed ${i}`,
+      details: { error: raw },
+    })),
+  );
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await gotoApp(page, workerPath());
+  const problems = page.locator('[data-live-block="worker-problems"]');
+  await expect(problems.locator('[data-worker-event]')).toHaveCount(5);
+  await expect(problems).toContainText('Showing 1 to 5 of 7 problems');
+  const row = problems.locator('[data-worker-event]').first();
+  const detail = row.getByText(`error: ${raw}`, { exact: true });
+  const cells = row.locator('td');
+  for (const cell of await cells.all()) {
+    await expect(cell).toHaveCSS('vertical-align', 'top');
+    expect(await cell.evaluate((node) => parseFloat(getComputedStyle(node).paddingTop))).toBeGreaterThan(0);
+  }
+  await expect(row.locator('td').last().getByRole('button', { name: 'Copy report' })).toBeVisible();
+  await expect(row.getByRole('button', { name: 'Show full error' })).toHaveCSS('padding', '0px');
+  await expect(detail).toHaveAttribute('data-collapsed', '');
+  expect(await detail.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await row.getByRole('button', { name: 'Show full error' }).click();
+  await expect(detail).not.toHaveAttribute('data-collapsed');
+  expect(await detail.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await row.getByRole('button', { name: 'Show less' }).click();
+  await problems.getByRole('button', { name: 'Next page' }).click();
+  await expect(problems.locator('[data-worker-event]')).toHaveCount(2);
+  await expect(problems).toContainText('Showing 6 to 7 of 7 problems');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
