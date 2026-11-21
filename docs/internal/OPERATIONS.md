@@ -508,8 +508,16 @@ call) between their database phases. Those take their database handle from
   (`db/session.py` `build_async_engine`; `asyncpg` for PostgreSQL, from the
   `[async]` extra the image installs) and the request loop never blocks on the
   database;
-- without one (`QYM_DB_ASYNC_DRIVER=off`, the package missing, or a test that
-  overrides `get_db`), the same `fn` runs on the request thread pool.
+- without one (`QYM_DB_ASYNC_DRIVER=off`, the driver or `greenlet` missing, or a
+  test that overrides `get_db`), the same `fn` runs on the request thread pool.
+
+SQLAlchemy's asyncio extension runs on `greenlet`, which SQLAlchemy 2.1 no longer
+installs by itself; the `[async]` extra includes `sqlalchemy[asyncio]` for it. An
+image built from the platform package without that extra (or with an older
+`[async]` that listed only the drivers) logs `async database engine not
+available: the greenlet package is missing` at the first async handler and runs
+those handlers on the thread pool; install `sqlalchemy[asyncio]` to get the
+async engine back.
 
 Either way the handler ends its transaction (`await db.rollback()`) before
 awaiting the remote call, so no connection sits idle in transaction for the

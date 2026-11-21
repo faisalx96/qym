@@ -62,10 +62,13 @@ def _settings(**values) -> PlatformSettings:
         ),
         (
             dict(),
-            lambda driver: driver == "psycopg",
+            lambda package: package in ("psycopg", "greenlet"),
             "postgresql+psycopg://qym:secret@db.example/qym?options=-csearch_path%3Dtenant",
         ),
         (dict(), lambda _: False, None),
+        # The driver alone is not enough: SQLAlchemy's asyncio extension runs on greenlet.
+        (dict(), lambda package: package != "greenlet", None),
+        (dict(db_async_driver="asyncpg"), lambda package: package != "greenlet", None),
         (dict(db_async_driver="off"), lambda _: True, None),
         (
             dict(db_async_driver="psycopg"),

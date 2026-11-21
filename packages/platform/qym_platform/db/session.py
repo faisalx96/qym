@@ -110,12 +110,23 @@ def async_database_url(
     names the driver, or ``auto`` takes the first installed one for the
     backend (``asyncpg`` then ``psycopg`` for PostgreSQL, ``aiosqlite`` for a
     SQLite file). An in-memory SQLite database is never shared: a second
-    engine would open a second, empty database.
+    engine would open a second, empty database. Without ``greenlet``, which
+    SQLAlchemy's asyncio extension runs on and SQLAlchemy 2.1 no longer
+    installs by itself (``sqlalchemy[asyncio]``, part of the platform's
+    ``[async]`` extra), there is no async engine either: the async handlers
+    then use the thread pool, and the warning says what to install.
     """
     settings = settings or PlatformSettings()
     if settings.database_async_url:
         return settings.database_async_url
     if settings.db_async_driver == "off":
+        return None
+    if not installed("greenlet"):
+        logger.warning(
+            "async database engine not available: the greenlet package is missing "
+            "(pip install 'sqlalchemy[asyncio]' or the platform's [async] extra); "
+            "async handlers use the thread pool"
+        )
         return None
     parsed = make_url(settings.database_url)
     backend = parsed.get_backend_name()
