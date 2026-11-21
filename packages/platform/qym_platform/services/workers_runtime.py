@@ -155,7 +155,7 @@ class WorkersRuntime:
     def __init__(self, settings: Any = None, *, service: str = "workers") -> None:
         from qym_platform.db.session import build_engine
         from qym_platform.db.session import engine as job_engine
-        from qym_platform.services.dashboard_summaries import DashboardSummaryWorker
+        from qym_platform.services.dashboard_summaries import DashboardSummaryWorker, worker_options
         from qym_platform.services.eval_dispatcher import EvalDispatcher
         from qym_platform.services.eval_remote_queue import RemoteQueueSnapshotter
         from qym_platform.services.job_executor import JobExecutor
@@ -180,8 +180,7 @@ class WorkersRuntime:
         sessions = sessionmaker(bind=self.engine, autoflush=False, autocommit=False)
         self.loops: Dict[str, Any] = {
             "dashboard_summary": DashboardSummaryWorker(
-                sessions,
-                live_refresh_interval=self.settings.dashboard_live_refresh_seconds,
+                sessions, **worker_options(self.settings)
             ),
             "maintenance": MaintenanceWorker(sessions, self.engine),
             "eval_dispatcher": EvalDispatcher(sessions),

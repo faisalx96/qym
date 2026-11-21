@@ -2863,6 +2863,26 @@ SHAPE_CHECK_WINDOW = 30 * 60
 SHAPE_CHECK_INTERVAL = 60 * 60
 
 
+# Seconds between two outbox retention passes (C074).
+EVENT_PRUNE_INTERVAL = 60.0
+
+
+def worker_options(settings) -> dict:
+    """``DashboardSummaryWorker`` keyword arguments from the platform settings.
+
+    One place for the app and the workers service, so both read the same
+    ``QYM_DASHBOARD_WORKER_*`` variables.
+    """
+    return dict(
+        interval=settings.dashboard_worker_interval_seconds,
+        max_partitions=settings.dashboard_worker_max_partitions,
+        max_events=settings.dashboard_worker_max_events,
+        backfill_chunk=settings.dashboard_worker_backfill_chunk,
+        live_refresh_interval=settings.dashboard_live_refresh_seconds,
+        event_prune_interval=settings.dashboard_event_prune_interval_seconds,
+    )
+
+
 class DashboardSummaryWorker:
     """A restart-safe polling worker with bounded transactions and owned sessions.
 
@@ -2881,8 +2901,6 @@ class DashboardSummaryWorker:
 
     # Live runs whose last rebuild time this process remembers.
     LIVE_REFRESH_MAX_RUNS = 1024
-    # Seconds between two outbox retention passes (C074).
-    EVENT_PRUNE_INTERVAL = 60.0
 
     def __init__(
         self,
@@ -2893,6 +2911,7 @@ class DashboardSummaryWorker:
         max_events=500,
         backfill_chunk=200,
         live_refresh_interval=2.0,
+        event_prune_interval=EVENT_PRUNE_INTERVAL,
     ):
         self.session_factory = session_factory
         self.interval = interval
@@ -2901,6 +2920,7 @@ class DashboardSummaryWorker:
         # Source rows locked per backfill transaction.
         self.backfill_chunk = max(1, min(backfill_chunk, max_events))
         self.live_refresh_interval = live_refresh_interval
+        self.event_prune_interval = float(event_prune_interval)
         # Rebuilds skipped because a row was busy (diagnostics; see _refresh_live_summaries).
         self.live_refresh_busy = 0
         # run_id -> [monotonic time of the last rebuild, rebuild pending]
@@ -3049,7 +3069,7 @@ class DashboardSummaryWorker:
             prune_dashboard_state(db, limit=self.max_events)
             now = time.monotonic()
             if now >= self._next_event_prune:
-                self._next_event_prune = now + self.EVENT_PRUNE_INTERVAL
+                self._next_event_prune = now + self.event_prune_interval
                 prune_dashboard_events(db, limit=self.max_events)
             db.commit()
         self._made_progress &= not failed

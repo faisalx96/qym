@@ -122,7 +122,7 @@ from qym_platform.db.models import (
     EvalJobStatus,
     Run,
 )
-from qym_platform.deps import get_db
+from qym_platform.deps import AsyncDb, get_async_db, get_db
 from qym_platform.llm_endpoint_security import LlmEndpointValidationError
 from qym_platform.permissions import is_project_manager, require_project_writer
 from qym_platform.services import eval_queue
@@ -419,41 +419,58 @@ async def cancel_orphan_remote_jobs(
     project_id: str,
     req: RemoteCancelRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db: AsyncDb = Depends(get_async_db),
     principal: Principal = Depends(require_ui_principal),
     client_factory: EvalClientFactory = Depends(get_eval_client_factory),
 ) -> Dict[str, Any]:
-    _require_project_manager(db, principal, project_id)
-    env = _get_environment(db, project_id, req.environment_id)
-    api_key = _stored_key(env, PlatformSettings())
+    settings = PlatformSettings()
+
+    def prepare(session: Session):
+        _require_project_manager(session, principal, project_id)
+        env = _get_environment(session, project_id, req.environment_id)
+        plan = eval_queue.plan_remote_orphan_cancels(session, env.id, req.remote_job_ids)
+        return env.id, env.base_url, _stored_key(env, settings), plan
+
+    env_id, base_url, api_key, plan = await db.run_sync(prepare)
+    # The service calls run with no transaction open.
+    await db.rollback()
     try:
-        client = client_factory(env.base_url, api_key)
+        client = client_factory(base_url, api_key)
     except LlmEndpointValidationError as exc:
         raise _remote_http_error(exc, api_key)
     finally:
         del api_key
     try:
-        outcomes, errors = await eval_queue.cancel_remote_orphans(
-            db, env, req.remote_job_ids, principal, client, reason=req.reason
+        outcomes, errors, attempted = await eval_queue.cancel_planned_orphans(
+            plan, client, principal.user.id
         )
     finally:
         await client.aclose()
-    db.commit()
+
+    def record(session: Session) -> bool:
+        env = _get_environment(session, project_id, env_id)
+        eval_queue.record_remote_orphan_cancels(
+            session, env, principal, plan, outcomes, attempted, reason=req.reason
+        )
+        session.commit()
+        return bool(env.is_active)
+
+    is_active = await db.run_sync(record)
     logger.info(
         "Orphan remote job cancel on environment %s: %s (%d error(s))",
-        env.id,
+        env_id,
         _counts(outcomes),
         len(errors or []),
     )
-    if env.is_active:
+    if is_active:
         background_tasks.add_task(
             refresh_snapshot_on_view,
-            _session_factory(db),
-            env.id,
+            sessionmaker(bind=db.sync_bind, autoflush=False),
+            env_id,
             client_factory=client_factory,
         )
     return {
-        "environment_id": env.id,
+        "environment_id": env_id,
         "outcomes": outcomes,
         "errors": errors,
         "counts": _counts(outcomes),
