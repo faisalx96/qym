@@ -340,7 +340,8 @@ function RuleEditor({ onOpenChange, factory, groups, existing, onSave }: RuleDia
   const [extraIds, setExtraIds] = useState<string[]>(
     (existing?.categories ?? []).map((c) => c.id).filter((id) => id !== existing?.category_id),
   );
-  const [bridgeIds, setBridgeIds] = useState<string[]>((existing?.bridge_to ?? []).map((c) => c.id));
+  const [bridgeGroups, setBridgeGroups] = useState<string[]>(existing?.bridge_to ?? []);
+  const [moreGroups, setMoreGroups] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const category = factory.categories.find((c) => c.id === categoryId) ?? null;
@@ -348,15 +349,26 @@ function RuleEditor({ onOpenChange, factory, groups, existing, onSave }: RuleDia
   const needsBody = Boolean(category?.json_schema);
   const primary = categoryId ? String(categoryId) : null;
   const others = factory.categories.filter((c) => c.id !== primary);
-  // A bridge may open one of its own categories (a "join orders" bridge filed in Joins opens Joins), so every
-  // category is a possible target: adding a category to the rule never takes a target away.
-  const chosenBridges = bridgeIds.filter((id) => factory.categories.some((c) => c.id === id));
+  // A bridge opens other groups of the grouping key: the known ones are chips (the key's values, the groups
+  // that have rules, the rule's own targets); more can be typed. The rule's own group is never a target.
+  const ownGroup = group.trim();
+  const keyValues = factory.metadata_keys.find((k) => k.key === factory.group_metadata_key)?.values ?? [];
+  const knownGroups = Array.from(new Set([...keyValues, ...groups, ...bridgeGroups])).filter(
+    (g) => g && g !== ownGroup,
+  );
+  const typedGroups = moreGroups
+    .split(',')
+    .map((g) => g.trim())
+    .filter((g) => g && g !== ownGroup);
+  const chosenGroups = Array.from(
+    new Set([...bridgeGroups.filter((g) => knownGroups.includes(g)), ...typedGroups]),
+  );
   const blocker = !categoryId
     ? 'Choose a category'
     : !title.trim()
       ? 'Give the rule a title'
-      : kind === 'bridge' && !chosenBridges.length
-        ? 'Choose a category the bridge opens'
+      : kind === 'bridge' && !chosenGroups.length
+        ? 'Name a group the bridge opens'
         : parsed.error
           ? 'Fix the body first'
           : needsBody && !parsed.value
@@ -373,7 +385,7 @@ function RuleEditor({ onOpenChange, factory, groups, existing, onSave }: RuleDia
         category_id: String(categoryId),
         category_ids: extraIds.filter((id) => id !== String(categoryId)),
         kind,
-        bridge_to_category_ids: kind === 'bridge' ? chosenBridges : [],
+        bridge_to_groups: kind === 'bridge' ? chosenGroups : [],
         group_value: group.trim(),
         title: title.trim(),
         description: description.trim(),
@@ -456,7 +468,7 @@ function RuleEditor({ onOpenChange, factory, groups, existing, onSave }: RuleDia
           onChange={setKind}
           options={[
             { value: 'rule', label: 'Rule', title: 'Constrains the answer of an item' },
-            { value: 'bridge', label: 'Bridge', title: 'Extends an item into other categories' },
+            { value: 'bridge', label: 'Bridge', title: 'Extends an item into other groups' },
           ]}
           data-testid="rule-kind"
         />
@@ -465,16 +477,28 @@ function RuleEditor({ onOpenChange, factory, groups, existing, onSave }: RuleDia
             <Text as="span" variant="sm" tone="muted" id="rule-bridge-targets">
               Bridges into
             </Text>
-            <ToggleChips
-              aria-labelledby="rule-bridge-targets"
-              options={factory.categories.map((c) => ({ value: c.id, label: c.name }))}
-              value={chosenBridges}
-              onChange={setBridgeIds}
-              size="sm"
+            {knownGroups.length ? (
+              <ToggleChips
+                aria-labelledby="rule-bridge-targets"
+                options={knownGroups.map((g) => ({ value: g, label: g }))}
+                value={bridgeGroups.filter((g) => knownGroups.includes(g))}
+                onChange={setBridgeGroups}
+                size="sm"
+              />
+            ) : null}
+            <TextField
+              label="Other groups"
+              value={moreGroups}
+              onChange={setMoreGroups}
+              placeholder="orders, customers"
+              help="Comma-separated values of the grouping key that are not listed."
+              width="100%"
+              data-testid="rule-bridge-more"
             />
             <Text as="p" variant="sm" tone="muted" className={styles.help}>
-              In generation, an item that carries this rule can take rules of these categories next: a join in
-              a query, a second product in a conversation. A bridge may open one of its own categories.
+              {factory.group_metadata_key
+                ? `In generation, an item that carries this rule is extended into these groups of ${factory.group_metadata_key} (a join to another table, a second product in a conversation) and can take their rules next.`
+                : 'Set a grouping key in Settings first: a bridge extends an item into other groups of that key.'}
             </Text>
           </div>
         ) : null}

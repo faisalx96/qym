@@ -14,7 +14,7 @@ run routes. Jobs are queued here and run by the factory worker
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -97,7 +97,8 @@ class RuleWrite(BaseModel):
     category_id: str = Field(..., min_length=1, max_length=36)
     category_ids: List[str] = Field(default_factory=list, max_length=50)
     kind: Literal["rule", "bridge"] = "rule"
-    bridge_to_category_ids: List[str] = Field(default_factory=list, max_length=50)
+    # The groups (values of the grouping key) a bridge opens.
+    bridge_to_groups: List[str] = Field(default_factory=list, max_length=50)
     group_value: str = Field(default="", max_length=500)
     title: str = Field(..., min_length=1, max_length=300)
     description: str = Field(default="", max_length=20_000)
@@ -108,7 +109,7 @@ class RulePatch(BaseModel):
     category_id: Optional[str] = Field(default=None, min_length=1, max_length=36)
     category_ids: Optional[List[str]] = Field(default=None, max_length=50)
     kind: Optional[Literal["rule", "bridge"]] = None
-    bridge_to_category_ids: Optional[List[str]] = Field(default=None, max_length=50)
+    bridge_to_groups: Optional[List[str]] = Field(default=None, max_length=50)
     group_value: Optional[str] = Field(default=None, max_length=500)
     title: Optional[str] = Field(default=None, min_length=1, max_length=300)
     description: Optional[str] = Field(default=None, max_length=20_000)
@@ -332,7 +333,6 @@ def _rule_payload(
     categories: Dict[str, FactoryRuleCategory],
     users: Dict[str, User],
     extra: Optional[Dict[str, List[str]]] = None,
-    bridges: Optional[Dict[str, List[str]]] = None,
 ) -> Dict[str, Any]:
     category = categories.get(rule.category_id)
     category_ids = [rule.category_id] + [
@@ -348,18 +348,7 @@ def _rule_payload(
             ref for ref in (_category_ref(c, categories) for c in category_ids) if ref
         ],
         "kind": rule.kind or "rule",
-        "bridge_to": (
-            [
-                ref
-                for ref in (
-                    _category_ref(c, categories)
-                    for c in (bridges or {}).get(rule.id, [])
-                )
-                if ref
-            ]
-            if rule.kind == "bridge"
-            else []
-        ),
+        "bridge_to": svc.bridge_groups_of(rule),
         "group_value": rule.group_value or "",
         "title": rule.title,
         "description": rule.description or "",
@@ -459,14 +448,10 @@ def _factory_categories(db: Session, factory_id: str) -> Dict[str, FactoryRuleCa
 
 
 def _one_rule_payload(db: Session, rule: FactoryRule) -> Dict[str, Any]:
-    extra, bridges = svc.rule_category_map(db, [rule.id])
+    extra = svc.rule_category_map(db, [rule.id])
     users = _users_by_id(db, {rule.created_by_user_id, rule.approved_by_user_id})
     return _rule_payload(
-        rule,
-        categories=_factory_categories(db, rule.factory_id),
-        users=users,
-        extra=extra,
-        bridges=bridges,
+        rule, categories=_factory_categories(db, rule.factory_id), users=users, extra=extra
     )
 
 
@@ -494,12 +479,8 @@ def _links_or_422(
     *,
     primary: FactoryRuleCategory,
     category_ids: List[str],
-    kind: str,
-    bridge_ids: List[str],
-) -> Tuple[List[str], List[str]]:
-    """The further category ids and the bridge target ids of a rule, checked against the factory.
-
-    ``category_ids`` may repeat the primary; a bridge's targets may overlap its categories."""
+) -> List[str]:
+    """The further category ids of a rule, checked against the factory (the primary may repeat)."""
     known = _factory_categories(db, factory.id)
     extra: List[str] = []
     for cid in category_ids:
@@ -507,27 +488,27 @@ def _links_or_422(
             raise HTTPException(status_code=422, detail="Unknown rule category")
         if cid != primary.id and cid not in extra:
             extra.append(cid)
+    return extra
+
+
+def _bridge_groups_or_422(kind: str, groups: List[str], own_group: str) -> List[str]:
+    """The groups a bridge opens: trimmed, distinct, its own group left out; a bridge names at least one."""
     if kind != "bridge":
-        return extra, []
-    # A target may be one of the rule's own categories: a "join orders" bridge filed in
-    # Joins opens Joins for the item. Only the targets outside its categories widen the
-    # generation pool; the rest keep the rule readable as a bridge.
-    bridges: List[str] = []
-    for cid in bridge_ids:
-        if cid not in known:
-            raise HTTPException(status_code=422, detail="Unknown rule category")
-        if cid not in bridges:
-            bridges.append(cid)
-    if not bridges:
+        return []
+    out: List[str] = []
+    for raw in groups:
+        value = str(raw).strip()[:500]
+        if value and value != own_group and value not in out:
+            out.append(value)
+    if not out:
         raise HTTPException(
-            status_code=422, detail="A bridge rule names at least one category it opens"
+            status_code=422,
+            detail="A bridge rule names at least one group it opens, other than its own",
         )
-    return extra, bridges
+    return out
 
 
-def _set_links(
-    db: Session, rule: FactoryRule, extra: List[str], bridges: List[str]
-) -> None:
+def _set_links(db: Session, rule: FactoryRule, extra: List[str]) -> None:
     db.query(FactoryRuleLink).filter(FactoryRuleLink.rule_id == rule.id).delete(
         synchronize_session=False
     )
@@ -535,12 +516,6 @@ def _set_links(
         db.add(
             FactoryRuleLink(
                 id=str(uuid4()), rule_id=rule.id, category_id=cid, role="category"
-            )
-        )
-    for cid in bridges:
-        db.add(
-            FactoryRuleLink(
-                id=str(uuid4()), rule_id=rule.id, category_id=cid, role="bridge"
             )
         )
 
@@ -1144,8 +1119,7 @@ def delete_category(
         db.query(FactoryRuleLink).filter(FactoryRuleLink.rule_id.in_(gone)).delete(
             synchronize_session=False
         )
-    # Rules linked to it as a further category or a bridge target lose that link; a bridge
-    # left without a target becomes a plain rule.
+    # Rules linked to it as a further category lose that link.
     db.query(FactoryRuleLink).filter(FactoryRuleLink.category_id == category.id).delete(
         synchronize_session=False
     )
@@ -1154,17 +1128,6 @@ def delete_category(
         .filter(FactoryRule.category_id == category.id)
         .delete(synchronize_session=False)
     )
-    still_bridged = {
-        rid
-        for (rid,) in db.query(FactoryRuleLink.rule_id).filter(
-            FactoryRuleLink.role == "bridge"
-        )
-    }
-    for rule in db.query(FactoryRule).filter(
-        FactoryRule.factory_id == factory.id, FactoryRule.kind == "bridge"
-    ):
-        if rule.id not in still_bridged:
-            rule.kind = "rule"
     db.delete(category)
     factory.updated_at = utc_now_naive()
     db.commit()
@@ -1260,7 +1223,7 @@ def list_rules(
         db,
         {r.created_by_user_id for r in rules} | {r.approved_by_user_id for r in rules},
     )
-    extra, bridges = svc.rule_category_map(db, [r.id for r in rules])
+    extra = svc.rule_category_map(db, [r.id for r in rules])
     groups: Dict[str, Dict[str, int]] = {}
     for value, official, n in (
         db.query(
@@ -1277,9 +1240,7 @@ def list_rules(
         "factory_id": factory.id,
         "total": total,
         "rules": [
-            _rule_payload(
-                r, categories=categories, users=users, extra=extra, bridges=bridges
-            )
+            _rule_payload(r, categories=categories, users=users, extra=extra)
             for r in rules
         ],
         "groups": [
@@ -1312,25 +1273,23 @@ def create_rule(
         db, principal, factory_id, need="modify", write=True
     )
     category = _category_or_404(db, factory, req.category_id)
-    extra, bridges = _links_or_422(
-        db,
-        factory,
-        primary=category,
-        category_ids=req.category_ids,
-        kind=req.kind,
-        bridge_ids=req.bridge_to_category_ids,
+    extra = _links_or_422(
+        db, factory, primary=category, category_ids=req.category_ids
     )
+    group_value = req.group_value.strip()[:500]
+    bridges = _bridge_groups_or_422(req.kind, req.bridge_to_groups, group_value)
     now = utc_now_naive()
     rule = FactoryRule(
         id=str(uuid4()),
         factory_id=factory.id,
         category_id=category.id,
-        group_value=req.group_value.strip()[:500],
+        group_value=group_value,
         title=req.title.strip(),
         description=req.description.strip(),
         body=_rule_body_or_422(req.body, category),
         official=False,
         kind=req.kind,
+        bridge_to_groups=bridges,
         source="manual",
         evidence=[],
         created_by_user_id=principal.user.id,
@@ -1338,7 +1297,7 @@ def create_rule(
         updated_at=now,
     )
     db.add(rule)
-    _set_links(db, rule, extra, bridges)
+    _set_links(db, rule, extra)
     factory.updated_at = now
     db.commit()
     return _one_rule_payload(db, rule)
@@ -1358,9 +1317,9 @@ def update_rule(
     )
     rule = _rule_or_404(db, factory, rule_id)
     category = _category_or_404(db, factory, req.category_id or rule.category_id)
-    current_extra, current_bridges = svc.rule_category_map(db, [rule.id])
+    current_extra = svc.rule_category_map(db, [rule.id])
     kind = req.kind or rule.kind or "rule"
-    extra, bridges = _links_or_422(
+    extra = _links_or_422(
         db,
         factory,
         primary=category,
@@ -1369,19 +1328,27 @@ def update_rule(
             if req.category_ids is not None
             else current_extra.get(rule.id, [])
         ),
-        kind=kind,
-        bridge_ids=(
-            req.bridge_to_category_ids
-            if req.bridge_to_category_ids is not None
-            else current_bridges.get(rule.id, [])
+    )
+    group_value = (
+        req.group_value.strip()[:500]
+        if req.group_value is not None
+        else rule.group_value or ""
+    )
+    bridges = _bridge_groups_or_422(
+        kind,
+        (
+            req.bridge_to_groups
+            if req.bridge_to_groups is not None
+            else list(rule.bridge_to_groups or [])
         ),
+        group_value,
     )
     rule.kind = kind
-    _set_links(db, rule, extra, bridges)
+    rule.bridge_to_groups = bridges
+    _set_links(db, rule, extra)
     if req.category_id is not None:
         rule.category_id = category.id
-    if req.group_value is not None:
-        rule.group_value = req.group_value.strip()[:500]
+    rule.group_value = group_value
     if req.title is not None:
         rule.title = req.title.strip()
     if req.description is not None:

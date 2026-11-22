@@ -429,15 +429,16 @@ not generic advice.
 For each rule choose the categories it belongs to: only those whose description fits the rule, usually one, never
 every category by default. The first category is the primary one; when it has a JSON schema, "body" follows that
 schema, else "body" is null.
-A rule is a "bridge" when it extends an item into other categories rather than constraining its answer: joining
-another table in a query, bringing a second product into a conversation, handing over to another process. A bridge
-lists in "bridge_to" the categories it opens.
+A rule is a "bridge" when it extends an item into other groups of the dataset rather than constraining its answer:
+joining another table in a query, bringing a second product into a conversation, handing over to another process. A
+bridge lists in "bridge_to" the groups it opens, chosen from the dataset's groups given below; without a grouping key
+there are no bridges.
 Existing rules are listed with their ids. Never propose a rule that says what an existing one says, even in other
 words or with other examples: put the existing rule's id in "same_as" instead, or leave the rule out.
 Answer with JSON only, in this shape:
 {"rules": [{"title": "<short rule name>", "description": "<the rule, in one to three sentences, as a statement the
-answer must satisfy>", "categories": ["<category key>", ...], "kind": "rule" or "bridge", "bridge_to": ["<category
-key>", ...], "body": <object or null>, "evidence": ["<item_id>", ...], "same_as": "<existing rule id>" or null}]}
+answer must satisfy>", "categories": ["<category key>", ...], "kind": "rule" or "bridge", "bridge_to": ["<group>",
+...], "body": <object or null>, "evidence": ["<item_id>", ...], "same_as": "<existing rule id>" or null}]}
 Return {"rules": []} when the items show no new rule."""
 
 CONSOLIDATE_SYSTEM = """You deduplicate business rules. You are given the rules a factory already has (with their ids)
@@ -450,7 +451,7 @@ GENERATION_SYSTEM = """You create a new evaluation dataset item from an existing
 You are given the base item (its input and expected output), the rules already applied to it, and one new rule.
 Write a new input that is a natural variation of the base input in which the new rule matters, and the expected
 output that is correct for the new input under all the applied rules. When the new rule is a bridge, the new input
-extends the base item into the categories the bridge opens (it joins the other table, brings in the other product,
+extends the base item into the groups the bridge opens (it joins the other table, brings in the other product,
 reaches the other process) and the expected output covers that extension. When items that already follow the new
 rule are given, apply the rule the way they do, in the same form and to the same degree; the new item still derives
 from the base item, never from those examples. Keep the language, the domain, the tone and the exact data shape of
@@ -499,12 +500,21 @@ def analysis_prompt(
     items: List[DatasetItem],
     existing: List[Dict[str, Any]],
     instructions: str,
+    bridge_targets: Optional[List[str]] = None,
 ) -> str:
+    """The user message of one analysis call; ``bridge_targets`` are the other groups a bridge may open."""
     lines = [
         "Rule categories (choose only the ones that fit each rule):",
         json.dumps([_category_brief(c) for c in categories], ensure_ascii=False),
         f"Group: {_group_label(group_key, group_value)}",
     ]
+    if group_key and bridge_targets:
+        lines.append(
+            f"Other groups of the dataset (values of metadata key '{group_key}'; the groups a bridge may open): "
+            + json.dumps(bridge_targets, ensure_ascii=False)
+        )
+    else:
+        lines.append("No other group: propose no bridge.")
     if instructions.strip():
         lines.append(f"Extra instructions: {instructions.strip()}")
     lines.append(
@@ -558,18 +568,20 @@ def generation_prompt(
     applied: List[FactoryRule],
     rule: FactoryRule,
     category_names: List[str],
-    bridge_names: List[str],
+    bridge_groups: List[str],
+    group_key: Optional[str],
     instructions: str,
     examples: Optional[List[DatasetItem]] = None,
 ) -> str:
-    """The user message of one generation call; ``examples`` are source items that follow ``rule``."""
+    """The user message of one generation call; ``examples`` are source items that follow ``rule``,
+    ``bridge_groups`` the groups (values of ``group_key``) a bridge opens."""
 
     def rule_json(r: FactoryRule) -> Dict[str, Any]:
         return {"title": r.title, "description": r.description, "body": r.body}
 
     heading = f"New rule to apply (categories: {', '.join(category_names) or 'none'}"
     if rule.kind == "bridge":
-        heading += f"; a bridge into: {', '.join(bridge_names) or 'none'}"
+        heading += f"; a bridge into {group_key or 'groups'}: {', '.join(bridge_groups) or 'none'}"
     heading += "):"
     lines = [
         "Base item input:",
@@ -997,22 +1009,27 @@ def _group_items(
     )
 
 
-def rule_category_map(
-    db: Session, rule_ids: List[str]
-) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
-    """The further category ids and the bridge target ids of each rule, by rule id."""
+def rule_category_map(db: Session, rule_ids: List[str]) -> Dict[str, List[str]]:
+    """The further category ids of each rule, by rule id."""
     extra: Dict[str, List[str]] = {}
-    bridges: Dict[str, List[str]] = {}
     if not rule_ids:
-        return extra, bridges
+        return extra
     for link in (
         db.query(FactoryRuleLink)
-        .filter(FactoryRuleLink.rule_id.in_(rule_ids))
+        .filter(
+            FactoryRuleLink.rule_id.in_(rule_ids), FactoryRuleLink.role == "category"
+        )
         .order_by(FactoryRuleLink.id)
     ):
-        target = bridges if link.role == "bridge" else extra
-        target.setdefault(link.rule_id, []).append(link.category_id)
-    return extra, bridges
+        extra.setdefault(link.rule_id, []).append(link.category_id)
+    return extra
+
+
+def bridge_groups_of(rule: FactoryRule) -> List[str]:
+    """The groups a bridge rule opens (none on a plain rule)."""
+    if rule.kind != "bridge":
+        return []
+    return [str(g) for g in (rule.bridge_to_groups or []) if str(g).strip()]
 
 
 def _existing_briefs(
@@ -1026,7 +1043,7 @@ def _existing_briefs(
         .order_by(FactoryRule.created_at, FactoryRule.id)
         .all()
     )
-    extra, bridges = rule_category_map(db, [r.id for r in rules])
+    extra = rule_category_map(db, [r.id for r in rules])
     out = []
     for r in rules:
         keys = [categories_by_id.get(r.category_id, "")] + [
@@ -1040,9 +1057,7 @@ def _existing_briefs(
             "kind": r.kind or "rule",
         }
         if r.kind == "bridge":
-            brief["bridge_to"] = [
-                categories_by_id.get(c, "") for c in bridges.get(r.id, [])
-            ]
+            brief["bridge_to"] = bridge_groups_of(r)
         out.append(brief)
     return out
 
@@ -1053,8 +1068,12 @@ def _rules_from_answer(
     categories: List[FactoryRuleCategory],
     item_ids: set[str],
     existing_ids: set[str],
+    bridge_targets: Optional[List[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], int]:
-    """The usable candidate rules of an analysis answer, and how many it marked as existing."""
+    """The usable candidate rules of an analysis answer, and how many it marked as existing.
+
+    ``bridge_targets`` are the groups a bridge may open; a bridge naming none of them is a plain rule."""
+    targets = set(bridge_targets or [])
     rules = answer.get("rules")
     if not isinstance(rules, list):
         return [], 0
@@ -1087,13 +1106,13 @@ def _rules_from_answer(
                 continue
             body = None
         kind = "bridge" if raw.get("kind") == "bridge" else "rule"
-        bridge_keys: List[str] = []
+        bridge_groups: List[str] = []
         raw_bridge = raw.get("bridge_to")
-        for k in raw_bridge if isinstance(raw_bridge, list) else []:
-            k = str(k)
-            if k in by_key and k not in bridge_keys:
-                bridge_keys.append(k)
-        if kind == "bridge" and not bridge_keys:
+        for g in raw_bridge if isinstance(raw_bridge, list) else []:
+            g = str(g).strip()
+            if g in targets and g not in bridge_groups:
+                bridge_groups.append(g)
+        if kind == "bridge" and not bridge_groups:
             kind = "rule"
         evidence_raw = raw.get("evidence")
         evidence = (
@@ -1109,7 +1128,7 @@ def _rules_from_answer(
                 "evidence": evidence,
                 "category_keys": keys,
                 "kind": kind,
-                "bridge_keys": bridge_keys if kind == "bridge" else [],
+                "bridge_groups": bridge_groups if kind == "bridge" else [],
             }
         )
     return out, same
@@ -1197,6 +1216,12 @@ async def _run_analysis(ctx: JobContext) -> None:
 
     answered = 0
 
+    # The groups a bridge of one group may open: every other real group of the dataset.
+    all_groups = [g for g in _group_items(items, key) if g != UNGROUPED]
+
+    def targets_of(group: str) -> List[str]:
+        return [g for g in all_groups if g != group] if key else []
+
     async def extract(
         group: str, rows: List[DatasetItem], existing: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
@@ -1208,6 +1233,7 @@ async def _run_analysis(ctx: JobContext) -> None:
             items=rows,
             existing=existing,
             instructions=instructions,
+            bridge_targets=targets_of(group),
         )
         async with semaphore:
             answer = await complete_json(client, model, ANALYSIS_SYSTEM, prompt)
@@ -1266,6 +1292,7 @@ async def _run_analysis(ctx: JobContext) -> None:
                         categories=categories,
                         item_ids=item_ids,
                         existing_ids=existing_ids,
+                        bridge_targets=targets_of(group),
                     )
                     same += marked
                     fresh = 0
@@ -1313,6 +1340,7 @@ async def _run_analysis(ctx: JobContext) -> None:
                             body=rule["body"],
                             official=False,
                             kind=rule["kind"],
+                            bridge_to_groups=rule["bridge_groups"],
                             source="agent",
                             evidence=rule["evidence"],
                             job_id=ctx.job_id,
@@ -1327,15 +1355,6 @@ async def _run_analysis(ctx: JobContext) -> None:
                                 rule_id=rule_id,
                                 category_id=by_key[k].id,
                                 role="category",
-                            )
-                        )
-                    for k in rule["bridge_keys"]:
-                        db.add(
-                            FactoryRuleLink(
-                                id=str(uuid4()),
-                                rule_id=rule_id,
-                                category_id=by_key[k].id,
-                                role="bridge",
                             )
                         )
                     added += 1
@@ -1467,10 +1486,9 @@ class _Node:
     """One item of the generation tree: a base item or a generated one.
 
     ``groups`` are the item's groups (one, or every value of a list-valued key;
-    ``UNGROUPED`` alone when it has none), inherited by its children. ``open`` is
-    the set of category ids the next rule may come from: empty on a base item
-    (any rule), then the categories of the applied rules plus the targets of the
-    applied bridges.
+    ``UNGROUPED`` alone when it has none) plus the groups the applied bridges
+    opened, inherited by its children: the next rule comes from them (and the
+    global rules).
     """
 
     __slots__ = (
@@ -1481,7 +1499,6 @@ class _Node:
         "metadata",
         "groups",
         "applied",
-        "open",
     )
 
     def __init__(
@@ -1493,7 +1510,6 @@ class _Node:
         metadata: Dict[str, Any],
         groups: Tuple[str, ...],
         applied: List[FactoryRule],
-        open_categories: Optional[set[str]] = None,
     ):
         self.item_id = item_id
         self.base_item_id = base_item_id
@@ -1502,7 +1518,28 @@ class _Node:
         self.metadata = metadata
         self.groups = groups
         self.applied = applied
-        self.open = set(open_categories or ())
+
+
+def _with_groups(metadata: Dict[str, Any], key: Optional[str], groups: Tuple[str, ...]) -> Dict[str, Any]:
+    """A copy of ``metadata`` whose list at ``key`` names every group of ``groups`` (a bridge
+    opened new ones): a generated item reads as a member of the groups it was extended into.
+    A scalar or missing value is left as it is."""
+    out = dict(metadata)
+    if not key:
+        return out
+    node: Any = out
+    parts = key.split(".")
+    for part in parts[:-1]:
+        if not isinstance(node, dict) or not isinstance(node.get(part), dict):
+            return out
+        node[part] = dict(node[part])
+        node = node[part]
+    if not isinstance(node, dict) or not isinstance(node.get(parts[-1]), list):
+        return out
+    current = list(node[parts[-1]])
+    texts = {_scalar_group_text(v) for v in current}
+    node[parts[-1]] = current + [g for g in groups if g != UNGROUPED and g not in texts]
+    return out
 
 
 def _insert_generated(
@@ -1566,20 +1603,14 @@ async def _run_generation(ctx: JobContext) -> None:
                 FactoryRuleCategory.factory_id == factory.id
             )
         }
-        extra_links, bridge_links = rule_category_map(db, [r.id for r in rules])
+        extra_links = rule_category_map(db, [r.id for r in rules])
         items = source_items(db, version.id)
         db.expunge_all()
     rule_categories = {r.id: {r.category_id, *extra_links.get(r.id, [])} for r in rules}
-    rule_bridges = {
-        r.id: set(bridge_links.get(r.id, [])) if r.kind == "bridge" else set()
-        for r in rules
-    }
+    rule_bridges = {r.id: bridge_groups_of(r) for r in rules}
 
     def category_names(ids: set[str]) -> List[str]:
         return sorted(categories[c].name for c in ids if c in categories)
-
-    def category_keys(ids: set[str]) -> List[str]:
-        return sorted(categories[c].key for c in ids if c in categories)
 
     if not rules:
         raise FactoryConfigError(
@@ -1603,15 +1634,11 @@ async def _run_generation(ctx: JobContext) -> None:
     }
 
     def applicable(node: _Node) -> List[FactoryRule]:
-        """The rules of the item's groups (and the global ones) not yet applied, within its open categories."""
+        """The rules of the item's groups, the ones its bridges opened included, and the global ones, not yet applied."""
         done_ids = {r.id for r in node.applied}
         wanted = {*node.groups, UNGROUPED} if key else {UNGROUPED}
         return [
-            r
-            for r in rules
-            if r.group_value in wanted
-            and r.id not in done_ids
-            and (not node.open or rule_categories[r.id] & node.open)
+            r for r in rules if r.group_value in wanted and r.id not in done_ids
         ]
 
     def examples_for(node: _Node, rule: FactoryRule) -> List[DatasetItem]:
@@ -1717,7 +1744,8 @@ async def _run_generation(ctx: JobContext) -> None:
                 applied=parent.applied,
                 rule=rule,
                 category_names=category_names(rule_categories[rule.id]),
-                bridge_names=category_names(rule_bridges[rule.id]),
+                bridge_groups=rule_bridges[rule.id],
+                group_key=key,
                 instructions=instructions,
                 examples=examples_for(parent, rule),
             )
@@ -1740,10 +1768,11 @@ async def _run_generation(ctx: JobContext) -> None:
                 return None
             layer = len(parent.applied) + 1
             applied = parent.applied + [rule]
-            open_categories = (
-                parent.open | rule_categories[rule.id] | rule_bridges[rule.id]
+            # A bridge extends the item into its groups: the next layer may take their rules.
+            groups = parent.groups + tuple(
+                g for g in rule_bridges[rule.id] if g not in parent.groups
             )
-            metadata = dict(parent.metadata)
+            metadata = _with_groups(parent.metadata, key, groups)
             metadata["factory"] = {
                 "job_id": ctx.job_id,
                 "layer": layer,
@@ -1752,7 +1781,7 @@ async def _run_generation(ctx: JobContext) -> None:
                 "rule_ids": [r.id for r in applied],
                 "rule_titles": [r.title for r in applied],
                 "bridges": [r.title for r in applied if r.kind == "bridge"],
-                "categories": category_keys(open_categories),
+                "groups": [g for g in groups if g != UNGROUPED],
                 "note": str(answer.get("note") or "")[:500],
             }
             return {
@@ -1766,9 +1795,8 @@ async def _run_generation(ctx: JobContext) -> None:
                     answer.get("input"),
                     answer.get("expected_output"),
                     metadata,
-                    parent.groups,
+                    groups,
                     applied,
-                    open_categories,
                 ),
             }
 
@@ -1863,6 +1891,7 @@ __all__ = [
     "UNGROUPED",
     "active_job",
     "body_problem",
+    "bridge_groups_of",
     "check_json_schema",
     "claim_job",
     "complete_json",

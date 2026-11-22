@@ -1,7 +1,6 @@
 /**
- * The rule editor's bridge controls. Regression: a bridge's targets were the categories the rule was not in, so
- * in a two-category factory a bridge could take no further category and moving its primary category into its
- * target dropped the bridge and blocked Save. Every category is a possible target now.
+ * The rule editor's bridge controls: a bridge extends an item into other groups of the grouping key, so its targets
+ * are groups (the known ones as chips, more by name), never its own group, and never a category.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
@@ -31,7 +30,10 @@ function category(id: string, name: string) {
 const factory = {
   id: 'f1',
   categories: [category('c1', 'General'), category('c2', 'Joins')],
-  group_metadata_key: null,
+  group_metadata_key: 'tables',
+  metadata_keys: [
+    { key: 'tables', kind: 'list', values: ['customers', 'orders'], value_count: 2, truncated: false },
+  ],
 } as unknown as FactoryDetail;
 
 const bridge = {
@@ -42,8 +44,8 @@ const bridge = {
   category_name: 'General',
   categories: [{ id: 'c1', key: 'general', name: 'General' }],
   kind: 'bridge',
-  bridge_to: [{ id: 'c2', key: 'joins', name: 'Joins' }],
-  group_value: '',
+  bridge_to: ['orders'],
+  group_value: 'customers',
   title: 'Join orders',
   description: 'Joins the orders table.',
   body: null,
@@ -70,7 +72,7 @@ function mount(existing: FactoryRule | null) {
               open
               onOpenChange={() => undefined}
               factory={factory}
-              groups={[]}
+              groups={['customers', 'shipments']}
               existing={existing}
               onSave={onSave}
             />
@@ -90,45 +92,36 @@ function chips(dialog: HTMLElement, name: string) {
 }
 
 describe('RuleDialog bridges', () => {
-  it('files a bridge in the category it opens and keeps the target', async () => {
+  it('offers the other groups as targets, with the stored ones on, and takes more by name', async () => {
     const onSave = mount(bridge);
     const dialog = await screen.findByTestId('rule-dialog');
+    // The key's values and the groups with rules, the rule's own group (customers) left out.
+    expect(chips(dialog, 'Bridges into')).toEqual(['orders:true', 'shipments:false']);
     expect(chips(dialog, 'Also in')).toEqual(['Joins:false']);
-    expect(chips(dialog, 'Bridges into')).toEqual(['General:false', 'Joins:true']);
     await userEvent.click(
-      within(within(dialog).getByRole('group', { name: 'Also in' })).getByRole('button', { name: 'Joins' }),
+      within(within(dialog).getByRole('group', { name: 'Bridges into' })).getByRole('button', {
+        name: 'shipments',
+      }),
     );
-    expect(chips(dialog, 'Bridges into')).toEqual(['General:false', 'Joins:true']);
+    await userEvent.type(
+      within(dialog).getByRole('textbox', { name: 'Other groups' }),
+      'invoices, customers ,orders',
+    );
     const save = screen.getByRole('button', { name: 'Save' });
     expect(save).not.toBeDisabled();
     await userEvent.click(save);
     await waitFor(() => expect(onSave).toHaveBeenCalled());
+    // Typed groups join the chips, distinct, the own group dropped; categories are untouched.
     expect(onSave.mock.calls[0][0]).toMatchObject({
       category_id: 'c1',
-      category_ids: ['c2'],
-      kind: 'bridge',
-      bridge_to_category_ids: ['c2'],
-    });
-  });
-
-  it('keeps the target when the primary category becomes that target', async () => {
-    const onSave = mount(bridge);
-    const dialog = await screen.findByTestId('rule-dialog');
-    await userEvent.click(within(dialog).getByRole('button', { name: /Category/ }));
-    await userEvent.click(await screen.findByRole('option', { name: /Joins/ }));
-    expect(chips(dialog, 'Also in')).toEqual(['General:false']);
-    expect(chips(dialog, 'Bridges into')).toEqual(['General:false', 'Joins:true']);
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(onSave).toHaveBeenCalled());
-    expect(onSave.mock.calls[0][0]).toMatchObject({
-      category_id: 'c2',
       category_ids: [],
       kind: 'bridge',
-      bridge_to_category_ids: ['c2'],
+      group_value: 'customers',
+      bridge_to_groups: ['orders', 'shipments', 'invoices'],
     });
   });
 
-  it('needs a target before a new bridge saves', async () => {
+  it('needs a group before a new bridge saves and sends none for a plain rule', async () => {
     const onSave = mount(null);
     const dialog = await screen.findByTestId('rule-dialog');
     await userEvent.type(within(dialog).getByRole('textbox', { name: 'Title' }), 'Bridge');
@@ -136,17 +129,14 @@ describe('RuleDialog bridges', () => {
     expect(screen.getByRole('button', { name: 'Add rule' })).toBeDisabled();
     await userEvent.click(
       within(within(dialog).getByRole('group', { name: 'Bridges into' })).getByRole('button', {
-        name: 'General',
+        name: 'orders',
       }),
     );
-    const add = screen.getByRole('button', { name: 'Add rule' });
-    expect(add).not.toBeDisabled();
-    await userEvent.click(add);
+    expect(screen.getByRole('button', { name: 'Add rule' })).not.toBeDisabled();
+    // Back to a plain rule: no groups are sent.
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'Rule' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add rule' }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
-    expect(onSave.mock.calls[0][0]).toMatchObject({
-      category_id: 'c1',
-      kind: 'bridge',
-      bridge_to_category_ids: ['c1'],
-    });
+    expect(onSave.mock.calls[0][0]).toMatchObject({ kind: 'rule', bridge_to_groups: [] });
   });
 });

@@ -148,12 +148,8 @@ export function RulesTab({
             </Tag>
           ))}
           {r.kind === 'bridge' ? (
-            <Tag
-              tone="accent"
-              title="A bridge extends an item into these categories"
-              data-testid="rule-bridge"
-            >
-              Bridge into {r.bridge_to.map((c) => c.name).join(', ') || '—'}
+            <Tag tone="accent" title="A bridge extends an item into these groups" data-testid="rule-bridge">
+              Bridge into {r.bridge_to.join(', ') || '—'}
             </Tag>
           ) : null}
         </span>
