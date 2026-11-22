@@ -14,12 +14,21 @@ export function initials(user: DsUser | null | undefined): string {
 }
 
 /** A person in the datasets area: the shared UserName (C144), after an optional label such as "Drafted by". */
-export function UserPill({ user, label }: { user: DsUser | null | undefined; label?: string }) {
+export function UserPill({
+  user,
+  label,
+  wrap,
+}: {
+  user: DsUser | null | undefined;
+  label?: string;
+  /** the name wraps instead of an ellipsis (catalog card footer) */
+  wrap?: boolean;
+}) {
   if (!user) return null;
   return (
     <span className={styles.person}>
       {label ? <span className={styles.label}>{label}</span> : null}
-      <UserName id={user.id} name={user.display_name} email={user.email} />
+      <UserName id={user.id} name={user.display_name} email={user.email} wrap={wrap} />
     </span>
   );
 }

@@ -1684,6 +1684,7 @@ def refresh_run_summary(db, run_id, version):
     )
     passes = None
     pass_details = pass_groups = None
+    pass_items_completed = pass_items_total = None
     total_retries = summary.retry_sum
     if int(run.samples or 1) > 1:
         from qym_platform.api.runs import _repeat_pass_status
@@ -1694,6 +1695,19 @@ def refresh_run_summary(db, run_id, version):
             Record.present,
             Record.is_last.is_(True),
         )
+        # The runs list draws a live repeat run as a single-pass one (17 Nov
+        # R3): a bar of the item passes done out of items x passes.
+        # progress_* stay per item (Overview and admin read them).
+        pass_items_completed = db.scalar(
+            select(func.count()).select_from(
+                attempts.with_only_columns(Record.record_key, Record.pass_number)
+                .where(Record.pass_number >= 1)
+                .group_by(Record.record_key, Record.pass_number)
+                .subquery()
+            )
+        )
+        if expected is not None:
+            pass_items_total = expected * int(run.samples)
         attempt_latencies = attempts.with_only_columns(Record.latency_ms).where(
             Record.latency_ms.isnot(None)
         )
@@ -1872,6 +1886,8 @@ def refresh_run_summary(db, run_id, version):
         "progress_completed": summary.terminal_count,
         "progress_total": expected,
         "progress_pct": summary.terminal_count / expected if expected else None,
+        "pass_items_completed": pass_items_completed,
+        "pass_items_total": pass_items_total,
         "success_count": success_count,
         "error_count": summary.error_count,
         "not_received_count": not_received,

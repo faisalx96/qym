@@ -30,6 +30,8 @@ export interface DashboardFilters {
   since?: string;
   until?: string;
   q?: string;
+  /** A fixed set of runs (a bookmark group's page); an empty list matches none. */
+  run_ids?: string[];
 }
 
 export interface Freshness {
@@ -134,6 +136,9 @@ export interface RunRow {
   progress_completed: number;
   progress_total: number | null;
   progress_pct: number | null;
+  /** A repeat run: item passes done, out of items x passes (absent on a summary published before 17 Nov R3). */
+  pass_items_completed?: number | null;
+  pass_items_total?: number | null;
   success_count: number;
   error_count: number;
   not_received_count: number;

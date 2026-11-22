@@ -7,7 +7,12 @@ import { ERROR_SLOTS, type ErrorSlot } from './rowErrors';
 
 export interface ActiveChip {
   key: string;
+  /** The whole filter in words (the accessible name and the hover text). */
   label: string;
+  /** RD11: a filter on one field names it apart from its value ("Task error" + the message), so a long value can be
+   * clamped while the field stays readable. */
+  field?: string;
+  value?: string;
   /** The view with this one filter removed. */
   clear: (view: RunView) => RunView;
 }
@@ -84,6 +89,8 @@ export function activeChips(view: RunView, defs: FieldDef[], metric: string | nu
     chips.push({
       key: `error:${slot}`,
       label: `${kind}: ${e.label}`,
+      field: kind,
+      value: e.label,
       clear: (v) => {
         const errors = { ...v.filters.errors };
         delete errors[slot as ErrorSlot];

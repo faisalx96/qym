@@ -314,11 +314,36 @@ def _rewrite_events_sql(db: Session, run: Run, deleted_pass: int) -> int:
     return int(deleted or 0)
 
 
+def _last_completed_after_delete(
+    run: Run, samples: int, deleted_pass: int
+) -> Optional[int]:
+    """The run's last completed pass once ``deleted_pass`` is gone (None: unknown).
+
+    Only the passes up to it count as completed. Passes after it keep their
+    place: a stopped run's passes that never ran stay "not run" after a
+    delete, instead of turning into completed passes with no data.
+    """
+    metadata = run.run_metadata if isinstance(run.run_metadata, dict) else {}
+    raw = metadata.get("last_completed_pass")
+    try:
+        last = int(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        last = None
+    if last is None:
+        if run.status != RunWorkflowStatus.COMPLETED:
+            return None
+        last = samples
+    if last >= deleted_pass:
+        last -= 1
+    return max(0, min(last, samples - 1))
+
+
 def _rewrite_events(
     db: Session,
     run: Run,
     deleted_pass: int,
     new_samples: int,
+    last_completed: Optional[int] = None,
 ) -> int:
     if db.get_bind().dialect.name == "postgresql":
         deleted_events = _rewrite_events_sql(db, run, deleted_pass)
@@ -370,7 +395,10 @@ def _rewrite_events(
             )
             if summary_metadata is not None:
                 summary_metadata["samples"] = new_samples
-                summary_metadata["last_completed_pass"] = new_samples
+                if last_completed is not None:
+                    summary_metadata["last_completed_pass"] = last_completed
+                else:
+                    summary_metadata.pop("last_completed_pass", None)
                 summary["run_metadata"] = summary_metadata
             payload["summary"] = summary
         event.payload = payload
@@ -600,9 +628,12 @@ def delete_repeat_pass(
     db.flush()
 
     new_samples = samples - 1
+    last_completed = _last_completed_after_delete(run, samples, pass_number)
     retired_reviews = _remap_pass_reviews(db, run.id, pass_number)
     _renumber_rows(db, run.id, pass_number)
-    deleted_events = _rewrite_events(db, run, pass_number, new_samples)
+    deleted_events = _rewrite_events(
+        db, run, pass_number, new_samples, last_completed
+    )
     if exclusive_trace_ids:
         (
             db.query(Span)
@@ -640,7 +671,10 @@ def delete_repeat_pass(
     run.run_config = run_config
     run_metadata = dict(run.run_metadata) if isinstance(run.run_metadata, dict) else {}
     run_metadata["samples"] = new_samples
-    run_metadata["last_completed_pass"] = new_samples
+    if last_completed is not None:
+        run_metadata["last_completed_pass"] = last_completed
+    else:
+        run_metadata.pop("last_completed_pass", None)
     run_metadata["has_repeat_pass_context"] = True
     run_metadata["pass_revision"] = pass_revision(run) + 1
     run.run_metadata = run_metadata

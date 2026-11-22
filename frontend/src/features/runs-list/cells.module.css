@@ -62,6 +62,16 @@
   background: var(--chart-8);
 }
 
+/* The ×N pass count on a run name: the Tag's --bg-elevated fill almost matches a striped or hovered row, so it takes
+   the next step up (17 Nov R2). With that brighter fill the 20px count box read too large (round 2): it is a 16px box
+   with 4px sides, the 10px badge numerals unchanged, so it is smaller than the main build's count tag. */
+.runName .passCount {
+  min-height: 16px;
+  padding: 0 var(--space-xs);
+  background: var(--bg-active);
+  line-height: 16px;
+}
+
 .status {
   display: inline-flex;
   align-items: center;
@@ -76,6 +86,11 @@
   gap: var(--space-xs);
   color: var(--text-muted);
   font-size: var(--font-sm);
+}
+
+/* the unit word ("pass", "items") in sans, then the mono done/total: one phrase */
+.progressText {
+  white-space: nowrap;
 }
 
 .progressTrack {
@@ -96,10 +111,16 @@
 /* Status, then the signals (C028): the signals sit in a second column, so they line up from row to row. */
 .statusRow {
   display: inline-grid;
-  grid-template-columns: minmax(92px, max-content) auto;
+  /* both columns keep their content width (17 Nov R9: a squeezed first column let the signals overlap the status;
+     the table widens the column to the widest cell instead) */
+  grid-template-columns: max-content max-content;
+  width: max-content;
   align-items: center;
   column-gap: var(--space-sm);
-  min-width: 0;
+}
+
+.statusRow > :first-child {
+  min-width: 92px;
 }
 
 .signals {

@@ -2,9 +2,11 @@
  * Errors grouped by message (brief 04 §3g). Round 10: each kind is a group with a tinted icon, its colour and its
  * total, then one card per message: the message and its detail, the error count large in the kind's colour, and a bar
  * of its share of the kind. The items it touched are in the card's hover text only (cv4 C2-7: no subtext). Cards wrap in a grid (no table, no sideways scroll). A card toggles
- * the page's filter for that error.
+ * the page's filter for that error; the active card says so in words ("Filtering items", RD11), not only by its frame.
+ * RD10 (round 2): the card is as compact as before, the title and the detail on one line each; when either is cut, a quiet
+ * "Show more" text control under the card opens the full message in place (never a silent ellipsis).
  */
-import { useMemo } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { CardTitle, EmptyState, Icon, type IconName, Tag } from '@/ui';
 import {
   collectErrors,
@@ -38,6 +40,96 @@ const MEANING: Record<ErrorKind, string> = {
   'Trace error': 'A step inside the trace failed (a tool or a model call). The item may still have a score.',
   'Analysis error': 'The automatic analysis could not explain the item.',
 };
+
+/** True when a one-line ellipsis text cuts its content (its full width is wider than its box). */
+const isCut = (el: Element) => el.scrollWidth > el.clientWidth + 1;
+
+/**
+ * RD10 (round 2): is the collapsed message cut? Measured on the title and the detail lines while collapsed, again when the
+ * card resizes; once open, the answer stays as it was so "Show less" stays in place.
+ */
+function useCutText(open: boolean, text: string) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [cut, setCut] = useState(false);
+  const measure = useCallback(() => {
+    const el = ref.current;
+    if (!el || open) return;
+    setCut(Array.from(el.children).some(isCut));
+  }, [open]);
+  useLayoutEffect(measure, [measure, text]);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [measure]);
+  return [ref, cut] as const;
+}
+
+export function ErrorCard({
+  bucket: b,
+  total,
+  on,
+  onToggle,
+}: {
+  bucket: ErrorBucket;
+  total: number;
+  on: boolean;
+  onToggle: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const { title, detail } = splitErrorLabel(b.label);
+  const [textRef, cut] = useCutText(open, b.label);
+  const textId = useId();
+  const share = total ? b.count / total : 0;
+  const n = b.itemIds.size;
+  const tally = `${b.count} ${b.count === 1 ? 'error' : 'errors'}${
+    n === b.count ? '' : ` in ${n} ${n === 1 ? 'item' : 'items'}`
+  }`;
+  return (
+    <div className={styles.errCard} data-kind={CLASS[b.kind]} data-selected={on ? '' : undefined}>
+      <button
+        type="button"
+        className={styles.errToggle}
+        data-testid="error-card"
+        data-kind={CLASS[b.kind]}
+        aria-pressed={on}
+        data-selected={on ? '' : undefined}
+        onClick={onToggle}
+        title={`${tally}. ${on ? 'Showing only these items. Click to clear.' : 'Show only the items with this error.'}`}
+      >
+        <span ref={textRef} id={textId} className={styles.errText} data-open={open ? '' : undefined}>
+          <span className={styles.errTitle}>{title}</span>
+          {detail ? <span className={styles.errDetail}>{detail}</span> : null}
+        </span>
+        <span className={styles.errCount}>{b.count}</span>
+        <span className={styles.errShare} aria-hidden="true">
+          <span style={{ width: `${Math.max(3, share * 100)}%` }} />
+        </span>
+        {on ? (
+          <span className={styles.errActive} data-testid="error-card-active">
+            <Icon name="check" size={12} aria-hidden="true" />
+            Filtering items
+          </span>
+        ) : null}
+      </button>
+      {/* A sibling of the toggle (a button never holds a button), so it never sets the filter. */}
+      {cut || open ? (
+        <button
+          type="button"
+          className={styles.errMore}
+          aria-expanded={open}
+          aria-controls={textId}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? 'Show less' : 'Show more'}
+          <Icon name={open ? 'chevron-up' : 'chevron-down'} size={12} aria-hidden="true" />
+        </button>
+      ) : null}
+    </div>
+  );
+}
 
 export function ErrorsTab() {
   const { items, model, api } = useRunPage();
@@ -87,39 +179,15 @@ export function ErrorsTab() {
             />
           </header>
           <div className={styles.errGrid} role="group" aria-label={`${g.kind}s by message`}>
-            {g.buckets.map((b) => {
-              const { title, detail } = splitErrorLabel(b.label);
-              const on = active[slotOfKind(b.kind)]?.label === b.label;
-              const share = g.total ? b.count / g.total : 0;
-              const n = b.itemIds.size;
-              const tally = `${b.count} ${b.count === 1 ? 'error' : 'errors'}${
-                n === b.count ? '' : ` in ${n} ${n === 1 ? 'item' : 'items'}`
-              }`;
-              return (
-                <button
-                  key={b.kind + b.label}
-                  type="button"
-                  className={styles.errCard}
-                  data-testid="error-card"
-                  data-kind={CLASS[b.kind]}
-                  aria-pressed={on}
-                  data-selected={on ? '' : undefined}
-                  onClick={() => toggle(b)}
-                  title={`${tally}. ${
-                    on ? 'Showing only these items. Click to clear.' : 'Show only the items with this error.'
-                  }`}
-                >
-                  <span className={styles.errText}>
-                    <span className={styles.errTitle}>{title}</span>
-                    {detail ? <span className={styles.errDetail}>{detail}</span> : null}
-                  </span>
-                  <span className={styles.errCount}>{b.count}</span>
-                  <span className={styles.errShare} aria-hidden="true">
-                    <span style={{ width: `${Math.max(3, share * 100)}%` }} />
-                  </span>
-                </button>
-              );
-            })}
+            {g.buckets.map((b) => (
+              <ErrorCard
+                key={b.kind + b.label}
+                bucket={b}
+                total={g.total}
+                on={active[slotOfKind(b.kind)]?.label === b.label}
+                onToggle={() => toggle(b)}
+              />
+            ))}
           </div>
         </section>
       ))}

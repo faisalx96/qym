@@ -67,9 +67,18 @@ def _parse_filters(raw: Optional[str]) -> dict:
     except (ValueError, TypeError):
         raise HTTPException(400, "Invalid dashboard filters") from None
     if not isinstance(value, dict) or set(value) - (
-        set(_FILTER_COLUMNS) | {"since", "until", "versioning", "q"}
+        set(_FILTER_COLUMNS) | {"since", "until", "versioning", "q", "run_ids"}
     ):
         raise HTTPException(400, "Invalid dashboard filters")
+    if "run_ids" in value:
+        # A fixed set of runs (a bookmark group's page); an empty list matches none.
+        ids = value["run_ids"]
+        if (
+            not isinstance(ids, list)
+            or len(ids) > 1000
+            or any(not isinstance(item, str) or len(item) > 100 for item in ids)
+        ):
+            raise HTTPException(400, "Invalid run_ids filter")
     try:
         # ``{key: [values]}`` over any versioning_metadata key; see run_versioning.
         value["versioning"] = parse_versioning_filter(value.get("versioning"))
@@ -260,6 +269,9 @@ def _filter_conditions(filters, *, skip=None, skip_versioning=None, facets=False
         if "__empty__" in values:
             terms.append(or_(column.is_(None), func.trim(column) == ""))
         conditions.append(or_(*terms))
+    if "run_ids" in filters:
+        ids = filters["run_ids"]
+        conditions.append(Dimension.run_key.in_(ids) if ids else false())
     if filters.get("since") is not None:
         conditions.append(Dimension.timestamp >= filters["since"])
     if filters.get("until") is not None:

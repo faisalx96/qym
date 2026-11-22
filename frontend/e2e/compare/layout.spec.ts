@@ -71,7 +71,7 @@ test('20 runs: the item pane shows the output of every run, a chip for each, wit
   const pane = itemPane(page);
   // above three runs the pane has one on/off chip for each output; all are on at the start (no "Show N more")
   await expect(paneOutputs(pane)).toHaveCount(20);
-  const chips = pane.getByRole('group', { name: 'Outputs' }).getByRole('button');
+  const chips = pane.getByRole('group', { name: 'Outputs in view' }).getByRole('button');
   await expect(chips).toHaveCount(20);
   await chips.nth(19).click();
   await expect(paneOutputs(pane)).toHaveCount(19);

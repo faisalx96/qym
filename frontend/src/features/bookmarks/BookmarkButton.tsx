@@ -10,7 +10,7 @@ import { Button, CountTile, Icon, Tooltip, useToast } from '@/ui';
 import { BookmarkDialog } from './BookmarkDialog';
 
 export function BookmarkButton({ runId, runName }: { runId: string; runName: string }) {
-  const { readOnly, snapshot } = useProjectContext();
+  const { slug, readOnly, snapshot } = useProjectContext();
   const [open, setOpen] = useState(false);
   const toast = useToast();
   const query = useRunBookmarks(runId, !snapshot);
@@ -26,8 +26,8 @@ export function BookmarkButton({ runId, runName }: { runId: string; runName: str
           others
             ? `${others} other member${others === 1 ? '' : 's'} bookmarked this run`
             : mine
-              ? 'Edit your bookmark'
-              : 'Save this run to your bookmarks'
+              ? `Edit your bookmark (in ${mine.group.name})`
+              : 'Save this run to one of your bookmark groups'
         }
       >
         <Button
@@ -45,6 +45,7 @@ export function BookmarkButton({ runId, runName }: { runId: string; runName: str
       <BookmarkDialog
         open={open}
         onOpenChange={setOpen}
+        slug={slug}
         runName={runName}
         existing={mine}
         onSave={async (values) => {

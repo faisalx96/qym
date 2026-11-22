@@ -1,9 +1,10 @@
 /**
- * The box plot mark (round 3 P7): one glyph set across the page. Box p25..p75, median line, whiskers p5..p95 with caps, a hollow
- * mean diamond, dots for the values outside the whiskers. `BoxPlot` is the SVG plot drawn at the measured width; `BoxTrack` is the
- * same glyph as a positioned row (per-pass rows, Step timings). Round 5 R2: one tone per plot (`data-band` of the median for a
- * directed score, else `data-series="1"`), no number row; the median is printed above its line, the data minimum and maximum
- * under the baseline ends, all six numbers are in the box tooltip and the `aria-label`.
+ * The box plot mark (round 3 P7): one glyph set across the page. Box p25..p75 (the 50% interval), whiskers p5..p95 with caps,
+ * a hollow mean diamond, a median line across the box (round 2 RD3), a 90th-percentile triangle above the box (RD5), small dots for the values
+ * outside the whiskers. `BoxGlyph` draws each symbol alone, so a KPI row can be the plot's legend. `BoxPlot` is the SVG plot
+ * drawn at the measured width; `BoxTrack` is the same glyph as a positioned row (per-pass rows, Step timings). Round 5 R2: one
+ * tone per plot (`data-band` of the median for a directed score, else `data-series="1"`); the data minimum and maximum are
+ * printed under the baseline ends, all the numbers are in the box tooltip and the `aria-label`.
  */
 import { useId, type CSSProperties } from 'react';
 import { ChartTooltipHost, Mark } from '@/ui/Chart';
@@ -32,6 +33,7 @@ export function boxSentence(
     `median ${fmt(s.median)}`,
     `mean ${fmt(s.mean)}`,
     `75th percentile ${fmt(s.p75)}`,
+    `90th percentile ${fmt(s.p90)}`,
     `maximum ${fmt(s.max)}`,
   ];
   if (opts.total) parts.push(`total ${opts.total}`);
@@ -50,7 +52,7 @@ export interface BoxPlotProps {
   name: string;
   /** One tone for the whole glyph: a score band or series 1 (default). */
   tone?: BoxTone;
-  /** `strip`: 40px, no axis and no median label (the response-time strip under its histogram). */
+  /** `strip`: 40px, no axis and no end labels (the response-time strip under its histogram). */
   variant?: 'full' | 'strip';
   /** Horizontal padding; the strip uses 0 so it lines up with the histogram above. */
   padX?: number;
@@ -83,10 +85,11 @@ export function BoxPlot({
   const enter = useEntrance();
   const uid = useId();
   const strip = variant === 'strip';
-  const H = strip ? 40 : 80;
+  // RD3/RD5: no median label above the box any more, only the p90 triangle, so the full plot is 6px shorter on top
+  const H = strip ? 40 : 74;
   const px = padX ?? (strip ? 0 : 14);
-  const cy = strip ? 20 : 34;
-  const base = 62;
+  const cy = strip ? 20 : 28;
+  const base = 56;
   const bh = strip ? 16 : 24;
   const sx = (v: number) => px + axisPosition(v, axis.domain) * (W - 2 * px);
   const inside = (v: number) => v <= axis.domain[1];
@@ -118,6 +121,7 @@ export function BoxPlot({
   const single = s.n === 1;
   const flat = s.min === s.max;
   const p95x = sx(Math.min(s.p95, axis.domain[1]));
+  const p90x = sx(Math.min(s.p90, axis.domain[1]));
   const clipMax = axis.clipped && s.max > axis.domain[1];
   const clipTip = `${axis.beyond || s.highCount} values beyond ${fmt(axis.domain[1])}, up to ${fmt(s.max)}`;
   const boxW = Math.max(3, sx(s.p75) - sx(s.p25));
@@ -237,13 +241,10 @@ export function BoxPlot({
                 height={bh}
                 rx={3}
               />
+              {/* RD5 + round 2 RD3: the symbols of the card's KPI row: | median line, ◇ mean, ▼ p90 */}
               <line className={styles.median} x1={medX} x2={medX} y1={cy - bh / 2} y2={cy + bh / 2} />
               <path className={styles.meanMark} d={diamond(meanX, cy)} />
-              {strip ? null : (
-                <text className={styles.medianLabel} x={medX} y={cy - bh / 2 - 6} textAnchor={labelAnchor}>
-                  {fmt(s.median)}
-                </text>
-              )}
+              <path className={styles.p90Mark} d={triangle(p90x, cy - bh / 2 - 1)} />
               {strip ? null : merged ? (
                 <text className={styles.endLabel} x={(minX + maxX) / 2} y={base + 16} textAnchor="middle">
                   {`${minText} to ${maxText}`}
@@ -357,6 +358,14 @@ export function BoxPlot({
               as="path"
               className={styles.hit}
               tabIndex={-1}
+              tip={`90th percentile ${fmt(s.p90)}`}
+              d={triangle(p90x, cy - bh / 2 - 1)}
+              data-mark-kind="p90"
+            />
+            <Mark
+              as="path"
+              className={styles.hit}
+              tabIndex={-1}
               tip={`Mean ${fmt(s.mean)}`}
               d={diamond(meanX, cy)}
               data-mark-kind="mean"
@@ -383,15 +392,47 @@ export function BoxPlot({
 }
 
 const diamond = (x: number, cy: number) => `M${x},${cy - 5}L${x + 5},${cy}L${x},${cy + 5}L${x - 5},${cy}Z`;
+/** The 90th percentile: a filled triangle pointing down at its value, its tip `y` (just above the box). */
+const triangle = (x: number, y: number) => `M${x},${y}L${x + 5},${y - 7}L${x - 5},${y - 7}Z`;
 
-/** The tooltip of the box: the middle half and all six numbers (the number row's replacement, round 5 R2). */
+export type BoxGlyphKind = 'mean' | 'median' | 'interval' | 'p90';
+
+/**
+ * One symbol of the plot, alone (RD5): the KPI row's key, so the numbers and the marks read as one legend. It takes the
+ * tone of its nearest `data-series` / `data-band` parent, as the plot does.
+ */
+export function BoxGlyph({ kind }: { kind: BoxGlyphKind }) {
+  return (
+    <svg
+      className={styles.glyph}
+      viewBox="0 0 12 12"
+      width={12}
+      height={12}
+      aria-hidden="true"
+      data-glyph={kind}
+    >
+      {kind === 'mean' ? (
+        <path className={styles.meanMark} d="M6,1.5L10.5,6L6,10.5L1.5,6Z" />
+      ) : kind === 'median' ? (
+        <line className={styles.median} x1={6} x2={6} y1={1} y2={11} />
+      ) : kind === 'interval' ? (
+        <rect className={styles.iqr} x={1} y={3} width={10} height={6} rx={1.5} />
+      ) : (
+        <path className={styles.p90Mark} d="M6,10L11,2.5L1,2.5Z" />
+      )}
+    </svg>
+  );
+}
+
+/** The tooltip of the box: the middle half and all its numbers (min, p25, median, mean, p75, p90, max). */
 function BoxTip({ s, fmt }: { s: BoxStats; fmt: (v: number) => string }) {
   const cells: Array<[string, number]> = [
     ['Min', s.min],
-    ['P25', s.p25],
+    ['p25', s.p25],
     ['Median', s.median],
     ['Mean', s.mean],
-    ['P75', s.p75],
+    ['p75', s.p75],
+    ['p90', s.p90],
     ['Max', s.max],
   ];
   return (
@@ -414,18 +455,18 @@ function BoxTip({ s, fmt }: { s: BoxStats; fmt: (v: number) => string }) {
 
 /** The sentence behind the "How to read the box plot" help marker in a card header. */
 export const HOW_TO_READ =
-  'The box is the middle half of the items, the line is the median, the diamond the mean. Whiskers reach the 5th and 95th percentile; dots are items outside them. Hover or focus the box for all six numbers.';
+  'The box is the middle half of the items (the 50% interval, p25 to p75), the line across the box is the median, the hollow diamond the mean and the triangle the 90th percentile. Whiskers reach the 5th and 95th percentile; small dots are items outside them. Hover or focus the box for all the numbers.';
 
 /** One muted key line under a card that stacks rows (per pass, step timings). */
 export function BoxKey() {
   return (
     <p className={styles.key}>
-      Box: middle 50%. Line: median. Diamond: mean. Whiskers: p5 to p95. Dots: outside the whiskers.
+      Box: middle 50%. Line: median. Diamond: mean. Whiskers: p5 to p95. Small dots: outside the whiskers.
     </p>
   );
 }
 
-/** The glyph as a positioned row: whiskers, box, median tick and mean diamond on a 0..1 scale (per-pass rows, Step timings). */
+/** The glyph as a positioned row: whiskers, box, median line and mean diamond on a 0..1 scale (per-pass rows, Step timings). */
 export function BoxTrack({
   stats,
   x,

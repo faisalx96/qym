@@ -34,6 +34,7 @@ import {
   Icon,
   Identicon,
   PageHeader,
+  RelativeTime,
   Skeleton,
   TabPanel,
   Tabs,
@@ -45,6 +46,8 @@ import {
 } from '@/ui';
 import { AddItemDialog, CreateDraftDialog, NameVersionDialog, PublishDialog } from '../components/dialogs';
 import { VersionSwitcher } from '../components/VersionSwitcher';
+import { UserPill } from '../components/UserPill';
+import { formatDate } from '../lib/itemValue';
 import { catalogPath, comparePath, datasetPath, parseDatasetRoute, type DetailTab } from '../lib/route';
 import { PRODUCTION_RULE, isProduction, resolveActiveVersion } from '../lib/versions';
 import { UploadWizard, type WizardMode } from '../wizard/UploadWizard';
@@ -416,8 +419,30 @@ function DetailBody({
             </Link>
           ) : undefined
         }
-        // The header holds the name, description, version switcher and actions only; counts stay on the state
-        // filter, the pager and the Items tab, and provenance is on the Lineage card (C042).
+        // Who made it and who changed it last, with when (feedback 17 Nov D5). Counts stay on the state filter, the
+        // pager and the Items tab; version provenance stays on the Lineage card (C042).
+        meta={[
+          <span key="created" className={styles.metaEntry} data-testid="hero-created">
+            Created
+            <time dateTime={dataset.created_at} title={formatDate(dataset.created_at)}>
+              {formatDate(dataset.created_at, 'date')}
+            </time>
+            {dataset.created_by ? (
+              <>
+                by <UserPill user={dataset.created_by} />
+              </>
+            ) : null}
+          </span>,
+          <span key="updated" className={styles.metaEntry} data-testid="hero-updated">
+            Last updated
+            <RelativeTime iso={dataset.updated_at} />
+            {dataset.updated_by ?? dataset.created_by ? (
+              <>
+                by <UserPill user={dataset.updated_by ?? dataset.created_by} />
+              </>
+            ) : null}
+          </span>,
+        ]}
         actions={
           <div className={styles.heroActions}>
             {active ? (

@@ -1,16 +1,24 @@
 /**
  * Trace stats by kind (legacy renderKinds): one card each for LLM, Tools (and Retrieval) and Eval, three large
- * numbers in the kind's colour. Each number opens its breakdown by call site, tool or evaluator.
+ * numbers in the kind's colour (the trace's colour and icon). Each number opens its breakdown by step, tool or
+ * evaluator: one row per step, whatever the model.
  */
 import { useMemo, useState } from 'react';
 import { Card, Icon, TextLink } from '@/ui';
-import { FAMILY_LABEL, FAMILY_TONE, kindPanels, type Family, type LatencyData } from '../../lib/latencyModel';
-import { FAMILY_ICON, Glyph } from './kinds';
+import {
+  FAMILY_ICON,
+  FAMILY_LABEL,
+  FAMILY_TONE,
+  kindPanels,
+  type Family,
+  type LatencyData,
+} from '../../lib/latencyModel';
+import { Glyph } from './kinds';
 import { cssVars } from './Tip';
 import styles from './Traces.module.css';
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-const BY_WORD: Partial<Record<Family, string>> = { LLM: 'call site', TOOL: 'tool', EVAL: 'evaluator' };
+const BY_WORD: Partial<Record<Family, string>> = { LLM: 'step', TOOL: 'tool', EVAL: 'evaluator' };
 
 export function KindCards({ D, onOpenSteps }: { D: LatencyData; onOpenSteps: (family: Family) => void }) {
   const panels = useMemo(() => kindPanels(D), [D]);

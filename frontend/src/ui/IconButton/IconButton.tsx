@@ -20,15 +20,23 @@ export interface IconButtonProps extends Omit<
   tile?: boolean;
   /** Why the button is locked: shown on hover and read with the button (A-22, the Button recipe). */
   disabledReason?: string;
+  /**
+   * The X that closes a surface (a drawer, side pane, dialog, panel, toast): muted at rest, the error red on hover and
+   * press (G3, owner: "close button X glows green on hover? should be red"). On by itself for the `close` glyph in the
+   * default tone; an X that removes a value (a chip, a mapping, a list entry) passes `closes={false}` and keeps the
+   * accent hover.
+   */
+  closes?: boolean;
   className?: string;
 }
 
 /** .qym-icon-action: 24px glyph-only action; hover changes only the glyph colour. */
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
-  { label, icon, tone = 'default', active, tile, disabledReason, className, isDisabled, ...rest },
+  { label, icon, tone = 'default', active, tile, disabledReason, closes, className, isDisabled, ...rest },
   ref,
 ) {
   const reasonId = useId();
+  const isClose = closes ?? (icon === 'close' && tone === 'default' && !tile);
   const reason = isDisabled && disabledReason ? disabledReason : null;
   const button = (
     <AriaButton
@@ -40,6 +48,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       data-tone={tone}
       data-active={active ? '' : undefined}
       data-tile={tile ? '' : undefined}
+      data-close={isClose ? '' : undefined}
       {...rest}
     >
       {typeof icon === 'string' ? <Icon name={icon as IconName} size={14} /> : icon}

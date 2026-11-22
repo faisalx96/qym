@@ -1,16 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import type { StepLatencyGroup, StepLatencyPayload } from '../../types';
+import { KIND_ICON, KIND_TONE } from '../../components/traces/spanKinds';
+import type { StepLatencyGroup, StepLatencyPayload, StepLatencyTreeNode } from '../../types';
 import {
+  allStepRows,
   budgetBrackets,
   budgetSegments,
-  buildStepsTree,
+  FAMILY_ICON,
+  FAMILY_TONE,
   flattenSteps,
   fmtMs,
+  kindWord,
   latencyPins,
+  mergeModels,
   normalizeLatency,
+  PHASE_TONE,
   pinChips,
+  stepFacts,
+  stepIcon,
   stepsAxis,
+  stepsCsv,
+  stepsModel,
   stepsOfFamily,
+  stepsSvg,
+  stepTone,
+  toSpanKind,
+  walkSteps,
   type LatencySummary,
   type StepSortKey,
 } from '../latencyModel';
@@ -72,70 +86,263 @@ describe('normalizeLatency: a step needs observations, zero and errors count', (
   });
 });
 
-describe('buildStepsTree / flattenSteps', () => {
-  const sort = { key: 'time' as StepSortKey, dir: -1 as const };
+/** One node of the server's average trace; every quantile equals `ms`. */
+function tnode(
+  name: string | null,
+  kind: string,
+  ms: number,
+  over: Partial<StepLatencyTreeNode> = {},
+  children: StepLatencyTreeNode[] = [],
+): StepLatencyTreeNode {
+  const { phase: _phase, step_type: _st, ...g } = group({}, ms);
+  return {
+    ...g,
+    name,
+    kind,
+    phase: 'task',
+    step: !children.length,
+    models: [],
+    in_traces: 4,
+    calls: 4,
+    time_per_trace_ms: ms,
+    tokens_total: 0,
+    children,
+    ...over,
+  };
+}
 
-  it('a kind that repeats its phase adds no extra level', () => {
-    const D = normalizeLatency(
-      payload({ groups: [group({ kind: 'AGENT', step_type: 'agent:planner' }, 300)] }),
-    );
-    const tree = buildStepsTree(D, { group: 'step', query: '' });
-    expect(tree).toHaveLength(1);
-    expect(tree[0]!.type).toBe('phase');
-    expect(tree[0]!.children!.map((c) => [c.type, c.label])).toEqual([['step', 'agent:planner']]);
+/** A run of 4 traces: an agent (an LLM step, a tool in 2 of the 4 traces, twice there) then an eval. */
+const treePayload = () =>
+  payload({
+    trace_count: 4,
+    tree: tnode(null, 'CHAIN', 5000, { step: false }, [
+      tnode('planner', 'AGENT', 4000, { step: false }, [
+        tnode('answer', 'LLM', 1000, { models: ['model-a', 'model-b'] }),
+        tnode('Tool: search', 'TOOL', 600, { in_traces: 2, calls: 4, time_per_trace_ms: 300 }),
+      ]),
+      tnode('judge', 'EVALUATOR', 800, { phase: 'eval' }),
+    ]),
+    kinds: [
+      { ...group({}, 1000), kind: 'LLM', calls: 4, in_traces: 4, avg_call_ms: 1000, time_per_trace_ms: 1000 },
+      { ...group({}, 600), kind: 'TOOL', calls: 4, in_traces: 2, avg_call_ms: 300, time_per_trace_ms: 300 },
+      {
+        ...group({}, 800),
+        kind: 'EVALUATOR',
+        calls: 4,
+        in_traces: 4,
+        avg_call_ms: 800,
+        time_per_trace_ms: 800,
+      },
+    ],
   });
 
-  it('phase headers carry their own parent bar; collapsed phases hide their steps', () => {
-    const D = normalizeLatency(payload({ phases: [group({ phase: 'task', n: 1 }, 900)] }));
-    const tree = buildStepsTree(D, { group: 'step', query: '' });
-    const collapsed = flattenSteps(D, tree, new Set(), sort);
-    expect(collapsed.map((r) => r.node.label)).toEqual(['Agent']);
-    expect(collapsed[0]!.node.stats.mean).toBe(900);
-    const expanded = flattenSteps(D, tree, new Set(['p:task']), sort);
-    expect(expanded.map((r) => r.node.label)).toEqual(['Agent', 'llm:test']);
-    expect(expanded[1]!.depth).toBe(1);
+const ORDER = { key: 'order' as StepSortKey, dir: -1 as const };
+const allOpen = () => true;
+
+describe('stepsModel: By step is the average trace', () => {
+  it('keeps the server tree in trace order, with the whole trace on top', () => {
+    const M = stepsModel(normalizeLatency(treePayload()));
+    expect(M.perTrace).toBe(true);
+    expect(M.traces).toBe(4);
+    const rows = flattenSteps(M.roots, { query: '', sort: ORDER, isOpen: allOpen, traces: 4 });
+    expect(rows.map((r) => [r.node.name, r.depth, r.isGroup])).toEqual([
+      ['Whole trace', 0, true],
+      ['planner', 1, true],
+      ['answer', 2, false],
+      ['Tool: search', 2, false],
+      ['judge', 1, false],
+    ]);
+    expect(rows[0]!.node.id).toBe('t:');
+    expect(rows[2]!.node.id).toBe('t:›planner›answer');
+    // One row per step, whatever the model: the models are quiet text on the row.
+    expect(rows[2]!.node.models).toEqual(['model-a', 'model-b']);
   });
 
-  it('a search keeps only matching steps and forces their phase open', () => {
-    const D = normalizeLatency(
-      payload({ groups: [group(), group({ step_type: 'tool:search', kind: 'TOOL' }, 50)] }),
-    );
-    const tree = buildStepsTree(D, { group: 'step', query: 'search' });
-    const rows = flattenSteps(D, tree, new Set(), sort);
-    expect(rows.map((r) => r.node.label)).toEqual(['Agent', 'tool:search']);
-    expect(buildStepsTree(D, { group: 'step', query: 'zzz' })).toEqual([]);
+  it('reads the kind of each row as the trace does', () => {
+    const M = stepsModel(normalizeLatency(treePayload()));
+    const kinds = walkSteps(M.roots).map((n) => [n.name, n.kind, stepTone(n), stepIcon(n)]);
+    expect(kinds).toContainEqual(['Tool: search', 'TOOL', KIND_TONE.TOOL, KIND_ICON.TOOL]);
+    expect(kinds).toContainEqual(['planner', 'AGENT', KIND_TONE.AGENT, KIND_ICON.AGENT]);
   });
 
-  it('By kind rolls steps up into one row per kind family', () => {
+  it('says when a step runs in only some traces, or more than once in one', () => {
+    const M = stepsModel(normalizeLatency(treePayload()));
+    const byName = Object.fromEntries(walkSteps(M.roots).map((n) => [n.name, n]));
+    expect(byName['Tool: search']!.facts).toBe('in 2 of 4 traces · ×2.0 per trace');
+    expect(byName['answer']!.facts).toBeNull();
+    expect(byName['Whole trace']!.facts).toBeNull();
+    expect(stepFacts(62, 62, 103)).toBe('in 62 of 103 traces');
+    expect(stepFacts(103, 247, 103)).toBe('×2.4 per trace');
+    expect(stepFacts(null, 8, 4)).toBe('×2.0 per trace');
+  });
+
+  it('folds a group the reader closes, and trace order reverses', () => {
+    const M = stepsModel(normalizeLatency(treePayload()));
+    const folded = flattenSteps(M.roots, {
+      query: '',
+      sort: ORDER,
+      isOpen: (n) => n.id !== 't:›planner',
+      traces: 4,
+    });
+    expect(folded.map((r) => r.node.name)).toEqual(['Whole trace', 'planner', 'judge']);
+    expect(folded[1]!.open).toBe(false);
+    const reversed = flattenSteps(M.roots, {
+      query: '',
+      sort: { key: 'order', dir: 1 },
+      isOpen: allOpen,
+      traces: 4,
+    });
+    expect(reversed.map((r) => r.node.name)).toEqual([
+      'Whole trace',
+      'judge',
+      'planner',
+      'Tool: search',
+      'answer',
+    ]);
+  });
+
+  it('sorts siblings by a number column inside their parent', () => {
+    const M = stepsModel(normalizeLatency(treePayload()));
+    const rows = flattenSteps(M.roots, {
+      query: '',
+      sort: { key: 'time', dir: -1 },
+      isOpen: allOpen,
+      traces: 4,
+    });
+    expect(rows.map((r) => r.node.name)).toEqual([
+      'Whole trace',
+      'planner',
+      'answer',
+      'Tool: search',
+      'judge',
+    ]);
+  });
+
+  it('a search keeps the matches and opens the groups that hold them, folds or not', () => {
+    const M = stepsModel(normalizeLatency(treePayload()));
+    const closed = () => false;
+    const byModel = flattenSteps(M.roots, { query: 'model-b', sort: ORDER, isOpen: closed, traces: 4 });
+    expect(byModel.map((r) => r.node.name)).toEqual(['Whole trace', 'planner', 'answer']);
+    // A group that matches shows all its rows (open as the reader left it).
+    const group = flattenSteps(M.roots, { query: 'plann', sort: ORDER, isOpen: allOpen, traces: 4 });
+    expect(group.map((r) => r.node.name)).toEqual(['Whole trace', 'planner', 'answer', 'Tool: search']);
+    expect(flattenSteps(M.roots, { query: 'zzz', sort: ORDER, isOpen: allOpen, traces: 4 })).toEqual([]);
+    expect(allStepRows(M.roots, { query: '', sort: ORDER, traces: 4 })).toHaveLength(5);
+  });
+});
+
+describe('stepsModel: By kind is each kind’s time in one trace', () => {
+  it('one row per kind with its calls per trace and average call, opening to its steps', () => {
+    const M = stepsModel(normalizeLatency(treePayload()));
+    expect(M.kinds.map((k) => [k.id, k.name, k.facts])).toEqual([
+      ['k:LLM', 'LLM', '1.0 calls / trace · 1.0s avg call'],
+      ['k:TOOL', 'Tools', '1.0 calls / trace · 300ms avg call'],
+      ['k:EVALUATOR', 'Eval', '1.0 calls / trace · 800ms avg call'],
+    ]);
+    const tools = M.kinds[1]!;
+    expect(tools.perTrace).toBe(300);
+    expect(tools.children!.map((c) => [c.id, c.name, c.children])).toEqual([
+      ['k:TOOL›t:›planner›Tool: search', 'Tool: search', null],
+    ]);
+  });
+});
+
+describe('stepsModel: without an average trace, the step sites', () => {
+  it('falls back to phases and steps, one call each', () => {
     const D = normalizeLatency(
       payload({
-        groups: [
-          group(),
-          group({ step_type: 'llm:b' }, 100),
-          group({ step_type: 'tool:x', kind: 'TOOL' }, 50),
-        ],
+        trace_count: 2,
+        groups: [group({ n: 4 }, 200), group({ step_type: 'tool:x', kind: 'TOOL', n: 2 }, 50)],
+        phases: [group({ phase: 'task', n: 2 }, 900)],
       }),
     );
-    const tree = buildStepsTree(D, { group: 'kind', query: '' });
-    expect(tree[0]!.children!.map((c) => c.label)).toEqual(['LLM', 'Tools']);
-    expect(tree[0]!.children![0]!.stats.n).toBe(4);
+    const M = stepsModel(D);
+    expect(M.perTrace).toBe(false);
+    const rows = flattenSteps(M.roots, { query: '', sort: ORDER, isOpen: allOpen, traces: 2 });
+    expect(rows.map((r) => [r.node.id, r.node.name, r.node.inTraces])).toEqual([
+      ['p:task', 'Agent', null],
+      ['s:task::LLM:llm:test:', 'llm:test', null],
+      ['s:task::TOOL:tool:x:', 'tool:x', null],
+    ]);
+    expect(rows[0]!.node.perTrace).toBe(900);
+    expect(rows[1]!.node.facts).toBe('×2.0 per trace');
+    // By kind adds up the calls and sorts by time per trace.
+    expect(M.kinds.map((k) => [k.name, k.calls])).toEqual([
+      ['LLM', 4],
+      ['Tools', 2],
+    ]);
   });
 });
 
 describe('stepsAxis', () => {
-  it('shares one axis between the phase parent bar and the step bars', () => {
-    const D = normalizeLatency(payload({ phases: [group({ phase: 'task', n: 1 }, 30000)] }));
-    const tree = buildStepsTree(D, { group: 'step', query: '' });
-    const rows = flattenSteps(D, tree, new Set(['p:task']), { key: 'time', dir: -1 });
+  it('fits every plotted row, the whole trace too', () => {
+    const M = stepsModel(normalizeLatency(treePayload()));
+    const stats = flattenSteps(M.roots, { query: '', sort: ORDER, isOpen: allOpen, traces: 4 }).map(
+      (r) => r.node.stats,
+    );
     for (const scale of ['linear', 'log'] as const) {
-      const axis = stepsAxis(rows, scale);
-      // A 30s phase bar fits the axis rather than running off the plot.
-      expect(axis.x(30000)).toBeLessThanOrEqual(100.0001);
-      expect(axis.x(222)).toBeLessThan(axis.x(30000));
+      const axis = stepsAxis(stats, scale);
+      expect(axis.x(5000)).toBeLessThanOrEqual(100.0001);
+      expect(axis.x(600)).toBeLessThan(axis.x(5000));
       expect(axis.ticks[axis.ticks.length - 1]).toBeGreaterThanOrEqual(
-        30000 * (scale === 'linear' ? 1 : 0.99),
+        5000 * (scale === 'linear' ? 1 : 0.99),
       );
     }
+  });
+
+  it('drops a log tick that would print over an end tick', () => {
+    const axis = stepsAxis([{ ...normalizeLatency(payload()).steps[0]!, p5: 220, p95: 9000 }], 'log');
+    const x = axis.ticks.map(axis.x);
+    x.slice(1, -1).forEach((v) => {
+      expect(v).toBeGreaterThan(12);
+      expect(v).toBeLessThan(88);
+    });
+  });
+});
+
+describe('Step timings export', () => {
+  it('writes the rows as CSV with the path, the plot unit and defused formulas', () => {
+    const M = stepsModel(normalizeLatency(treePayload()));
+    const csv = stepsCsv(allStepRows(M.roots, { query: '', sort: ORDER, traces: 4 }), M);
+    const lines = csv.trim().split('\n');
+    expect(lines[0]!.split(',').slice(0, 7)).toEqual([
+      'path',
+      'depth',
+      'name',
+      'kind',
+      'phase',
+      'models',
+      'plot',
+    ]);
+    expect(lines).toHaveLength(6);
+    expect(lines[4]).toMatch(
+      /^Whole trace \/ planner \/ Tool: search,2,Tool: search,TOOL,task,,one trace,2,4,4,1,300,/,
+    );
+    const evil = stepsModel(
+      normalizeLatency(
+        payload({ trace_count: 4, tree: tnode(null, 'CHAIN', 10, {}, [tnode('=cmd()', 'LLM', 5)]) }),
+      ),
+    );
+    expect(stepsCsv(allStepRows(evil.roots, { query: '', sort: ORDER, traces: 4 }), evil)).toContain(
+      ",1,'=cmd(),LLM,",
+    );
+  });
+
+  it('draws one kind colour per row and the caption in the SVG', () => {
+    const M = stepsModel(normalizeLatency(treePayload()));
+    const rows = allStepRows(M.roots, { query: '', sort: ORDER, traces: 4 });
+    const svg = stepsSvg(
+      rows,
+      stepsAxis(
+        rows.map((r) => r.node.stats),
+        'log',
+      ),
+      (t) => (t === KIND_TONE.TOOL ? '#123456' : '#000000'),
+      'Each plot is one trace.',
+    );
+    expect(svg).toContain('fill="#123456"');
+    expect(svg).toContain('Each plot is one trace.');
+    expect(svg).toContain('Tool: search');
   });
 });
 
@@ -196,6 +403,58 @@ describe('time budget brackets and kinds', () => {
   it('opens the phase that holds a kind and points at its steps', () => {
     expect(stepsOfFamily(D, 'EVAL')).toEqual({ open: ['p:eval'], ids: ['s:eval::LLM:judge:'] });
     expect(stepsOfFamily(D, 'LLM').open).toEqual(['p:task']);
+  });
+
+  it('in the average trace, opens the path to each step of the kind', () => {
+    const T = normalizeLatency(treePayload());
+    expect(stepsOfFamily(T, 'TOOL')).toEqual({
+      open: ['t:', 't:›planner'],
+      ids: ['t:›planner›Tool: search'],
+    });
+    expect(stepsOfFamily(T, 'EVAL')).toEqual({ open: ['t:'], ids: ['t:›judge'] });
+  });
+});
+
+describe('one colour and one icon per kind: the trace’s', () => {
+  it('each budget family and bracket reads its span kind from the trace', () => {
+    expect(FAMILY_TONE.LLM).toBe(KIND_TONE.LLM);
+    expect(FAMILY_TONE.TOOL).toBe(KIND_TONE.TOOL);
+    expect(KIND_TONE.TOOL).toBe('var(--chart-5)');
+    expect(FAMILY_TONE.RETRIEVAL).toBe(KIND_TONE.RETRIEVER);
+    expect(FAMILY_TONE.GUARD).toBe(KIND_TONE.GUARDRAIL);
+    expect(FAMILY_TONE.OTHER).toBe(KIND_TONE.DEFAULT);
+    expect(PHASE_TONE).toEqual({ task: KIND_TONE.AGENT, eval: KIND_TONE.EVALUATOR });
+    expect(FAMILY_ICON.TOOL).toBe(KIND_ICON.TOOL);
+  });
+
+  it('reads a server kind as the trace reads a span kind', () => {
+    expect(['llm', 'Tool', 'embedding', 'retrieve', 'mystery', null].map(toSpanKind)).toEqual([
+      'LLM',
+      'TOOL',
+      'EMBED',
+      'RETRIEVER',
+      'DEFAULT',
+      'DEFAULT',
+    ]);
+    expect(['TOOL', 'RETRIEVER', 'GUARDRAIL', 'mystery', 'OTHER', ''].map(kindWord)).toEqual([
+      'Tools',
+      'Retrieval',
+      'Guardrails',
+      'Mystery',
+      'Other',
+      'Other',
+    ]);
+  });
+
+  it('merges the models of one step into one row', () => {
+    const D = normalizeLatency(
+      payload({ groups: [group({ model: 'model-a', n: 2 }, 100), group({ model: 'model-b', n: 6 }, 200)] }),
+    );
+    const merged = mergeModels(D.steps);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.model).toBe('model-a · model-b');
+    expect(merged[0]!.n).toBe(8);
+    expect(merged[0]!.mean).toBeCloseTo(175);
   });
 });
 

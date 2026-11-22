@@ -36,11 +36,32 @@
   opacity: 0.6;
 }
 
-/* Running: the ring with its first pixel lit. Still: an infinite animation would never let the page settle. */
+/* Running: one lit pixel goes round the ring clockwise, a --motion-step per pixel, a short tail behind it (17 Nov R7).
+   CSS only; the page settle checks skip infinite animations. Under reduced motion it is the still figure: the ring
+   with its first pixel lit. */
 .mark[data-shape='orbit'] rect[data-ring] {
   opacity: 0.6;
+  animation: orbit calc(var(--motion-step) * 8) linear infinite;
+  animation-delay: calc(var(--motion-step) * (var(--ring-i, 0) - 8));
 }
 
 .mark[data-shape='orbit'] rect[data-ring]:first-child {
   opacity: 1;
+}
+
+@keyframes orbit {
+  0%,
+  12.5% {
+    opacity: 1;
+  }
+  37.5%,
+  100% {
+    opacity: 0.6;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mark[data-shape='orbit'] rect[data-ring] {
+    animation: none;
+  }
 }

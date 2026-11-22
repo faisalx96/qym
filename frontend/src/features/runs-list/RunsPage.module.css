@@ -11,6 +11,13 @@
   gap: var(--space-sm);
 }
 
+/* Inside a host page (a bookmark group): the host pads and heads the page; the table takes the rest. */
+.runs[data-scoped] {
+  flex: 1 1 auto;
+  height: auto;
+  padding: 0;
+}
+
 .commandBar {
   display: flex;
   flex-wrap: wrap;

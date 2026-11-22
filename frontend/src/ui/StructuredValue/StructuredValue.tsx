@@ -3,6 +3,7 @@ import { Button } from '../Button';
 import { Collapse } from '../Collapse';
 import { DataTable, type Column } from '../DataTable';
 import { CopyButton } from '../CopyButton';
+import { FoldButton } from '../IconButton';
 import { Icon } from '../Icon';
 import { JsonTree } from '../JsonViewer';
 import { SegmentedControl } from '../SegmentedControl';
@@ -247,22 +248,12 @@ export function StructuredValue({
         {toolbar ? (
           <div className={styles.toolbar}>
             <span className={styles.spacer} />
-            <Button
-              size="sm"
-              variant="neutral"
-              aria-label="Expand all keys"
+            <FoldButton
+              action="open"
+              label="Expand all keys"
               onPress={() => setOpenKeys(new Set(allPaths(parsed.data, uid)))}
-            >
-              Expand all
-            </Button>
-            <Button
-              size="sm"
-              variant="neutral"
-              aria-label="Collapse all keys"
-              onPress={() => setOpenKeys(new Set())}
-            >
-              Collapse all
-            </Button>
+            />
+            <FoldButton action="close" label="Collapse all keys" onPress={() => setOpenKeys(new Set())} />
           </div>
         ) : null}
         <KeyTree
@@ -310,9 +301,7 @@ export function StructuredValue({
           />
           <span className={styles.spacer} />
           {view === 'sections' ? (
-            <Button size="sm" variant="neutral" onPress={() => setAll(!anyOpen)}>
-              {anyOpen ? 'Collapse all' : 'Expand all'}
-            </Button>
+            <FoldButton action={anyOpen ? 'close' : 'open'} onPress={() => setAll(!anyOpen)} />
           ) : null}
           <CopyButton text={json} label="Copy JSON" />
         </div>

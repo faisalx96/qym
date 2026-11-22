@@ -7,10 +7,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useItemTraceQuery } from '@/api/runs';
 import {
-  Button,
   Chip,
   Drawer,
   ErrorState,
+  FoldButton,
   Icon,
   SearchField,
   SegmentedControl,
@@ -43,17 +43,36 @@ import {
 } from '../../lib/traceTree';
 import { singleKeyShortcutsEnabled } from '@/features/runs-list/useRunsKeyboard';
 import { CopyAct } from '../items/pane/actions';
+import { ResizeHandle, WidthAct, clampWidth, useStoredWidth } from '../items/pane/resize';
 import { KIND_ICON, KIND_LABEL, KIND_TONE } from './spanKinds';
+import { withFactIcons } from './factIcons';
 import { SpanDetail } from './SpanDetail';
 import styles from './TraceDrawer.module.css';
 
-const ROW = 32; // --row-compact
+// One span-tree row (virtualised, so a fixed number). It is not a table density: the --row-* tokens grew to
+// 36/44/56 for the tables (17 Nov R1), while the tree keeps its 32px rows.
+const ROW = 32;
 interface TraceSummaryLite {
   span_count?: number;
   duration_ms?: number | null;
   error_count?: number;
 }
 const EXPAND_ALL_LIMIT = 400;
+/** The drawer's default width (px; it never passes 97% of the window) and the narrowest a reader can make it. */
+const DRAWER_WIDTH = 1320;
+const DRAWER_MIN = 720;
+/** A drawer wider than its default gives the extra width to the details: the tree stays at most this wide. */
+const TREE_MAX = 720;
+
+function useWindowWidth(): number {
+  const [w, setW] = useState(() => (typeof window === 'undefined' ? DRAWER_WIDTH : window.innerWidth));
+  useEffect(() => {
+    const on = () => setW(window.innerWidth);
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []);
+  return w;
+}
 
 interface VisibleRow {
   node: SpanNode;
@@ -275,6 +294,33 @@ export function TraceView({ runId, itemId, pass, passCount = 0, onPass, onClose 
   });
 
   const select = (id: string) => setSelectedBy((s) => ({ ...s, [key]: id }));
+  // a tool call (or the call of a tool, the step of an error) opens its span: the tree opens the way to it, selects
+  // it and scrolls it into view; the focus goes to the name of the span in the details
+  const detailRef = useRef<HTMLElement>(null);
+  const reveal = useRef<string | null>(null);
+  const openSpan = (id: string) => {
+    if (!active) return;
+    const next = new Set(expanded);
+    let at = active.tree.byId.get(id);
+    while (at) {
+      const parentId = at._groupParent?.span_id ?? at.parent_span_id;
+      at = parentId ? active.tree.byId.get(parentId) : undefined;
+      if (at) next.add(at.span_id);
+    }
+    setExpandedBy((s) => ({ ...s, [key]: next }));
+    if (search) setSearch('');
+    select(id);
+    if (narrow) setPane('detail');
+    reveal.current = id;
+  };
+  useEffect(() => {
+    const id = reveal.current;
+    if (!id) return;
+    reveal.current = null;
+    const i = rows.findIndex((r) => r.node.span_id === id);
+    if (i >= 0) virtualizer.scrollToIndex(i, { align: 'auto' });
+    detailRef.current?.querySelector<HTMLElement>('h3')?.focus();
+  });
   const pickRow = (id: string) => {
     select(id);
     if (narrow) setPane('detail');
@@ -379,12 +425,17 @@ export function TraceView({ runId, itemId, pass, passCount = 0, onPass, onClose 
             : []),
         ]
       : [];
-  const drawerWidth =
-    typeof window === 'undefined'
-      ? 1320
-      : narrow
-        ? window.innerWidth
-        : Math.min(1320, window.innerWidth * 0.97);
+  // ---- width, as the item pane: the head button takes the full window width and gives it back; the start edge
+  // takes drag, arrow keys (16px), Home / End and a double click (the default). The reader's width is kept.
+  const windowWidth = useWindowWidth();
+  const [storedWidth, setStoredWidth] = useStoredWidth('qym:trace-drawer-width');
+  const defaultWidth = Math.min(DRAWER_WIDTH, windowWidth * 0.97);
+  const minWidth = Math.min(DRAWER_MIN, defaultWidth);
+  const maxWidth = windowWidth;
+  const drawerWidth = narrow ? windowWidth : clampWidth(storedWidth ?? defaultWidth, minWidth, maxWidth);
+  const full = drawerWidth >= maxWidth - 8;
+  const setDrawerWidth = (n: number | null, persist: boolean) =>
+    setStoredWidth(n === null ? null : clampWidth(n, minWidth, maxWidth), persist);
 
   const treeEl = active ? (
     <section className={styles.treePane} aria-label="Spans">
@@ -410,9 +461,8 @@ export function TraceView({ runId, itemId, pass, passCount = 0, onPass, onClose 
             },
           }}
         />
-        <Button
-          size="sm"
-          variant="neutral"
+        <FoldButton
+          action="open"
           onPress={() =>
             setExpandedBy((s) => ({
               ...s,
@@ -423,16 +473,8 @@ export function TraceView({ runId, itemId, pass, passCount = 0, onPass, onClose 
               ),
             }))
           }
-        >
-          Expand all
-        </Button>
-        <Button
-          size="sm"
-          variant="neutral"
-          onPress={() => setExpandedBy((s) => ({ ...s, [key]: new Set() }))}
-        >
-          Collapse all
-        </Button>
+        />
+        <FoldButton action="close" onPress={() => setExpandedBy((s) => ({ ...s, [key]: new Set() }))} />
       </div>
       <div
         ref={setScroller}
@@ -472,9 +514,14 @@ export function TraceView({ runId, itemId, pass, passCount = 0, onPass, onClose 
     </section>
   ) : null;
   const detailEl = (
-    <section className={styles.detailPane} aria-label="Span details">
+    <section ref={detailRef} className={styles.detailPane} aria-label="Span details">
       {selectedNode ? (
-        <SpanDetail key={selectedNode.span_id} node={selectedNode} />
+        <SpanDetail
+          key={selectedNode.span_id}
+          node={selectedNode}
+          nodes={active?.tree.nodes}
+          onOpenSpan={openSpan}
+        />
       ) : (
         <Text variant="sm" tone="muted">
           Select a span.
@@ -496,7 +543,30 @@ export function TraceView({ runId, itemId, pass, passCount = 0, onPass, onClose 
       }
       scrim="heavy"
       width={drawerWidth}
-      actions={norm?.item.trace_id ? <CopyAct text={norm.item.trace_id} label="Copy trace id" /> : null}
+      edge={
+        narrow ? null : (
+          <ResizeHandle
+            label="Resize the trace drawer"
+            width={drawerWidth}
+            min={minWidth}
+            max={maxWidth}
+            onWidth={setDrawerWidth}
+            onReset={() => setDrawerWidth(null, true)}
+          />
+        )
+      }
+      actions={
+        <>
+          {norm?.item.trace_id ? <CopyAct text={norm.item.trace_id} label="Copy trace id" /> : null}
+          {narrow ? null : (
+            <WidthAct
+              full={full}
+              narrowLabel="Give the page its room back"
+              onPress={() => setDrawerWidth(full ? null : maxWidth, true)}
+            />
+          )}
+        </>
+      }
     >
       <div className={styles.body} data-testid="trace-drawer">
         {query.isPending ? <Skeleton kind="lines" rows={6} label="Loading trace" /> : null}
@@ -539,7 +609,7 @@ export function TraceView({ runId, itemId, pass, passCount = 0, onPass, onClose 
               </div>
             ) : null}
             <div className={styles.stats}>
-              <StatStrip variant="compact" aria-label="Trace summary" items={facts} />
+              <StatStrip variant="compact" aria-label="Trace summary" items={withFactIcons(facts)} />
             </div>
             {active.tree.nodes.length === 0 ? (
               <p className={styles.empty} role="status" data-testid="trace-empty">
@@ -570,8 +640,9 @@ export function TraceView({ runId, itemId, pass, passCount = 0, onPass, onClose 
                     <SplitPane
                       label="Resize span tree and details"
                       storageKey="qym:trace-split"
-                      defaultPct={55}
+                      defaultPct={45}
                       minPx={280}
+                      maxStartPx={drawerWidth > defaultWidth + 8 ? TREE_MAX : undefined}
                       start={treeEl}
                       end={detailEl}
                     />

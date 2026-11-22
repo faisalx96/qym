@@ -500,6 +500,148 @@ def test_bulk_mutations_repeat_deletion_and_dimension_changes(database):
     assert projected(database)["owner"]["display_name"] == "New owner"
 
 
+def test_pass_deletions_leave_no_fake_passes_in_the_runs_list(database):
+    """Deleting a few passes of a stopped run (17 Nov feedback, R10).
+
+    Renumbering moves projection records to other pass numbers; the identities
+    they left must be deleted, or the next passes keep the deleted pass's
+    numbers. The never-run passes of a stopped run stay "not run".
+    """
+    from qym_platform.db.models import RunEvent
+    from qym_platform.services.repeat_passes import delete_repeat_pass
+
+    with Session(database) as db:
+        run(
+            db,
+            samples=4,
+            run_config={"samples": 4},
+            run_metadata={"total_items": 2, "samples": 4, "last_completed_pass": 3},
+            status=RunWorkflowStatus.STOPPED,
+            ended_at=datetime(2026, 9, 1, 13),
+        )
+        sequence = 0
+        for i in ("a", "b"):
+            item(db, i, latency_ms=10)
+            for p in (1, 2, 3):
+                db.add(
+                    RunItemAttempt(
+                        run_id="r",
+                        item_id=i,
+                        pass_number=p,
+                        attempt_number=2,
+                        status="COMPLETED",
+                        is_last_attempt=True,
+                        latency_ms=10 * p,
+                        task_started_at_ms=1000 * p,
+                    )
+                )
+                db.add(
+                    RunItemPassScore(
+                        run_id="r",
+                        item_id=i,
+                        metric_name="score",
+                        pass_number=p,
+                        score_numeric=p / 4,
+                    )
+                )
+                sequence += 1
+                # A retried item: its event is attempt evidence in the projection.
+                db.add(
+                    RunEvent(
+                        run_id="r",
+                        event_id=f"e-{i}-{p}",
+                        sequence=sequence,
+                        type="item_completed",
+                        sent_at=datetime(2026, 9, 1, 12),
+                        payload={"item_id": i, "pass_number": p, "retry_count": 1},
+                    )
+                )
+        db.add(
+            RunEvent(
+                run_id="r",
+                event_id="started",
+                sequence=0,
+                type="run_started",
+                sent_at=datetime(2026, 9, 1, 12),
+                payload={"run_config": {"samples": 4}},
+            )
+        )
+        db.commit()
+    drain(database)
+    for number in (2, 1):
+        with Session(database) as db:
+            delete_repeat_pass(db, db.get(Run, "r"), number, actor_user_id="u")
+            db.commit()
+        drain(database)
+
+    with Session(database) as db:
+        assert db.get(Run, "r").run_metadata["last_completed_pass"] == 1
+        left = db.scalars(
+            select(Record.pass_number)
+            .where(
+                Record.run_key == "r",
+                Record.present,
+                Record.record_kind.in_(("attempt", "pass_score")),
+            )
+            .distinct()
+        ).all()
+    # Only old pass 3 is left, as pass 1: nothing stays under 2, 3 or a
+    # temporary negative number.
+    assert sorted(left) == [1]
+    data = projected(database)
+    # Pass 4 never ran: it is pass 2 now and still "not run" (pending).
+    assert data["samples"] == 2
+    assert [(p["pass_number"], p["status"]) for p in data["pass_summaries"]] == [
+        (1, "completed"),
+        (2, "pending"),
+    ]
+    details = {p["pass_number"]: p for p in data["pass_details"]}
+    assert details[1]["completed_count"] == 2
+    assert details[1]["metric_means"]["score"] == pytest.approx(0.75)
+    assert details[2]["completed_count"] == 0
+    assert details[2]["metric_means"] == {}
+
+
+def test_live_repeat_run_counts_item_passes_for_the_runs_list_bar(database):
+    """A running repeat run's progress counts item passes (17 Nov R3).
+
+    The runs list draws it as a single-pass run: a bar of the finished item
+    passes out of items x passes. A retried attempt that is not the last does
+    not count; a single-pass run has no such counts.
+    """
+    with Session(database) as db:
+        run(
+            db,
+            samples=3,
+            run_config={"samples": 3},
+            run_metadata={"total_items": 2, "samples": 3, "last_completed_pass": 1},
+        )
+        for i in ("a", "b"):
+            item(db, i, latency_ms=10)
+        done = [("a", 1, True), ("b", 1, True), ("a", 2, True), ("b", 2, False)]
+        for i, p, last in done:
+            db.add(
+                RunItemAttempt(
+                    run_id="r",
+                    item_id=i,
+                    pass_number=p,
+                    attempt_number=1,
+                    status="COMPLETED" if last else "FAILED",
+                    is_last_attempt=last,
+                    latency_ms=10.0,
+                    task_started_at_ms=1000 * p,
+                )
+            )
+        run(db, "single", run_metadata={"total_items": 2})
+        item(db, "x", run_id="single")
+        db.commit()
+    drain(database)
+    data = projected(database)
+    assert (data["pass_items_completed"], data["pass_items_total"]) == (3, 6)
+    single = projected(database, "single")
+    assert (single["pass_items_completed"], single["pass_items_total"]) == (None, None)
+
+
 def test_bulk_mutations_read_snapshot_fields_in_chunks(database, monkeypatch):
     """A bulk UPDATE/DELETE of source rows locks them by key and reads only the
     snapshot fields, in bounded chunks: never the rows' input/output JSON."""

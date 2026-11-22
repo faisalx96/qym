@@ -493,14 +493,215 @@ def _aggregate_traces(spans: Sequence[Any], eval_ids: set) -> Dict[str, Any]:
     return {field: stats[field] for field in ["n", "error_count"] + _LATENCY_FIELDS}
 
 
+# The average trace (round 3 L2): the run's traces merged into one tree, in trace order, for the run page's
+# Step timings "By step". Noise spans the trace drawer hides (framework plumbing with children) are see-through,
+# as in the drawer: their children join the parent. Kinds the drawer always keeps are never noise.
+_NOISE_SPAN_NAMES = {
+    "should_continue", "route", "router", "RunnableSequence", "call_model", "ChannelWrite", "ChannelRead",
+    "Prompt", "RunnableParallel", "RunnableLambda", "__start__", "__end__",
+}
+_KEEP_KINDS = {"LLM", "TOOL", "AGENT", "EMBEDDING", "RETRIEVER", "EVALUATOR", "GUARDRAIL"}
+# A run whose span names never repeat (an id in each name) has no average trace; past this many merged nodes the
+# summary leaves the tree out and the page falls back to its flat list of steps.
+MAX_TREE_NODES = 2000
+# A deeper path also leaves the tree out (the payload is nested one level per step).
+MAX_TREE_DEPTH = 64
+
+
+def _new_node(first: int) -> Dict[str, Any]:
+    return {
+        "first": first, "kinds": defaultdict(int), "phases": defaultdict(int), "models": set(), "step": False,
+        "in_traces": 0, "calls": 0, "offsets": [], "children": [], **_new_bucket(),
+    }
+
+
+def _tree_payload(node: Dict[str, Any], name: Optional[str], traces: int, nodes: Dict[tuple, Dict[str, Any]]) -> Dict[str, Any]:
+    kind = max(node["kinds"].items(), key=lambda kv: kv[1])[0] if node["kinds"] else "OTHER"
+    phase = max(node["phases"].items(), key=lambda kv: kv[1])[0] if node["phases"] else None
+    kids = [(child, nodes[child]) for child in node["children"]]
+    # Trace order: the mean start of a step after its parent's start; the first one seen breaks ties (and places
+    # a step without start times).
+    kids.sort(key=lambda kv: (
+        sum(kv[1]["offsets"]) / len(kv[1]["offsets"]) if kv[1]["offsets"] else math.inf, kv[1]["first"]
+    ))
+    return {
+        "name": name,
+        "kind": kind,
+        "phase": phase,
+        "step": node["step"],
+        "models": sorted(node["models"]),
+        "in_traces": node["in_traces"],
+        "calls": node["calls"],
+        "time_per_trace_ms": (sum(node["durations"]) / traces) if traces else None,
+        **_bucket_stats(node),
+        "children": [_tree_payload(child, path[-1], traces, nodes) for path, child in kids],
+    }
+
+
+def _aggregate_tree(spans: Sequence[Any], eval_ids: set, rows: Sequence[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """The average trace: every trace's spans merged into one tree.
+
+    Merge rule: two spans are one node when they have the same name and their parents are one node (the same path
+    of names from the trace root); a trace's single root is the "whole trace" node itself (several roots hang
+    under it). Per node and per trace, the node's time is the sum of its spans' durations in that trace (ERROR
+    spans are counted, not timed), so each sample is "the time in one trace", over the traces it runs in.
+    Children are in trace order: the mean offset of their first start after the parent span's start.
+    Returns None when the merged tree is larger than MAX_TREE_NODES."""
+    steps = {(row["run_id"], row["trace_id"], row["span_id"]): row for row in rows}
+    by_trace: Dict[tuple, List[Any]] = defaultdict(list)
+    for span in spans:
+        if span.trace_id:
+            by_trace[(span.run_id, span.trace_id)].append(span)
+    traces = len(by_trace)
+    nodes: Dict[tuple, Dict[str, Any]] = {(): _new_node(0)}
+
+    def start_key(item: tuple) -> tuple:
+        index, span = item
+        return (span.start_time_ns is None, span.start_time_ns or 0, index)
+
+    for (run_id, trace_id), trace_spans in by_trace.items():
+        ids = {span.span_id for span in trace_spans}
+        children: Dict[str, List[tuple]] = defaultdict(list)
+        roots: List[tuple] = []
+        for index, span in enumerate(trace_spans):
+            if span.parent_span_id and span.parent_span_id in ids and span.parent_span_id != span.span_id:
+                children[span.parent_span_id].append((index, span))
+            else:
+                roots.append((index, span))
+        roots.sort(key=start_key)
+        for kids in children.values():
+            kids.sort(key=start_key)
+        starts = [span.start_time_ns for _, span in roots if span.start_time_ns is not None]
+        trace_start = min(starts) if starts else None
+        # One trace's time per node path (None while no span of it is timed).
+        seen: Dict[tuple, List[Optional[float]]] = {}
+
+        def visit(span: Any, path: tuple) -> None:
+            key = (run_id, trace_id, span.span_id)
+            node = nodes.get(path)
+            if node is None:
+                node = nodes[path] = _new_node(len(nodes))
+                nodes[path[:-1]]["children"].append(path)
+            row = steps.get(key)
+            if row is not None:
+                # A step: its row already holds the kind, phase, model and tokens (a container's tokens would count
+                # its children's twice, so only steps carry them).
+                node["step"] = True
+                node["kinds"][row["kind"]] += 1
+                node["phases"][row["phase"]] += 1
+                if row.get("model"):
+                    node["models"].add(row["model"])
+                _add_tokens(node, row)
+            else:
+                attrs = span.attributes or {}
+                node["kinds"][_span_oi_kind(attrs) or "OTHER"] += 1
+                node["phases"]["eval" if key in eval_ids else "task"] += 1
+                model = str(attrs.get("llm.model_name") or "").strip()
+                if model:
+                    node["models"].add(model)
+            node["calls"] += 1
+            acc = seen.setdefault(path, [None])
+            if str(span.status or "").upper() == "ERROR":
+                node["error_count"] += 1
+            else:
+                duration = _duration_ms(span.duration_ms)
+                if duration is not None:
+                    acc[0] = (acc[0] or 0.0) + duration
+
+        def offset(span: Any, base: Optional[int]) -> Optional[float]:
+            if base is None or span.start_time_ns is None:
+                return None
+            return (span.start_time_ns - base) / 1e6
+
+        whole = nodes[()]
+        for _, span in roots:
+            whole["kinds"][_span_oi_kind(span.attributes or {}) or "OTHER"] += 1
+        whole["calls"] += 1
+        root_errors = any(str(span.status or "").upper() == "ERROR" for _, span in roots)
+        if root_errors:
+            whole["error_count"] += 1
+        else:
+            duration = _parents_duration([span for _, span in roots])
+            if duration is not None:
+                whole["durations"].append(duration)
+        whole["in_traces"] += 1
+
+        # The walk: (span, parent path, parent start). A single root is the whole trace, so its children start.
+        top = children.get(roots[0][1].span_id, []) if len(roots) == 1 else roots
+        base = roots[0][1].start_time_ns if len(roots) == 1 else trace_start
+        stack: List[tuple] = [(span, (), base) for _, span in reversed(top)]
+        firsts: Dict[tuple, Optional[float]] = {}
+        while stack:
+            span, parent_path, parent_start = stack.pop()
+            kids = children.get(span.span_id, [])
+            if kids and span.name in _NOISE_SPAN_NAMES and _span_oi_kind(span.attributes or {}) not in _KEEP_KINDS:
+                stack.extend((kid, parent_path, parent_start) for _, kid in reversed(kids))
+                continue
+            path = parent_path + (span.name or "span",)
+            if len(path) > MAX_TREE_DEPTH:
+                return None
+            visit(span, path)
+            if path not in firsts:
+                firsts[path] = offset(span, parent_start)
+            stack.extend((kid, path, span.start_time_ns) for _, kid in reversed(kids))
+        if len(nodes) > MAX_TREE_NODES:
+            return None
+        for path, (duration,) in seen.items():
+            node = nodes[path]
+            node["in_traces"] += 1
+            if duration is not None:
+                node["durations"].append(duration)
+            if firsts.get(path) is not None:
+                node["offsets"].append(firsts[path])
+    if not traces:
+        return None
+    return _tree_payload(nodes[()], None, traces, nodes)
+
+
+def _aggregate_kinds(rows: Sequence[Dict[str, Any]], traces: int) -> List[Dict[str, Any]]:
+    """Each kind's time inside one trace: per trace, the sum of its steps' durations (ERROR steps are counted,
+    not timed), over the traces it runs in; with its calls and the time of an average call."""
+    kinds: Dict[str, Dict[str, Any]] = {}
+    per_trace: Dict[tuple, List[Any]] = {}
+    for row in rows:
+        kind = row["kind"] or "OTHER"
+        bucket = kinds.setdefault(kind, {**_new_bucket(), "calls": 0, "timed": 0.0, "timed_n": 0, "traces": set()})
+        bucket["calls"] += 1
+        bucket["traces"].add((row["run_id"], row["trace_id"]))
+        _add_tokens(bucket, row)
+        acc = per_trace.setdefault((kind, row["run_id"], row["trace_id"]), [None])
+        if row["status"] == "ERROR":
+            bucket["error_count"] += 1
+        elif row["duration_ms"] is not None:
+            acc[0] = (acc[0] or 0.0) + row["duration_ms"]
+            bucket["timed"] += row["duration_ms"]
+            bucket["timed_n"] += 1
+    for (kind, _, _), (duration,) in per_trace.items():
+        if duration is not None:
+            kinds[kind]["durations"].append(duration)
+    out = []
+    for kind, bucket in kinds.items():
+        out.append({
+            "kind": kind,
+            "in_traces": len(bucket["traces"]),
+            "calls": bucket["calls"],
+            "avg_call_ms": bucket["timed"] / bucket["timed_n"] if bucket["timed_n"] else None,
+            "time_per_trace_ms": (sum(bucket["durations"]) / traces) if traces else None,
+            **_bucket_stats(bucket),
+        })
+    out.sort(key=lambda k: -(k["time_per_trace_ms"] or 0))
+    return out
+
+
 def summarize_step_latency(
-    spans: Sequence[Any], rollup: str = "name"
+    spans: Sequence[Any], rollup: str = "name", tree: bool = False
 ) -> Dict[str, Any]:
     """Step groups plus phase parent distributions, from one attribution.
 
     The call-site rollup (``site``) also returns each sub-agent's span
     distribution (``agents``); every rollup returns whole-trace timings
-    (``traces``)."""
+    (``traces``). ``tree`` adds the average trace (``tree``, or None when
+    it is too large) and each kind's time per trace (``kinds``)."""
     eval_ids = _metric_span_ids(spans)
     agent_of, agent_spans = _site_context(spans, eval_ids) if rollup == "site" else (None, [])
     rows = classify_spans(spans, rollup=rollup, eval_ids=eval_ids, agent_of=agent_of)
@@ -511,6 +712,10 @@ def summarize_step_latency(
     }
     if rollup == "site":
         summary["agents"] = _aggregate_agents(agent_spans)
+    if tree:
+        traces = len({(span.run_id, span.trace_id) for span in spans if span.trace_id})
+        summary["tree"] = _aggregate_tree(spans, eval_ids, rows)
+        summary["kinds"] = _aggregate_kinds(rows, traces)
     return summary
 
 
@@ -740,6 +945,7 @@ LIVE_SUMMARY_REBUILD = timedelta(seconds=15)
 # A running run's stored summary is served while it is this new (two writer rebuild intervals).
 LIVE_SUMMARY_SERVE = timedelta(seconds=30)
 WRITER_ROLLUP = "site"
+SUMMARY_VERSION = "t1"
 
 
 def _summary_fingerprint(db: Session, run: Run) -> str:
@@ -749,7 +955,8 @@ def _summary_fingerprint(db: Session, run: Run) -> str:
     )
     attempts = db.query(func.count()).select_from(RunItemAttempt).filter(RunItemAttempt.run_id == run.id).scalar()
     status = run.status.value if hasattr(run.status, "value") else str(run.status or "")
-    return f"{status}|{pass_revision(run)}|{span_count or 0}|{max_span or 0}|{attempts or 0}"
+    # The leading version changes when the payload's shape does (t1: the average trace), so stored rows rebuild.
+    return f"{SUMMARY_VERSION}|{status}|{pass_revision(run)}|{span_count or 0}|{max_span or 0}|{attempts or 0}"
 
 
 def _is_live(run: Run) -> bool:
@@ -883,7 +1090,8 @@ def _step_latency_response(
         groups = compute_step_latency(spans, rollup=rollup)
         fields = _SUMMARY_FIELDS[:3] + site_fields + _SUMMARY_FIELDS[3:]
         return _csv_response(fields, groups, "step_latency_summary.csv")
-    summary = summarize_step_latency(spans, rollup=rollup)
+    # The run page's call-site summary also carries the average trace; compare's lanes do not draw it.
+    summary = summarize_step_latency(spans, rollup=rollup, tree=rollup == "site" and group_by is None)
     payload: Dict[str, Any] = {
         "run_ids": ids,
         "rollup": rollup,
@@ -897,6 +1105,9 @@ def _step_latency_response(
     }
     if "agents" in summary:
         payload["agents"] = summary["agents"]
+    if "tree" in summary:
+        payload["tree"] = summary["tree"]
+        payload["kinds"] = summary["kinds"]
     if group_by == "ref":
         # Compare draws one lane per run or pass; serving every lane from the
         # pooled spans replaces one request per lane.

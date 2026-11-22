@@ -14,6 +14,8 @@ export interface BoxStats {
   median: number;
   mean: number;
   p75: number;
+  /** RD5: the 90th percentile (one of the card's four KPIs; the ▼ mark on the plot). */
+  p90: number;
   p95: number;
   max: number;
   sum: number;
@@ -44,6 +46,7 @@ const EMPTY: BoxStats = {
   median: NaN,
   mean: NaN,
   p75: NaN,
+  p90: NaN,
   p95: NaN,
   max: NaN,
   sum: 0,
@@ -76,6 +79,7 @@ export function boxStats(values: number[]): BoxStats {
     median: quantile(sorted, 0.5),
     mean: sum / n,
     p75: quantile(sorted, 0.75),
+    p90: quantile(sorted, 0.9),
     p95,
     max: sorted[n - 1]!,
     sum,

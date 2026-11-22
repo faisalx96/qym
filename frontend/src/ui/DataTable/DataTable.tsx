@@ -289,7 +289,7 @@ function useMedia(query: string): boolean {
 const VIRTUAL_AFTER = 200;
 /** Rows read for the content fit of a column set (C020): enough for a fair width, few enough for one cheap layout. */
 const FIT_SAMPLE_ROWS = 20;
-const ROW_PX: Record<Density, number> = { compact: 32, regular: 40, comfortable: 52 };
+const ROW_PX: Record<Density, number> = { compact: 36, regular: 44, comfortable: 56 };
 /** Text lines of a wrapping column (`Column.wrap`) at each density (cv4 X6). */
 const WRAP_LINES: Record<Density, number> = { compact: 1, regular: 2, comfortable: 5 };
 const wrapLines = (wrap: boolean | number | undefined, density: Density): number | undefined =>
@@ -345,6 +345,11 @@ interface DataCellProps<R> {
  * inputs are the same (perf round 6, A8). A column whose `cell` closes over changing state must change identity
  * (memoise the column list with that state in its dependencies), as for any memoised column list.
  */
+/** The row actions fold behind a handle only while the column is pinned at the end (see FoldCell). */
+function ActionsFold({ fold, children }: { fold: boolean; children: ReactNode }) {
+  return fold ? <FoldCell label="Row actions">{children}</FoldCell> : <>{children}</>;
+}
+
 const DataCell = memo(function DataCell<R>({
   col,
   row,
@@ -664,7 +669,8 @@ function DataTableInner<R>({
             pseudo: 'actions',
             foldLabel: () => 'Row actions',
             width: 16 + 26 * actionSlots,
-            pin: 'end',
+            // feedback 17 Nov D3: an actions column never pins; it scrolls with its row (the fold applies only when a
+            // reader pins it at the end from the column menu)
             resizable: false,
             header: 'Actions',
             hideLabel: true,
@@ -1708,8 +1714,14 @@ function DataTableInner<R>({
       const primary = lone ? [...shown, lone] : shown;
       const more = lone ? [] : rest;
       return (
-        <td key={col.id} {...common} role="gridcell" data-pseudo="actions" data-fold="">
-          <FoldCell label="Row actions">
+        <td
+          key={col.id}
+          {...common}
+          role="gridcell"
+          data-pseudo="actions"
+          data-fold={pin === 'end' ? '' : undefined}
+        >
+          <ActionsFold fold={pin === 'end'}>
             <span className={styles.rowActions}>
               {primary.map((a) => {
                 const button = (
@@ -1751,7 +1763,7 @@ function DataTableInner<R>({
                 />
               ) : null}
             </span>
-          </FoldCell>
+          </ActionsFold>
         </td>
       );
     }

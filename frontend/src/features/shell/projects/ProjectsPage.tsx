@@ -100,7 +100,8 @@ function ProjectCard({ project }: { project: Project }) {
         <div className={styles.cardHead}>
           <Identicon seed={project.slug} chip />
           <div className={styles.cardTitle}>
-            <Text variant="md" as="span">
+            {/* G1: a catalog card name is the card heading role (--font-lg), as on the Datasets cards */}
+            <Text variant="lg" as="span">
               {project.name}
             </Text>
             <Text variant="sm" as="span" mono>

@@ -44,10 +44,24 @@
 /* the pass status, then its signals, in the run row's two columns (C028) */
 .statusRow {
   display: inline-grid;
-  grid-template-columns: minmax(92px, max-content) auto;
+  /* both columns keep their content width (17 Nov R9: a squeezed first column let the signals overlap the status;
+     the table widens the column to the widest cell instead) */
+  grid-template-columns: max-content max-content;
+  width: max-content;
   align-items: center;
   column-gap: var(--space-sm);
-  min-width: 0;
+}
+
+.statusRow > :first-child {
+  min-width: 92px;
+}
+
+/* the status and, while the pass runs, its bar and done/total (the run row's .status recipe) */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  white-space: nowrap;
 }
 
 .metric {

@@ -7,7 +7,7 @@ import type { useStepLatencyQuery } from '@/api/runs';
 import { ErrorState, Skeleton, Subsection } from '@/ui';
 import { normalizeLatency, stepsOfFamily, type Family } from '../../lib/latencyModel';
 import { KindCards } from './KindCards';
-import { STEPS_VIEW, StepTimings, type StepsView } from './StepTimings';
+import { openInSteps, STEPS_VIEW, StepTimings, type StepsView } from './StepTimings';
 import { TimeBudget } from './TimeBudget';
 import styles from './Traces.module.css';
 
@@ -24,7 +24,7 @@ export function InsideTraces({ query }: { query: ReturnType<typeof useStepLatenc
   const openSteps = (family: Family) => {
     if (!D) return;
     const { open, ids } = stepsOfFamily(D, family);
-    setView((v) => ({ ...v, group: 'step', query: '', open: new Set([...v.open, ...open]) }));
+    setView((v) => openInSteps(v, open));
     setFlash((f) => ({ ids: new Set(ids), n: (f?.n ?? 0) + 1 }));
     // The flash plays once: rows that mount later (a search, a re-sort) do not replay it.
     window.setTimeout(() => setFlash(null), 1600);

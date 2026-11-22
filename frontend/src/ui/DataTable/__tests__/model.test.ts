@@ -208,3 +208,17 @@ describe('fitColumnWidths (content fit)', () => {
     expect(fitColumnWidths([], 400)).toBeNull();
   });
 });
+
+describe('readPersisted density (feedback 17 Nov R1)', () => {
+  it('drops a density chosen on the old row heights and keeps one chosen on the current scale', async () => {
+    const { DENSITY_SCALE, readPersisted } = await import('../model');
+    const { KEYS } = await import('@/lib/storage');
+    localStorage.setItem(KEYS.dataTableState('dl-old'), JSON.stringify({ density: 'compact', hidden: ['x'] }));
+    expect(readPersisted('dl-old')).toMatchObject({ density: null, hidden: ['x'] });
+    localStorage.setItem(
+      KEYS.dataTableState('dl-new'),
+      JSON.stringify({ density: 'compact', densityScale: DENSITY_SCALE }),
+    );
+    expect(readPersisted('dl-new').density).toBe('compact');
+  });
+});

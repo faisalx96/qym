@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { KEYS, writeJson } from '@/lib/storage';
-import { clampWidth, orderColumns, readPersisted, type PersistedState } from './model';
+import { clampWidth, DENSITY_SCALE, orderColumns, readPersisted, type PersistedState } from './model';
 import type { Column, Density } from './types';
 
 export interface DataTableModelOptions<R> {
@@ -107,7 +107,7 @@ export function useDataTableModel<R>({
     },
     [columns, update],
   );
-  const setDensity = useCallback((d: Density) => update({ density: d }), [update]);
+  const setDensity = useCallback((d: Density) => update({ density: d, densityScale: DENSITY_SCALE }), [update]);
   const toggleGroup = useCallback(
     (key: string) =>
       update((s) => ({

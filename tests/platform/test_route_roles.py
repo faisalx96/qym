@@ -24,7 +24,7 @@ from qym_platform.route_roles import PROBE_LIMITS, ROLES, ROUTE_ROLES
 HIDDEN = {"Project not found", "Run not found"}
 ALLOWED_FOR = {
     "outsider": set(),
-    "member": {"member"},
+    "member": {"member", "group_owner"},
     "owner": {"member", "owner_or_manager"},
     "mgr": {"member", "owner_or_manager", "manager", "factory_approver"},
     "admin": {"member", "owner_or_manager", "manager", "admin", "factory_approver"},

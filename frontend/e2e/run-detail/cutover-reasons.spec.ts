@@ -110,6 +110,8 @@ test('structured item metadata never renders as [object Object]', async ({ page 
   const card = itemPane(page, 'item-0');
   await expect(card).toBeVisible();
   // the Metadata part of the pane shows each key with its value; a nested object shows as its own fields
+  // (the part starts closed since 17 Nov I4)
+  await card.getByRole('button', { name: 'Metadata', exact: true }).click();
   const meta = card.locator('[data-part="metadata"]');
   await expect(meta).toContainText('hard');
   await expect(meta).toContainText('finance');

@@ -1,7 +1,10 @@
 /**
  * Quality vs latency card (legacy renderQuality / renderScatter): one dot per item for the page metric, the pass
  * threshold line, the median latency line, the fast-and-passing and slow-and-failing zones, the slowest 5% hatched,
- * task errors as open red rings. The metric is the page metric from the sticky nav; the card has no picker.
+ * task errors as open red rings. The metric is the page metric from the sticky nav; the card has no picker. A boolean
+ * metric (RD9) has no threshold line and no "Pass" legend entry: the zones and the dot colours already say pass and
+ * fail. When every dot is 0 or 1 its axis reads false / true; a repeat run's per-item share of true passes keeps a
+ * 0-100% axis (the tip says "60% true").
  */
 import { useId } from 'react';
 import { Card, CardTitle, ChartTooltipHost, useMarkTip } from '@/ui';
@@ -26,6 +29,7 @@ export interface QualityMetric {
 function Dot({
   item,
   metric,
+  isBoolean,
   cx,
   cy,
   passes,
@@ -34,6 +38,7 @@ function Dot({
 }: {
   item: LatencyItem;
   metric: string;
+  isBoolean: boolean;
   cx: number;
   cy: number;
   passes: boolean;
@@ -46,7 +51,14 @@ function Dot({
       title={item.itemId}
       rows={[
         ['Latency', durText(item.latency)],
-        [metric, `${(v * 100).toFixed(1)}%`],
+        [
+          metric,
+          isBoolean && (v === 0 || v === 1)
+            ? String(v === 1)
+            : isBoolean
+              ? `${Math.round(v * 100)}% true`
+              : `${(v * 100).toFixed(1)}%`,
+        ],
         ['Status', item.error ? <span className={styles.tipBad}>task error</span> : 'completed'],
       ]}
       hint="Click to open the item"
@@ -97,11 +109,16 @@ export function QualityLatency({ items, metric }: { items: LatencyItem[]; metric
   const p95 = quantile(sorted, 0.95);
   const yStep = [0.05, 0.1, 0.2, 0.25, 0.5].find((st) => (y1 - y0) / st <= 7) ?? 0.5;
   const yTicks: number[] = [];
-  for (let v = Math.ceil(y0 / yStep - 1e-9) * yStep; v <= y1 + 1e-9; v += yStep) yTicks.push(v);
+  // A boolean whose dots are all 0 or 1 reads false / true; a repeat run's share of true passes keeps percentages
+  const twoValued = metric.isBoolean && qs.every((v) => v === 0 || v === 1);
+  if (twoValued) yTicks.push(0, 1);
+  else for (let v = Math.ceil(y0 / yStep - 1e-9) * yStep; v <= y1 + 1e-9; v += yStep) yTicks.push(v);
+  const yLabel = (v: number) => (twoValued ? (v >= 0.5 ? 'true' : 'false') : `${Math.round(v * 100)}%`);
   const xTicks: number[] = [];
   for (let v = 0; v <= x1 + 1e-9; v += xStep) xTicks.push(v);
+  // RD9: a boolean metric has no threshold to draw: it passes when true, which the zones and dot colours show
   const passLabel = metric.isBoolean
-    ? 'Pass = true'
+    ? null
     : `Pass ${passThresholdLabel(metric.threshold, metric.direction)}`;
   return (
     <Card as="section" className={styles.box} aria-label="Quality versus latency">
@@ -125,10 +142,12 @@ export function QualityLatency({ items, metric }: { items: LatencyItem[]; metric
             <i className={styles.swZone} data-zone="bad" aria-hidden="true" />
             Slow and failing
           </li>
-          <li>
-            <i className={styles.swPass} aria-hidden="true" />
-            {passLabel}
-          </li>
+          {passLabel ? (
+            <li>
+              <i className={styles.swPass} aria-hidden="true" />
+              {passLabel}
+            </li>
+          ) : null}
           <li>
             <i className={styles.swLine} aria-hidden="true" />
             Median latency
@@ -197,7 +216,7 @@ export function QualityLatency({ items, metric }: { items: LatencyItem[]; metric
                 <g key={v}>
                   <line className={styles.gridLine} x1={M.l} x2={w - M.r} y1={Y(v)} y2={Y(v)} />
                   <text className={styles.tick} x={M.l - 8} y={Y(v) + 4} textAnchor="end">
-                    {Math.round(v * 100)}%
+                    {yLabel(v)}
                   </text>
                 </g>
               ))}
@@ -206,13 +225,14 @@ export function QualityLatency({ items, metric }: { items: LatencyItem[]; metric
                   {tickLabel(v)}
                 </text>
               ))}
-              <line className={styles.passLine} x1={M.l} x2={w - M.r} y1={yT} y2={yT} />
+              {passLabel ? <line className={styles.passLine} x1={M.l} x2={w - M.r} y1={yT} y2={yT} /> : null}
               <line className={styles.medianLine} x1={X(p50)} x2={X(p50)} y1={top} y2={bottom} />
               {items.map((it) => (
                 <Dot
                   key={it.itemId}
                   item={it}
                   metric={metric.name}
+                  isBoolean={metric.isBoolean}
                   cx={X(it.latency)}
                   cy={Y(it.score ?? 0)}
                   passes={passes(it.score ?? 0)}

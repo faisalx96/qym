@@ -277,10 +277,20 @@ export function passItemHref(
   return `${basePath}?${next.toString()}`;
 }
 
-export function MetricAnalysisCards({ row }: { row: Row }) {
+export function MetricAnalysisCards({
+  row,
+  pass,
+}: {
+  row: Row;
+  /**
+   * The pass these cards review, for a host that shows the passes of a repeat item side by side (the item pane):
+   * `row` is then that pass's row (`scopeRowToPass`) and the cards are that pass's, with no links to the pass views.
+   */
+  pass?: number;
+}) {
   const { model, api, readOnly, basePath } = useRunPage();
   const [search] = useSearchParams();
-  const repeatAggregate = model.isRepeat && !model.viewPass;
+  const repeatAggregate = model.isRepeat && !model.viewPass && pass === undefined;
   const md = row.item_metadata ?? {};
   const analyses = (md.metric_analyses ?? {}) as Record<string, MetricAnalysis>;
   if (repeatAggregate) {
@@ -295,7 +305,7 @@ export function MetricAnalysisCards({ row }: { row: Row }) {
       </p>
     ) : null;
   }
-  const passNumber = model.viewPass ?? (model.isRepeat ? 1 : null);
+  const passNumber = pass ?? model.viewPass ?? (model.isRepeat ? 1 : null);
   const canEdit = !readOnly;
   // A task error or a missing outcome means the judges said nothing: only saved diagnoses show.
   const noVerdict = isItemTaskError(row) || row.output_received === false;
@@ -331,7 +341,11 @@ export function MetricAnalysisCards({ row }: { row: Row }) {
       ? `no issues yet, ${cards.length} ${cards.length === 1 ? 'metric' : 'metrics'}`
       : `${issueCount} ${issueCount === 1 ? 'issue' : 'issues'} across ${cards.length} ${cards.length === 1 ? 'metric' : 'metrics'}`;
   return (
-    <Disclosure title="Root cause" summary={summary} className={styles.rootCause}>
+    <Disclosure
+      title={pass === undefined ? 'Root cause' : `Root cause, pass ${pass}`}
+      summary={summary}
+      className={styles.rootCause}
+    >
       {cards.map((c) => (
         <Card
           key={c.metric}

@@ -322,7 +322,6 @@ export function TrashPage() {
       hideLabel: true,
       // one 20px handle and the cell padding, as on the runs list
       width: 44,
-      pin: 'end',
       hideable: false,
       menuColumn: true,
       cell: (r) => (
@@ -446,7 +445,6 @@ export function TrashPage() {
         >
           <DataTable<TrashRun>
             aria-label="Deleted runs"
-            className={styles.table}
             storageKey="trash-v2"
             rows={rows}
             rowKey={(r) => r.id}

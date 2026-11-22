@@ -63,6 +63,7 @@ export type IconName =
   | 'swap'
   | 'wrench'
   | 'brain'
+  | 'lightbulb'
   | 'bot'
   | 'target'
   | 'agent'
@@ -80,6 +81,8 @@ export type IconName =
   | 'html-file'
   | 'zap'
   | 'diamond'
+  | 'unfold'
+  | 'fold'
   | 'bookmark'
   | 'factory'
   | 'pin'
@@ -164,6 +167,9 @@ const PATHS: Record<IconName, string> = {
     'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z',
   brain:
     'M12 5a3 3 0 1 0-6 .1 4 4 0 0 0-2.5 5.8 4 4 0 0 0 .6 6.6A4 4 0 1 0 12 18zM12 5a3 3 0 1 1 6 .1 4 4 0 0 1 2.5 5.8 4 4 0 0 1-.6 6.6A4 4 0 1 1 12 18zM12 5v13',
+  /* 17 Nov G2: the reasoning-model bulb (the pre-React dashboard mark): a round bulb on a flat neck, one base line. */
+  lightbulb:
+    'M12 2.5a6.5 6.5 0 0 0-3.9 11.7c.6.5.9 1.1.9 1.8V17h6v-1c0-.7.3-1.3.9-1.8A6.5 6.5 0 0 0 12 2.5zM10 21h4',
   bot: 'M12 8V4H8M5 8h14v12H5zM2 14h3M19 14h3M9 13v2M15 13v2',
   target:
     'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10zM12 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2z',
@@ -188,6 +194,10 @@ const PATHS: Record<IconName, string> = {
   /* C-23: the zap glyph; E-30: the diamond (stroke only). */
   zap: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
   diamond: 'M12 3l9 9-9 9-9-9z',
+  /* G4 (owner: "expand all and collapse all shall be subtle icons"): chevrons apart = open every level (Expand all),
+     chevrons together = close every level (Collapse all); not `expand` / `collapse`, the pane's widen / narrow. */
+  unfold: 'M6 9l6-6 6 6M6 15l6 6 6-6',
+  fold: 'M6 3l6 6 6-6M6 21l6-6 6 6',
 };
 
 export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {

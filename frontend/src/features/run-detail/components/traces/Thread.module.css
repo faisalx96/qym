@@ -1,0 +1,155 @@
+/* The conversation of a span (Thread.tsx), in the pre-React viewer's look (round 3 T2): dense and flat. A message is
+   a row with a faint wash of its role's tone (a system prompt a neutral step of the surface), a small role label in
+   the tone, the body at the body size; a tool call a row of its own in the tool's tone inside its message. */
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.sectionHead,
+.msgHead,
+.callHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  min-width: 0;
+}
+
+/* Input and Output keep their tone (blue in, green / red out), quiet: the label and a muted count */
+.sectionHead {
+  min-height: 24px;
+}
+
+.sectionTitle {
+  color: var(--tone-text);
+}
+
+.count {
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* one message: a faint wash of the role's tone, no edge */
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+  padding: var(--space-xs) var(--space-sm) var(--space-sm);
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--tone) var(--tint-faint), transparent);
+}
+
+.msg[data-tone='neutral'] {
+  background: color-mix(in srgb, var(--text-primary) var(--stripe-step), transparent);
+}
+
+.msgHead {
+  min-height: 24px;
+}
+
+.role {
+  color: var(--tone-text);
+}
+
+.name {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.msgBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+/* a long message scrolls inside its box: the thread around it keeps its place */
+.scroll {
+  max-block-size: max(200px, 45vh);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.scroll:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: var(--space-xs);
+  border-radius: var(--control-radius);
+}
+
+/* a tool call inside the message that made it: the tool's tone (set on the row) */
+.call {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+  padding: var(--space-xs) var(--space-sm) var(--space-sm);
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--tone) var(--tint-faint), transparent);
+}
+
+.callHead {
+  min-height: 24px;
+}
+
+.callName,
+.resultName {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 600;
+}
+
+.callName {
+  color: var(--tone);
+}
+
+.resultName {
+  color: var(--tone-text);
+}
+
+.callId {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.quiet {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.thinking {
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}

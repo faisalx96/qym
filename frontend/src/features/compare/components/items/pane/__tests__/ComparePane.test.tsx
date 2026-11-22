@@ -126,7 +126,7 @@ describe('the compare item list', () => {
 });
 
 describe('ComparePane', () => {
-  it('shows Input, Expected beside one Output for each run, then Metrics, Execution and Root cause', () => {
+  it('shows Input, Expected, then the Output row with one Output for each run, then Metrics, Execution and Root cause', () => {
     render(<Harness runs={two} />);
     fireEvent.click(heads()[0]!);
     const p = pane()!;
@@ -150,6 +150,10 @@ describe('ComparePane', () => {
       o.getAttribute('data-tone'),
     );
     expect(tones).toEqual(['success', 'danger']);
+    // Expected has a row of its own: it is not in the Output row (feedback round 2)
+    const row = p.querySelector('[data-part="output-row"]')!;
+    expect(row.querySelectorAll('[data-part="output"]')).toHaveLength(2);
+    expect(row.querySelector('[data-part="expected"]')).toBeNull();
   });
 
   it('marks the baseline with the platform flag and counts the failed metrics in a count tag', () => {

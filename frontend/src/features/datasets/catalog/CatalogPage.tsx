@@ -1,6 +1,8 @@
 /**
  * /projects/:slug/datasets — catalog cards (brief 07 §2.1). Search is
- * client-side and mirrored to `?q=`; sort lives in `?sort=`.
+ * client-side and mirrored to `?q=`; sort lives in `?sort=`. A constrained card
+ * grid like Projects: sort and search sit in the header row, right before
+ * "New dataset", then "Deleted datasets" (feedback 17 Nov D6).
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -8,7 +10,7 @@ import { useDatasetCatalog, type Dataset } from '@/api/datasets';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
-import { fullWidth } from '@/features/shell/layout';
+import { constrained } from '@/features/shell/layout';
 import {
   ActionTile,
   Button,
@@ -19,6 +21,7 @@ import {
   Identicon,
   LinkButton,
   PageHeader,
+  RelativeTime,
   SearchField,
   Select,
   Skeleton,
@@ -30,7 +33,7 @@ import { NewDatasetDialog } from '../components/dialogs';
 import { VersionBadge } from '../components/VersionSwitcher';
 import { UnregisteredNames } from './UnregisteredNames';
 import { UserPill } from '../components/UserPill';
-import { formatDate, pluralize, relativeTime } from '../lib/itemValue';
+import { formatDate, pluralize } from '../lib/itemValue';
 import { catalogPath, datasetPath } from '../lib/route';
 import {
   CATALOG_SORTS,
@@ -81,9 +84,28 @@ export function CatalogPage() {
       }
       actions={
         <>
-          <LinkButton to={catalogPath(slug, { view: 'deleted' })} variant="neutral">
-            Deleted datasets
-          </LinkButton>
+          {/* A card grid: sort and search sit in the header row, just before the primary action (cv4 F15, D6). */}
+          {datasets.length ? (
+            <>
+              <Select
+                label="Sort"
+                hideLabel
+                items={CATALOG_SORTS.map((s) => ({ key: s.key, label: s.label }))}
+                value={sort}
+                onChange={(k) => replaceUrlQuery({ sort: k === 'updated_desc' ? null : String(k) })}
+                searchable={false}
+                width={150}
+              />
+              <SearchField
+                label="Search datasets"
+                placeholder="Search datasets"
+                value={search}
+                onChange={setSearch}
+                width="var(--search-width)"
+                shortcut="/"
+              />
+            </>
+          ) : null}
           {canCreate ? (
             <DropdownMenu
               label="New dataset"
@@ -109,35 +131,17 @@ export function CatalogPage() {
               onAction={(id) => (id === 'blank' ? setCreating(true) : setImporting(true))}
             />
           ) : null}
+          <LinkButton to={catalogPath(slug, { view: 'deleted' })} variant="neutral">
+            Deleted datasets
+          </LinkButton>
         </>
       }
     />
   );
 
   return (
-    <div className={fullWidth} data-datasets-catalog>
+    <div className={constrained} data-datasets-catalog>
       {header}
-      {datasets.length ? (
-        <div className={styles.toolbar}>
-          <SearchField
-            label="Search datasets"
-            placeholder="Search datasets"
-            value={search}
-            onChange={setSearch}
-            width="var(--search-width)"
-            shortcut="/"
-          />
-          <Select
-            label="Sort"
-            hideLabel
-            items={CATALOG_SORTS.map((s) => ({ key: s.key, label: s.label }))}
-            value={sort}
-            onChange={(k) => replaceUrlQuery({ sort: k === 'updated_desc' ? null : String(k) })}
-            searchable={false}
-            width={150}
-          />
-        </div>
-      ) : null}
       {showSkeleton ? (
         <Skeleton kind="cards" count={6} label="Loading datasets" />
       ) : query.isError ? (
@@ -274,12 +278,29 @@ function DatasetCard({ dataset: d, slug }: { dataset: Dataset; slug: string }) {
             {d.run_count.toLocaleString(APP_LOCALE)} {d.run_count === 1 ? 'run' : 'runs'}
           </span>
         </div>
-        <div className={styles.cardFoot}>
-          <UserPill user={d.created_by} />
-          <span className={styles.dates}>
-            created {formatDate(d.created_at, 'date')} · updated {relativeTime(d.updated_at)}
-          </span>
-        </div>
+        {/* Two labelled lines, never cut: when and by whom it was made, then last changed (D7). */}
+        <dl className={styles.cardFoot} data-testid="da-card-dates">
+          <div className={styles.dateRow}>
+            <dt className={styles.dateLabel}>Created</dt>
+            <dd className={styles.dateValue}>
+              <time dateTime={d.created_at} title={formatDate(d.created_at)}>
+                {formatDate(d.created_at, 'date')}
+              </time>
+            </dd>
+            <dd className={styles.datePerson}>
+              <UserPill user={d.created_by} label="by" wrap />
+            </dd>
+          </div>
+          <div className={styles.dateRow}>
+            <dt className={styles.dateLabel}>Updated</dt>
+            <dd className={styles.dateValue}>
+              <RelativeTime iso={d.updated_at} />
+            </dd>
+            <dd className={styles.datePerson}>
+              <UserPill user={d.updated_by ?? d.created_by} label="by" wrap />
+            </dd>
+          </div>
+        </dl>
       </div>
     </Card>
   );

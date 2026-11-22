@@ -1,8 +1,9 @@
 /**
- * Steps section of the Latency panel with mocked /api/runs/step-latency payloads
+ * Step timings section of the Latency panel with mocked /api/runs/step-latency payloads
  * (cutover of test_step_latency_browser.py: the vanilla step_latency.js widget).
  * The payload is fulfilled in the browser so each case controls exactly which
- * distributions the server "returned".
+ * distributions the server "returned". These payloads carry no `tree`, so the
+ * section shows its fallback: one row per call site under the Agent / Eval rows.
  */
 import { test, expect, type Page, type Route } from '@playwright/test';
 import { openRun, seedClassic, seedProject, type Seeded } from './support';
@@ -48,11 +49,12 @@ const payload = (over: Record<string, unknown> = {}) => ({
 async function mockSteps(page: Page, handler: (route: Route) => Promise<void> | void) {
   await page.route(/\/api\/runs\/step-latency\?/, handler);
 }
-const stepsRegion = (page: Page) => page.getByRole('region', { name: 'Steps' });
-/** Steps start collapsed (only the phase rows); open every group. */
-const expandAll = (page: Page) => stepsRegion(page).getByRole('button', { name: 'Expand all steps' }).click();
+const stepsRegion = (page: Page) => page.getByRole('region', { name: 'Step timings' });
+/** By step starts open (as the trace drawer): wait for the table, no click needed. */
+const expandAll = (page: Page) =>
+  expect(stepsRegion(page).getByRole('table', { name: 'Step latency by call site' })).toBeVisible();
 
-test.describe('Steps (step latency)', () => {
+test.describe('Step timings (step latency, no tree)', () => {
   test('a zero-latency step and an errors-only step are kept; a step with no samples is dropped', async ({
     page,
   }) => {
@@ -87,11 +89,11 @@ test.describe('Steps (step latency)', () => {
     const steps = stepsRegion(page);
     await expect(steps.getByText('llm:zero')).toBeVisible();
     await expect(steps.getByText('tool:broken')).toBeVisible();
-    await expect(steps.getByText('3 err')).toBeVisible();
+    await expect(steps.getByRole('row').filter({ hasText: 'tool:broken' })).toContainText('3');
     await expect(steps.getByText('llm:silent')).toHaveCount(0);
   });
 
-  test('a payload without any observation hides the Steps section', async ({ page }) => {
+  test('a payload without any observation hides the Step timings section', async ({ page }) => {
     await mockSteps(page, (route) =>
       route.fulfill({ json: payload({ groups: [group({ n: 0, error_count: 0 }, null)], trace_count: 0 }) }),
     );
@@ -128,7 +130,7 @@ test.describe('Steps (step latency)', () => {
     expect(await page.evaluate(() => (window as unknown as { injected?: boolean }).injected)).toBeUndefined();
   });
 
-  test('the phase header plots its parent span and opens/closes from the keyboard keeping focus', async ({
+  test('the phase header plots its parent span and folds/opens from the keyboard keeping focus', async ({
     page,
   }) => {
     await mockSteps(page, (route) =>
@@ -139,16 +141,17 @@ test.describe('Steps (step latency)', () => {
     const header = steps.getByRole('button', { name: /Agent/ });
     // The phase row carries the parent bar's numbers (aria-label of its interval).
     await expect(steps.getByLabel('p5 900 ms, median 900 ms, p95 900 ms')).toBeVisible();
-    await expect(header).toHaveAttribute('aria-expanded', 'false');
-    await expect(steps.getByText('llm:test')).toHaveCount(0);
+    // By step starts open
+    await expect(header).toHaveAttribute('aria-expanded', 'true');
+    await expect(steps.getByText('llm:test')).toBeVisible();
     await header.focus();
     await page.keyboard.press('Enter');
-    await expect(header).toHaveAttribute('aria-expanded', 'true');
-    await expect(header).toBeFocused();
-    await expect(steps.getByText('llm:test')).toBeVisible();
-    await page.keyboard.press('Enter');
     await expect(header).toHaveAttribute('aria-expanded', 'false');
+    await expect(header).toBeFocused();
     await expect(steps.getByText('llm:test')).toHaveCount(0);
+    await page.keyboard.press('Enter');
+    await expect(header).toHaveAttribute('aria-expanded', 'true');
+    await expect(steps.getByText('llm:test')).toBeVisible();
   });
 
   test('a 30s phase bar shares the axis with the step bars (fits inside the plot)', async ({ page }) => {
@@ -165,17 +168,22 @@ test.describe('Steps (step latency)', () => {
     expect(cell!.x + cell!.width).toBeLessThanOrEqual(box!.x + box!.width + 1);
   });
 
-  test('Summary and Spans CSV links export the run in the current scope', async ({ page }) => {
-    await mockSteps(page, (route) => route.fulfill({ json: payload() }));
+  test('Export: CSV summary is the rows on screen; the server CSVs keep the run scope', async ({ page }) => {
+    await mockSteps(page, (route) =>
+      route.fulfill({ json: payload({ groups: [group()], phases: [group({ n: 1 }, 900)] }) }),
+    );
     await openRun(page, s.slug, classic, 'panel=latency');
-    const summary = stepsRegion(page).getByRole('link', { name: /Summary CSV/ });
-    const spans = stepsRegion(page).getByRole('link', { name: /Spans CSV/ });
-    const q = async (l: typeof summary) => new URL((await l.getAttribute('href'))!, 'http://x').searchParams;
-    expect((await q(summary)).get('format')).toBe('csv');
-    expect((await q(summary)).get('run_ids')).toBe(classic);
-    expect((await q(summary)).get('level')).toBeNull();
-    expect((await q(spans)).get('level')).toBe('spans');
-    expect((await q(spans)).get('format')).toBe('csv');
+    const steps = stepsRegion(page);
+    await steps.getByRole('button', { name: 'Export' }).click();
+    for (const name of ['CSV summary', 'CSV by step and model', 'CSV raw spans', 'SVG plot'])
+      await expect(page.getByRole('menuitem', { name })).toBeVisible();
+    const [file] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('menuitem', { name: 'CSV summary' }).click(),
+    ]);
+    expect(file.suggestedFilename()).toBe('step_timings.csv');
+    const text = await (await file.createReadStream()).toArray();
+    expect(Buffer.concat(text).toString()).toContain('llm:test');
   });
 
   test('By kind groups the steps into one row per kind and Log scale keeps the rows', async ({ page }) => {
@@ -193,7 +201,10 @@ test.describe('Steps (step latency)', () => {
     await steps.getByRole('radio', { name: 'By kind' }).click({ force: true });
     await expect(steps.getByText('LLM', { exact: true })).toBeVisible();
     await expect(steps.getByText('Tools', { exact: true })).toBeVisible();
+    // a kind row opens to its steps
     await expect(steps.getByText('llm:test')).toHaveCount(0);
+    await steps.getByRole('button', { name: /LLM/ }).click();
+    await expect(steps.getByText('llm:test')).toBeVisible();
     await steps.getByRole('radio', { name: 'Log' }).click({ force: true });
     await expect(steps.getByText('Tools', { exact: true })).toBeVisible();
   });

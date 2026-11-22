@@ -15,6 +15,7 @@ import {
   Text,
   StateTag,
 } from '@/ui';
+import { readLocal, writeLocal } from '@/lib/storage';
 import { useSearchParamsState } from '@/lib/url-state';
 import { getMetadataCategoryValues } from '@/features/run-detail/lib/rowMeta';
 import { useCompare } from '../../CompareContext';
@@ -45,6 +46,23 @@ const pct = (v: number | null | undefined, d = 1) =>
   v === null || v === undefined || Number.isNaN(v) ? '—' : `${(v * 100).toFixed(d)}%`;
 /** Sweep item rows per page (C217). */
 const SWEEP_PAGE = 25;
+const SWEEP_PAGE_SIZES = [SWEEP_PAGE, 50, 100, 500];
+const SWEEP_PAGE_KEY = 'qym:compare-sweep-page-size';
+
+/** Rows on one page of the item table. The reader's choice stays for the next visit. */
+function useSweepPageSize(): [number, (n: number) => void] {
+  const [size, setSize] = useState(() => {
+    const n = Number(readLocal(SWEEP_PAGE_KEY));
+    return SWEEP_PAGE_SIZES.includes(n) ? n : SWEEP_PAGE;
+  });
+  return [
+    size,
+    (n) => {
+      writeLocal(SWEEP_PAGE_KEY, String(n));
+      setSize(n);
+    },
+  ];
+}
 
 const signed = (v: number, d = 1) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v * 100).toFixed(d)} pts`;
 
@@ -146,6 +164,7 @@ export function SweepView() {
   const ui = useItemsUi();
   // C217: the item table pages instead of drawing every row
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useSweepPageSize();
   const [sort, setSort] = useState<{
     key: 'default' | 'issue' | 'left' | 'right' | 'move';
     dir: 'asc' | 'desc';
@@ -186,9 +205,9 @@ export function SweepView() {
   const [paged, setPaged] = useState<string | null>(null);
   if (open.id !== paged) {
     setPaged(open.id);
-    if (open.at >= 0) setPage(Math.floor(open.at / SWEEP_PAGE) + 1);
+    if (open.at >= 0) setPage(Math.floor(open.at / pageSize) + 1);
   }
-  const pageCount = Math.max(1, Math.ceil(shown.length / SWEEP_PAGE));
+  const pageCount = Math.max(1, Math.ceil(shown.length / pageSize));
   const pageNow = Math.min(page, pageCount);
   void filteredCompareItems;
   if (!cohorts)
@@ -642,7 +661,7 @@ export function SweepView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {shown.slice((pageNow - 1) * SWEEP_PAGE, pageNow * SWEEP_PAGE).map((item) => (
+                  {shown.slice((pageNow - 1) * pageSize, pageNow * pageSize).map((item) => (
                     <tr
                       key={item.itemId}
                       id={sweepRowId(item.itemId)}
@@ -701,11 +720,18 @@ export function SweepView() {
             </ScrollRegion>
             {shown.length > SWEEP_PAGE ? (
               <Pagination
+                className={styles.pager}
                 total={shown.length}
                 page={pageNow}
-                pageSize={SWEEP_PAGE}
+                pageSize={pageSize}
                 noun="items"
+                pageSizeOptions={SWEEP_PAGE_SIZES}
                 onPageChange={setPage}
+                onPageSizeChange={(n) => {
+                  // keep the first row of the page in view
+                  setPage(Math.floor(((pageNow - 1) * pageSize) / n) + 1);
+                  setPageSize(n);
+                }}
               />
             ) : null}
           </section>

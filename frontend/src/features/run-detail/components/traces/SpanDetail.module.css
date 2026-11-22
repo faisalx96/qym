@@ -1,0 +1,354 @@
+/* The details of one span (SpanDetail.tsx) in the pre-React viewer's look (round 3 T2, owner: "the old version's
+   style and css looks better"): a head of icon, name and one quiet line of facts; flat panels with a faint wash of
+   their tone in place of railed blocks; the documents of a retriever as compact cards. */
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+/* ---------- head: the kind glyph, the name, one line of facts, the status ---------- */
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.kindIcon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  color: var(--tone);
+}
+
+.headText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.spanName {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--font-md);
+  font-weight: 600;
+  line-height: 20px;
+  color: var(--text-primary);
+}
+
+/* model · duration · tokens (in / out) · reasoning · cost: sans with tabular figures, the model name mono */
+.metaLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-xs);
+  margin: 0;
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.metaLine > * + *::before {
+  content: '·';
+  margin-inline-end: var(--space-xs);
+  color: var(--text-muted);
+}
+
+.model {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+}
+
+.split {
+  margin-inline-start: var(--space-xs);
+  color: var(--text-muted);
+}
+
+.headEnd {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+/* ---------- a panel: a faint wash of its tone, a small label in the tone, icon actions at the end ---------- */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+  padding: var(--space-xs) var(--space-sm) var(--space-sm);
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--tone) var(--tint-faint), transparent);
+}
+
+.panel[data-tone='neutral'] {
+  background: color-mix(in srgb, var(--text-primary) var(--stripe-step), transparent);
+}
+
+.panelHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  min-width: 0;
+  min-height: 24px;
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: inherit;
+  line-height: 1;
+}
+
+.panelLabel {
+  color: var(--tone-text);
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+}
+
+.pane {
+  padding-top: var(--space-sm);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.expanded {
+  min-width: 0;
+}
+
+.toolName {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.toolNote,
+.fact {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.fact {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- the error: the type in bold mono, the message as text, the stack folded ---------- */
+.errorType {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--text-muted);
+}
+
+.reasoning {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-md);
+  color: var(--text-muted);
+}
+
+/* a line of facts with a link to another span (the call that asked for a tool, the step an error came from) */
+.linkLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.toolList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.toolList > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+}
+
+/* ---------- the documents of a retriever ---------- */
+.docs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.docsHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-xs) var(--space-sm);
+}
+
+.docsTitle {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.docsSub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.query {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.queryLabel {
+  color: var(--tone-text);
+}
+
+.queryBox {
+  min-width: 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--dropdown-radius);
+  background: var(--bg-base);
+}
+
+.docList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* a document card has the softness of a dropdown (owner: "too squary and boundaries are bold"): its radius, a quiet
+   edge, and hairlines inside that are quieter than the edge */
+.doc {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--dropdown-radius);
+  background: var(--bg-base);
+}
+
+.docHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--control-edge);
+}
+
+.docIcon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 18px;
+  color: var(--tone);
+}
+
+.docText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.docTitle {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--font-base);
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--text-primary);
+}
+
+.docSub {
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.docBody {
+  padding: var(--space-sm) var(--space-md);
+}
+
+/* the metadata of a document: one chip per key, the key in small capitals, the value mono */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  border-top: 1px solid var(--control-edge);
+  list-style: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  max-inline-size: 100%;
+  padding: 0 var(--space-sm);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-size: var(--font-sm);
+  line-height: 20px;
+}
+
+.chipKey {
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.chipValue {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}

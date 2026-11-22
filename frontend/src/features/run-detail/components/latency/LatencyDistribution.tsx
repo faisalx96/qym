@@ -1,7 +1,8 @@
 /**
  * Latency distribution card (legacy renderDistribution): the mean as the hero, the fastest-to-slowest spectrum with
- * the p50, p90 and p95 pins, then the histogram. Click a bar, or drag across bars, to filter the page by latency;
- * a pin filters to the items at or above it.
+ * the p50, p90 and p95 pins, then the histogram and, under it on the same x scale, the response-time box plot strip
+ * (RD8; its diamond is the one mean mark, round 2). Click a bar, or drag across bars, to filter the page by latency; a pin filters to the items at or above it;
+ * the strip's box, whiskers and dots filter or open items as every box plot does.
  */
 import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { formatDuration } from '@/lib/format';
@@ -21,6 +22,10 @@ import {
   type LatencySummary,
 } from '../../lib/latencyModel';
 import { useRunPage } from '../../RunContext';
+import { boxStats } from '../../lib/boxStats';
+import { selectedPart } from '../../lib/boxFilters';
+import { useBoxFilter } from '../charts/BoxCard';
+import { BoxPlot, boxSentence } from '../charts/BoxPlot';
 import { useMeasuredWidth } from '../charts/Charts';
 import { TipBody, cssVars } from './Tip';
 import styles from './Response.module.css';
@@ -215,6 +220,45 @@ function Bar({
   );
 }
 
+/**
+ * RD8: the response-time box plot as a 40px strip under the histogram, on the histogram's own x scale (`lo`..`hi`, no
+ * side padding), so a bar and the box above the same time line up. Clicking the box or a whisker filters the page by
+ * latency; a dot opens its item.
+ */
+export function LatencyStrip({ items, lo, hi }: { items: LatencyItem[]; lo: number; hi: number }) {
+  const { active, onRange, openItem } = useBoxFilter('latency');
+  const stats = useMemo(() => boxStats(items.map((i) => i.latency)), [items]);
+  const byValue = useMemo(() => {
+    const m = new Map<number, string>();
+    items.forEach((i) => m.has(i.latency) || m.set(i.latency, i.itemId));
+    return m;
+  }, [items]);
+  const axis = useMemo(
+    () => ({ domain: [lo, hi] as [number, number], ticks: [], clipped: false, beyond: 0 }),
+    [lo, hi],
+  );
+  if (stats.n < 2) return null;
+  return (
+    <div className={styles.strip} data-testid="latency-strip">
+      <BoxPlot
+        variant="strip"
+        stats={stats}
+        axis={axis}
+        format={(v) => durText(v)}
+        tailTone
+        name={boxSentence('Response time', stats, (v) => durText(v))}
+        selected={selectedPart(active, stats)}
+        onRange={onRange}
+        onItem={(v) => {
+          const id = byValue.get(v);
+          if (id) openItem(id);
+        }}
+        itemLabel={(v) => byValue.get(v)}
+      />
+    </div>
+  );
+}
+
 export function LatencyDistribution({ items, L }: { items: LatencyItem[]; L: LatencySummary }) {
   const { api } = useRunPage();
   const filter = api.view.filters.latency;
@@ -345,13 +389,18 @@ export function LatencyDistribution({ items, L }: { items: LatencyItem[]; L: Lat
                 {tickLabel(t)}
               </span>
             ))}
-            <i
-              className={`${styles.diamond} ${styles.meanMark}`}
-              style={cssVars({ '--x': H.xPct(L.mean) })}
-              title={`Mean ${durText(L.mean)}`}
-            />
+            {/* Round 2 RD8: the mean shows once. With the strip box plot under the axis (2+ items), its diamond is the
+                mean on this same x scale, so the axis carries no second diamond. */}
+            {items.length < 2 ? (
+              <i
+                className={`${styles.diamond} ${styles.meanMark}`}
+                style={cssVars({ '--x': H.xPct(L.mean) })}
+                title={`Mean ${durText(L.mean)}`}
+              />
+            ) : null}
           </div>
         </ChartTooltipHost>
+        <LatencyStrip items={items} lo={H.lo} hi={H.hi} />
       </div>
     </Card>
   );

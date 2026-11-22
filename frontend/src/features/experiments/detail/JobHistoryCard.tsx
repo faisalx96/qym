@@ -76,7 +76,6 @@ export function JobHistoryCard({
       header: 'Combo',
       type: 'id',
       width: 80,
-      pin: 'start',
       hideable: false,
       priority: 1,
       cell: (j) => (

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { boxAxis } from '../../lib/boxAxis';
 import { boxStats } from '../../lib/boxStats';
-import { BoxKey, BoxPlot, boxSentence } from './BoxPlot';
+import { BoxGlyph, BoxKey, BoxPlot, boxSentence } from './BoxPlot';
 
 const fmt = (v: number) => String(Math.round(v * 100) / 100);
 const range = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
@@ -71,7 +71,7 @@ describe('BoxPlot accessibility and interaction', () => {
     const stats = boxStats(range(100));
     const sentence = boxSentence('tokens_used', stats, fmt, { total: '5050' });
     expect(sentence).toMatch(
-      /^tokens_used, 100 items: minimum 1, 25th percentile 25\.75, median 50\.5, mean 50\.5, 75th percentile 75\.25, maximum 100, total 5050/,
+      /^tokens_used, 100 items: minimum 1, 25th percentile 25\.75, median 50\.5, mean 50\.5, 75th percentile 75\.25, 90th percentile 90\.1, maximum 100, total 5050/,
     );
     plot(range(100), { name: sentence });
     expect(screen.getByRole('img', { name: sentence })).toBeInTheDocument();
@@ -106,17 +106,43 @@ describe('no number row (round 5 R2)', () => {
     expect(screen.queryByRole('list', { name: 'How to read the box plot' })).toBeNull();
   });
 
-  it('prints the median above the line and the data min and max under the baseline, nothing else', () => {
+  it('prints only the data min and max under the baseline (RD5: no median label, the KPI row holds the values)', () => {
     const { container } = plot(range(100), { name: 'm' });
     const texts = [...container.querySelectorAll('svg[role=img] text')].map((t) => t.textContent);
-    expect(texts).toEqual(['50.5', '1', '100']);
+    expect(texts).toEqual(['1', '100']);
+  });
+
+  it('round 2 RD3: the median is a line across the box again, the p90 a triangle, each with its own mark', () => {
+    const { container } = plot(range(100), { name: 'm', onRange: () => {} });
+    const picture = container.querySelector('svg[role=img]')!;
+    expect(picture.querySelector('line[class*=median]')).not.toBeNull();
+    expect(picture.querySelector('circle[class*=median]')).toBeNull();
+    expect(picture.querySelector('path[class*=p90Mark]')).not.toBeNull();
+    expect(container.querySelector('rect[data-mark-kind=median]')).not.toBeNull();
+    expect(container.querySelector('path[data-mark-kind=p90]')).not.toBeNull();
+  });
+
+  it('RD5: BoxGlyph draws the same symbol classes as the plot, one per KPI', () => {
+    const { container } = render(
+      <>
+        <BoxGlyph kind="mean" />
+        <BoxGlyph kind="median" />
+        <BoxGlyph kind="interval" />
+        <BoxGlyph kind="p90" />
+      </>,
+    );
+    const kinds = [...container.querySelectorAll('svg[data-glyph]')].map((g) => g.getAttribute('data-glyph'));
+    expect(kinds).toEqual(['mean', 'median', 'interval', 'p90']);
+    // round 2 RD3: the Median KPI's key is the same line as the plot's median mark
+    expect(container.querySelector('[data-glyph=median] line')?.getAttribute('class')).toMatch(/median/);
+    expect(container.querySelector('[data-glyph=p90] path')?.getAttribute('class')).toMatch(/p90Mark/);
   });
 
   it('merges the end labels into "a to b" when the data span is too narrow for two labels', () => {
     const { container } = plot([1, 1.01, 1.02, 1.03, 1.04], { name: 'm' });
     const texts = [...container.querySelectorAll('svg[role=img] text')].map((t) => t.textContent);
-    expect(texts.some((t) => / to /.test(t ?? ''))).toBe(true);
-    expect(texts).toHaveLength(2);
+    expect(texts).toHaveLength(1);
+    expect(texts[0]).toMatch(/ to /);
   });
 
   it('puts all six numbers and the IQR in the box tooltip', async () => {
@@ -124,7 +150,7 @@ describe('no number row (round 5 R2)', () => {
     plot(range(100), { onRange: () => {}, onItem: () => {} });
     await user.tab();
     const tip = await screen.findByRole('tooltip');
-    for (const label of ['Min', 'P25', 'Median', 'Mean', 'P75', 'Max'])
+    for (const label of ['Min', 'p25', 'Median', 'Mean', 'p75', 'p90', 'Max'])
       expect(within(tip).getByText(label)).toBeInTheDocument();
     expect(tip).toHaveTextContent('IQR 49.5');
   });

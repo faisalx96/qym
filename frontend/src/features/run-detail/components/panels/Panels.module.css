@@ -279,11 +279,18 @@
   color: var(--text-muted);
 }
 
-.meanGlyph {
-  width: 8px;
-  height: 8px;
-  border: 1.5px solid var(--chart-1);
-  transform: rotate(45deg);
+/* RD3: a plain number's card sits its number close under the name; the item count is a quiet caption at the row's end. */
+.metricScore[data-compact] {
+  margin-block-start: var(--space-xs);
+}
+
+.numberCaption {
+  align-self: flex-end;
+  margin-inline-start: auto;
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 /* The foot: a hairline, then the error note. An empty foot keeps its line when another card of the grid has one. */
@@ -360,7 +367,8 @@
   margin-block-start: var(--space-md);
 }
 
-/* A plain number: Total, Min, Median and Max as one strip of equal columns, hairlines between them. */
+/* A plain number (RD4, RD5): Median, 50% interval and 90th percentile as one strip of equal columns, hairlines between
+   them; each label starts with the plot's symbol for that value. */
 .numberFacts {
   display: grid;
   grid-auto-columns: minmax(0, 1fr);
@@ -382,6 +390,9 @@
 }
 
 .numberFact dt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
   font-size: var(--font-sm);
   color: var(--text-muted);
 }
@@ -404,12 +415,69 @@
   margin-block-start: var(--space-md);
 }
 
-/* Overview metric cards: three in a row at 1440 (the first qym's width), so the note fits in two lines. */
+/* Overview metric cards (RD12): a card is at least 330px, so a row holds 1 to 6 (three at 1440, the first qym's width,
+   so the note fits in two lines). The cards fill every row: they split into the fewest, most even rows (5 in rows of 3
+   show 3 + 2) and a row's cards share its full width (metricGrid.ts sets the tracks and spans per column count; each
+   query below is the width where one more 330px card fits with the 14px gap). A row's cards share one height. */
 .metricGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr));
+  grid-template-columns: repeat(var(--mg-tracks-1, 1), minmax(0, 1fr));
   gap: var(--space-md);
   align-items: stretch;
+}
+
+.metricGrid > * {
+  grid-column: span var(--mg-span-1, 1);
+}
+
+@container (min-width: 674px) {
+  .metricGrid {
+    grid-template-columns: repeat(var(--mg-tracks-2, 2), minmax(0, 1fr));
+  }
+
+  .metricGrid > * {
+    grid-column: span var(--mg-span-2, 1);
+  }
+}
+
+@container (min-width: 1018px) {
+  .metricGrid {
+    grid-template-columns: repeat(var(--mg-tracks-3, 3), minmax(0, 1fr));
+  }
+
+  .metricGrid > * {
+    grid-column: span var(--mg-span-3, 1);
+  }
+}
+
+@container (min-width: 1362px) {
+  .metricGrid {
+    grid-template-columns: repeat(var(--mg-tracks-4, 4), minmax(0, 1fr));
+  }
+
+  .metricGrid > * {
+    grid-column: span var(--mg-span-4, 1);
+  }
+}
+
+@container (min-width: 1706px) {
+  .metricGrid {
+    grid-template-columns: repeat(var(--mg-tracks-5, 5), minmax(0, 1fr));
+  }
+
+  .metricGrid > * {
+    grid-column: span var(--mg-span-5, 1);
+  }
+}
+
+@container (min-width: 2050px) {
+  .metricGrid {
+    grid-template-columns: repeat(var(--mg-tracks-6, 6), minmax(0, 1fr));
+  }
+
+  .metricGrid > * {
+    grid-column: span var(--mg-span-6, 1);
+  }
 }
 
 .chartGrid {
@@ -591,6 +659,8 @@
   min-width: 0;
 }
 
+/* RD10 (round 2): collapsed, the title and the detail keep one line each, as before; a cut line has a quiet "Show more"
+   under the card (ErrorCard), and the open card wraps the whole message. */
 .errTitle {
   overflow: hidden;
   color: var(--text-primary);
@@ -667,20 +737,14 @@
   gap: var(--space-sm);
 }
 
+/* The card is a frame around its toggle button and, when its text is cut, its "Show more" text control (two siblings: a
+   button never holds a button). */
 .errCard {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: var(--space-xs) var(--space-md);
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  padding: var(--space-sm) var(--space-md);
-  border: 0;
   border-radius: var(--radius-md);
   background: var(--card-bg);
-  color: inherit;
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
   transition: background var(--transition-fast);
 }
 
@@ -688,11 +752,30 @@
   background: var(--bg-hover);
 }
 
+/* RD11: the active error (the page filters to it) has the kind's frame, a faint wash of its colour and the words
+   "Filtering items" with a check, so it is not told by colour alone. */
 .errCard[data-selected] {
+  background: color-mix(in srgb, var(--err) var(--tint-faint), var(--card-bg));
   box-shadow: inset 0 0 0 1px var(--err);
 }
 
-.errCard:focus-visible {
+.errToggle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-xs) var(--space-md);
+  min-width: 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.errToggle:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
@@ -702,6 +785,55 @@
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+}
+
+/* RD10 (round 2): the open card shows the whole message, wrapped. */
+.errText[data-open] > * {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* RD10 (round 2): a quiet text control, not a filled button: muted 11px words and a chevron, tucked under the share bar
+   at the text's start; brighter on hover and focus. It sits outside the toggle, so a click never sets the filter. */
+.errMore {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 2px;
+  margin: calc(-1 * var(--space-xs)) 0 var(--space-xs) calc(var(--space-md) - 2px);
+  padding: 0 2px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--font-sm);
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.errMore:hover {
+  color: var(--text-primary);
+}
+
+.errMore:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.errActive {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.errActive svg {
+  color: var(--err);
 }
 
 .errCount {

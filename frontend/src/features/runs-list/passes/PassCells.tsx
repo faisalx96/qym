@@ -5,7 +5,7 @@ import { ActionTile, Button, RowMenu, RunStatusBadge, ScoreValue, StatusMark, ty
 import { formatDateParts, formatNumericValue } from '@/lib/format';
 import { formatPercent, metricDirection } from '@/lib/metrics';
 import { AnalysisSpark, AnalyzeAction, analyzeState } from '../AnalyzeAction';
-import { Mono, passSignalItems, SignalMarkers } from '../cells';
+import { LiveProgress, Mono, passSignalItems, SignalMarkers } from '../cells';
 import { useRunsCtx } from '../context';
 import { passHref } from './links';
 import { queuedText, type QueuedView } from './model';
@@ -13,11 +13,10 @@ import styles from './PassCells.module.css';
 
 const runName = (run: RunRow) => run.external_run_id || run.run_name || run.run_id.slice(0, 8);
 
-/** "Pass 2" at the run name's x, linking to the pass; only while running or partial, how far it got. */
-export function PassNameCell({ run, pass, status }: { run: RunRow; pass: RunPass; status: string }) {
+/** "Pass 2" at the run name's x, linking to the pass (how far a running pass got is in its Status cell, 17 Nov R3). */
+export function PassNameCell({ run, pass }: { run: RunRow; pass: RunPass; status?: string }) {
   const { slug, listContext } = useRunsCtx();
   const n = pass.pass_number;
-  const partial = status === 'running' && pass.items_total > 0;
   return (
     <span className={styles.passName}>
       <Link
@@ -28,12 +27,6 @@ export function PassNameCell({ run, pass, status }: { run: RunRow; pass: RunPass
       >
         Pass {n}
       </Link>
-      {partial ? (
-        <span className={styles.muted}>
-          {Math.round((pass.completed_count / pass.items_total) * 100)}% · {pass.completed_count}/
-          {pass.items_total} items
-        </span>
-      ) : null}
     </span>
   );
 }
@@ -50,13 +43,26 @@ export function QueuedStatus({ queued }: { queued: QueuedView }) {
   return <StatusMark tone="neutral" shape="ring" label={queued.notRun ? 'Not run' : 'Queued'} />;
 }
 
-/** The pass status, then its signals, drawn as a run's and linking to the pass's Errors section (C028, C115). */
+/**
+ * The pass status, then its signals, drawn as a run's and linking to the pass's Errors section (C028, C115). A running
+ * pass shows its bar and "items done/total" as a running single-pass run does (17 Nov R3; the run row counts passes).
+ */
 export function PassStatus({ run, pass, status }: { run: RunRow; pass: RunPass; status: string }) {
   const { slug, listContext } = useRunsCtx();
   const items = passSignalItems(pass);
   return (
-    <span className={styles.statusRow}>
-      <RunStatusBadge status={status.toUpperCase() as 'COMPLETED'} />
+    <span className={styles.statusRow} data-status-fit="">
+      <span className={styles.status}>
+        <RunStatusBadge status={status.toUpperCase() as 'COMPLETED'} />
+        {status === 'running' && pass.items_total > 0 ? (
+          <LiveProgress
+            done={pass.completed_count}
+            total={pass.items_total}
+            unit="items"
+            label={`Pass ${pass.pass_number}, items ${pass.completed_count} of ${pass.items_total}`}
+          />
+        ) : null}
+      </span>
       {items.length ? (
         <SignalMarkers
           items={items}
@@ -97,10 +103,9 @@ export function PassAnalysis({ run, pass, status }: { run: RunRow; pass: RunPass
 export function PassMetricCell({ run, pass, metric }: { run: RunRow; pass: RunPass; metric: string }) {
   const { metricTypes } = useRunsCtx();
   const v = pass.metric_means?.[metric];
-  if (v === undefined || v === null || !run.metrics.includes(metric))
-    return <span className={styles.none}>—</span>;
-  const type = metricTypes[metric];
   const errors = pass.metric_error_counts?.[metric] ?? 0;
+  if (!run.metrics.includes(metric) || (v == null && !errors)) return <span className={styles.none}>—</span>;
+  const type = metricTypes[metric];
   const marker = errors ? (
     <span
       className={styles.metricError}
@@ -111,6 +116,14 @@ export function PassMetricCell({ run, pass, metric }: { run: RunRow; pass: RunPa
       <span aria-hidden="true">⚠</span>
     </span>
   ) : null;
+  // "Error" only when every score of the pass failed (no mean); otherwise the mean with the ⚠ marker (17 Nov R5)
+  if (v == null)
+    return (
+      <span className={styles.metric}>
+        <ScoreValue variant="plain" value={null} type={type} error="metric" />
+        {marker}
+      </span>
+    );
   if (type === 'numeric')
     return (
       <span className={styles.metric}>

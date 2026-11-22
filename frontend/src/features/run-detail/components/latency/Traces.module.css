@@ -23,7 +23,7 @@
   justify-content: flex-end;
 }
 
-/* Kind glyphs: the icon of a kind of work on a tint of its colour. */
+/* Kind glyphs: the icon of a kind of work on a tint of its colour (the trace drawer's tile recipe). */
 .glyph {
   display: inline-flex;
   flex: 0 0 24px;
@@ -31,16 +31,16 @@
   justify-content: center;
   width: 24px;
   height: 24px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--tone) 16%, transparent);
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--tone) var(--tint-tile), transparent);
   color: var(--tone);
 }
 
+/* A Step timings row: the trace drawer's 20px tile. */
 .glyph[data-size='sm'] {
-  flex-basis: 18px;
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
+  flex-basis: 20px;
+  width: 20px;
+  height: 20px;
 }
 
 /* ── Time budget ── */

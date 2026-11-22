@@ -17,6 +17,7 @@
 }
 
 .drawer {
+  position: relative; /* the anchor of an `edge` (a resize handle) */
   height: 100%;
   max-width: 100%;
   display: flex;

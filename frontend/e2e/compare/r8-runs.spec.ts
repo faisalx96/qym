@@ -18,7 +18,7 @@ test('C-title-1: the title block is 70 high at 1440 with Export on the title row
     size: getComputedStyle(e).fontSize,
     weight: getComputedStyle(e).fontWeight,
   }));
-  expect(css.size).toBe('22px');
+  expect(css.size).toBe('18px'); // --font-title, G1
   expect(Number(css.weight)).toBe(650);
   for (const sel of ['p:nth-of-type(1)', 'p:nth-of-type(2)']) {
     const p = await block

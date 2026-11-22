@@ -3,10 +3,13 @@ import { useState } from 'react';
 import { projectPath } from '@/app/routes';
 import { JobStatusBadge } from '@/features/experiments/components/StatusBadges';
 import {
+  Button,
   Card,
   CardTitle,
+  Collapse,
   Disclosure,
   Flag,
+  Icon,
   InlineNotice,
   LinkButton,
   StateTag,
@@ -17,7 +20,8 @@ import {
   type TimelineItem,
 } from '@/ui';
 import { formatTableDate } from '@/lib/dates';
-import { formatIsoDateTime, READ_ONLY_COPY, SCORE_LOCK_COPY } from '../lib/heroModel';
+import { readJson, writeJson } from '@/lib/storage';
+import { formatIsoDateTime, isEmptyValue, READ_ONLY_COPY, SCORE_LOCK_COPY } from '../lib/heroModel';
 import type { ReviewHistoryEvent, Run } from '../types';
 import styles from './RunPanels.module.css';
 
@@ -89,7 +93,9 @@ function reviewItem(event: ReviewHistoryEvent, i: number, selfApproved: boolean)
         <>
           {event.comment ? <span className={styles.comment}>“{event.comment}”</span> : null}
           {event.recorded === false ? (
-            <span className={styles.note}>Reconstructed from the approval record; earlier changes were not kept.</span>
+            <span className={styles.note}>
+              Reconstructed from the approval record; earlier changes were not kept.
+            </span>
           ) : null}
         </>
       ) : undefined,
@@ -142,9 +148,18 @@ function pointerLabel(pointer: string): string {
 
 const PROMOTABLE = ['COMPLETED', 'SUBMITTED', 'APPROVED'];
 
+/** RD1: the panel's details start collapsed; the user's last choice is kept (like the hero's "more"). */
+export const EXPERIMENT_OPEN_KEY = 'qym:run-experiment-open';
+
 /** Official runs only (run.experiment non-null with origin official). */
 export function ExperimentPanel({ run, slug }: { run: Run; slug: string }) {
   const [open, setOpen] = useState(false);
+  const [details, setDetails] = useState(() => readJson<boolean>(EXPERIMENT_OPEN_KEY, false));
+  const toggleDetails = () =>
+    setDetails((v) => {
+      writeJson(EXPERIMENT_OPEN_KEY, !v);
+      return !v;
+    });
   const panel = run.experiment?.panel as Record<string, unknown> | undefined;
   const exp = run.experiment as Record<string, unknown> | null | undefined;
   const p =
@@ -164,16 +179,17 @@ export function ExperimentPanel({ run, slug }: { run: Run; slug: string }) {
       ? `${projectPath(slug, 'settings')}?${new URLSearchParams({ tab: 'environments', env: String(p.environment_id), promote: 'run', id: run.run_id }).toString()}`
       : null;
   const promotable = PROMOTABLE.includes(String(run.status).toUpperCase());
-  const sweep = Object.entries(isObj(p.sweep) ? p.sweep : {}).map(([k, v]): [string, string, string] => [
-    pointerLabel(k),
-    display(v),
-    k,
-  ]);
+  // RD2: empty values ({}, [], '', null) are left out; 0 and false stay.
+  const sweep = Object.entries(isObj(p.sweep) ? p.sweep : {})
+    .filter(([, v]) => !isEmptyValue(v))
+    .map(([k, v]): [string, string, string] => [pointerLabel(k), display(v), k]);
   const models = Object.entries(isObj(p.slot_bindings) ? p.slot_bindings : {})
-    .filter(([, v]) => v != null)
+    .filter(([, v]) => !isEmptyValue(v))
     .map(([k, v]): [string, string, string] => [k.replace(/^[^:]*:/, ''), display(v), k]);
   const versions = isObj(p.remote_versioning)
-    ? Object.entries(p.remote_versioning).map(([k, v]): [string, string, string] => [k, display(v), k])
+    ? Object.entries(p.remote_versioning)
+        .filter(([, v]) => !isEmptyValue(v))
+        .map(([k, v]): [string, string, string] => [k, display(v), k])
     : [];
   const base = isObj(p.base_source) && p.base_source.kind ? p.base_source : null;
   const ref = base
@@ -266,27 +282,40 @@ export function ExperimentPanel({ run, slug }: { run: Run; slug: string }) {
                 Promote to default preset
               </LinkButton>
             ) : null}
+            <Button
+              variant="neutral"
+              size="sm"
+              aria-expanded={details}
+              aria-controls="rxp-details"
+              onPress={toggleDetails}
+              data-testid="experiment-details-toggle"
+              iconEnd={<Icon name={details ? 'chevron-up' : 'chevron-down'} size={12} />}
+            >
+              {details ? 'Hide details' : 'Show details'}
+            </Button>
           </>
         }
       />
-      {!p.job_available ? (
-        <p className={styles.note}>
-          The launch job is no longer available; showing the configuration stored on the run.
-        </p>
-      ) : null}
-      <dl className={styles.expGrid}>
-        {fields.map(([label, value, wide]) => (
-          <div key={label} className={wide ? styles.wide : undefined}>
-            <dt className={styles.kvKey}>{label}</dt>
-            <dd className={styles.expVal}>{value}</dd>
-          </div>
-        ))}
-      </dl>
-      {p.remote_result != null ? (
-        <Disclosure className={styles.result} title="Service result" open={open} onOpenChange={setOpen}>
-          <pre className={styles.json}>{JSON.stringify(p.remote_result, null, 2)}</pre>
-        </Disclosure>
-      ) : null}
+      <Collapse open={details} id="rxp-details">
+        {!p.job_available ? (
+          <p className={styles.note}>
+            The launch job is no longer available; showing the configuration stored on the run.
+          </p>
+        ) : null}
+        <dl className={styles.expGrid}>
+          {fields.map(([label, value, wide]) => (
+            <div key={label} className={wide ? styles.wide : undefined}>
+              <dt className={styles.kvKey}>{label}</dt>
+              <dd className={styles.expVal}>{value}</dd>
+            </div>
+          ))}
+        </dl>
+        {p.remote_result != null ? (
+          <Disclosure className={styles.result} title="Service result" open={open} onOpenChange={setOpen}>
+            <pre className={styles.json}>{JSON.stringify(p.remote_result, null, 2)}</pre>
+          </Disclosure>
+        ) : null}
+      </Collapse>
     </Card>
   );
 }

@@ -63,12 +63,12 @@ function Where() {
   return <output data-testid="where">{`${loc.pathname}${loc.search}`}</output>;
 }
 
-function tab(activeKey: string | null) {
+function tab(activeKey: string | null, v: DatasetVersion = version) {
   return (
     <ItemsTab
       slug="proj"
       dataset={dataset}
-      version={version}
+      version={v}
       readOnly={false}
       onAddItem={() => undefined}
       onImport={() => undefined}
@@ -78,7 +78,7 @@ function tab(activeKey: string | null) {
   );
 }
 
-function mount(activeKey: string | null) {
+function mount(activeKey: string | null, v: DatasetVersion = version) {
   const client = new QueryClient();
   const wrap = (node: React.ReactNode) => (
     <QueryClientProvider client={client}>
@@ -99,8 +99,8 @@ function mount(activeKey: string | null) {
       </ToastProvider>
     </QueryClientProvider>
   );
-  const view = render(wrap(tab(activeKey)));
-  return { ...view, rerenderWith: (key: string | null) => view.rerender(wrap(tab(key))) };
+  const view = render(wrap(tab(activeKey, v)));
+  return { ...view, rerenderWith: (key: string | null) => view.rerender(wrap(tab(key, v))) };
 }
 
 const row = (id: string) => document.querySelector<HTMLElement>(`tbody tr[data-row-key="${id}"]`)!;
@@ -130,12 +130,26 @@ describe('ItemsTab with the item pane (cv4 E2)', () => {
   });
 });
 
-describe('ItemsTab row actions (cv4 E5, X8)', () => {
-  it('keeps the row-actions column with the pane open and closed', () => {
+describe('ItemsTab row actions (cv4 E5, X8; feedback 17 Nov D2)', () => {
+  it('keeps the draft Delete action with the pane open and closed, and has no row Copy', () => {
     const view = mount(null);
-    expect(screen.getAllByRole('button', { name: 'Copy as JSON' }).length).toBe(items.length);
+    expect(screen.getAllByRole('button', { name: 'Delete item' }).length).toBe(items.length);
+    expect(screen.queryByRole('button', { name: 'Copy as JSON' })).toBeNull();
     view.rerenderWith('ct-002');
-    expect(screen.getAllByRole('button', { name: 'Copy as JSON' }).length).toBe(items.length);
+    expect(screen.getAllByRole('button', { name: 'Delete item' }).length).toBe(items.length);
+  });
+
+  it('shows no actions column on a published version', () => {
+    const view = mount(null, { ...version, status: 'published' } as unknown as DatasetVersion);
+    expect(screen.queryByRole('button', { name: 'Delete item' })).toBeNull();
+    expect(document.querySelector('[data-pseudo="actions"]')).toBeNull();
+    view.unmount();
+  });
+
+  it('does not pin the # column (feedback 17 Nov D3)', () => {
+    mount(null);
+    const index = row('ct-001').querySelector('td[data-col="index"]')!;
+    expect(index).not.toHaveAttribute('data-pin');
   });
 });
 
