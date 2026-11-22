@@ -1,237 +1,46 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { FactoryDetail, FactoryJob, FactoryList, FactoryRule, FactoryRulesList } from '@/api/factory';
-import type { Project } from '@/api/types';
-import { ProjectContext, type ProjectValue } from '@/features/shell/ProjectContext';
-import { ToastProvider } from '@/ui';
+import type { FactoryJob } from '@/api/factory';
 import { FactoryDetailPage } from '../FactoryDetailPage';
 import { FactoryListPage } from '../FactoryListPage';
 import { parseFactoryRoute, factoryPath } from '../lib/route';
 import { parseJsonObject } from '../dialogs';
-
-const project = {
-  id: 'p1',
-  name: 'Demo',
-  slug: 'demo',
-  is_active: true,
-  role: 'MEMBER',
-} as unknown as Project;
-
-const detail: FactoryDetail = {
-  id: 'f1',
-  project_id: 'p1',
-  project_slug: 'demo',
-  dataset: { id: 'ds1', name: 'Faq', slug: 'faq', deleted: false },
-  group_metadata_key: 'topic',
-  llm_connection: null,
-  access_mode: 'project',
-  analysis_instructions: '',
-  generation_instructions: '',
-  created_by: { id: 'mgr', display_name: 'Mgr', email: 'mgr@x.com' },
-  last_analyzed_at: '2026-11-19T10:00:00Z',
-  created_at: '2026-11-18T10:00:00Z',
-  updated_at: '2026-11-19T10:00:00Z',
-  counts: { categories: 2, rules: 2, official_rules: 1, jobs: 1, active_jobs: 0 },
-  permissions: {
-    access_level: 'approve',
-    can_modify: true,
-    can_approve: true,
-    can_manage_access: false,
-    can_disconnect: false,
-    is_creator: false,
-  },
-  categories: [
-    {
-      id: 'c1',
-      factory_id: 'f1',
-      key: 'general',
-      name: 'General',
-      description: 'Any rule',
-      json_schema: null,
-      position: 0,
-      rule_count: 1,
-      created_at: null,
-      updated_at: null,
-    },
-    {
-      id: 'c2',
-      factory_id: 'f1',
-      key: 'format',
-      name: 'Format',
-      description: 'Shape of the answer',
-      json_schema: { type: 'object', required: ['field'] },
-      position: 1,
-      rule_count: 1,
-      created_at: null,
-      updated_at: null,
-    },
-  ],
-  source_version: {
-    id: 'v',
-    version: 'v3',
-    name: '',
-    item_count: 120,
-    status: 'published',
-    published_at: null,
-  },
-  metadata_keys: [
-    { key: 'topic', kind: 'scalar', values: ['billing', 'shipping'], value_count: 2, truncated: false },
-  ],
-  llm_connections: [{ id: 'llm1', name: 'default', model: 'gpt-x', is_default: true, has_api_key: true }],
-  active_job: null,
-  generation_limits: {
-    max_layers: 5,
-    max_branching: 10,
-    max_items: 5000,
-    defaults: { max_layers: 1, branching: 3, max_items: 500, official_only: true },
-  },
-};
-
-function rule(over: Partial<FactoryRule> & { id: string; title: string }): FactoryRule {
-  return {
-    factory_id: 'f1',
-    category_id: 'c1',
-    category_key: 'general',
-    category_name: 'General',
-    categories: [{ id: 'c1', key: 'general', name: 'General' }],
-    kind: 'rule',
-    bridge_to: [],
-    group_value: 'billing',
-    description: `${over.title} rule`,
-    body: null,
-    official: false,
-    source: 'agent',
-    evidence: ['i1'],
-    job_id: 'j1',
-    created_by: null,
-    approved_by: null,
-    approved_at: null,
-    created_at: '2026-11-19T10:00:00Z',
-    updated_at: '2026-11-19T10:00:00Z',
-    ...over,
-  };
-}
-
-const RULES: FactoryRulesList = {
-  factory_id: 'f1',
-  total: 2,
-  rules: [
-    rule({
-      id: 'r1',
-      title: 'Amounts in SAR',
-      official: true,
-      approved_by: { id: 'mgr', display_name: 'Mgr', email: 'mgr@x.com' },
-    }),
-    rule({ id: 'r2', title: 'Greet back', group_value: '', source: 'manual', evidence: [] }),
-  ],
-  groups: [
-    { value: 'billing', count: 1, official: 1 },
-    { value: '', count: 1, official: 0 },
-  ],
-};
-
-const JOB: FactoryJob = {
-  id: 'j1',
-  factory_id: 'f1',
-  kind: 'generation',
-  status: 'succeeded',
-  params: { max_layers: 2, branching: 3, max_items: 500, official_only: true },
-  progress: { message: '6 items generated', generated: 6, max_items: 500, layer: 2, layers: 2 },
-  error: null,
-  output_dataset: { id: 'ds9', name: 'Faq generated 1', slug: 'faq-gen-1', deleted: false },
-  requested_by: { id: 'me', display_name: 'Me', email: 'me@x.com' },
-  created_at: '2026-11-19T10:00:00Z',
-  started_at: '2026-11-19T10:00:01Z',
-  finished_at: '2026-11-19T10:02:00Z',
-  updated_at: '2026-11-19T10:02:00Z',
-};
-
-const LIST: FactoryList = {
-  project_id: 'p1',
-  project_slug: 'demo',
-  connected_dataset_ids: ['ds1'],
-  factories: [detail],
-};
-
-function stubFetch(over: { detail?: FactoryDetail; rules?: FactoryRulesList; list?: FactoryList } = {}) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input);
-    const body = (payload: unknown, status = 200) =>
-      new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } });
-    if (url.includes('/api/projects/demo/factories')) return body(over.list ?? LIST);
-    if (/\/api\/factories\/f1\/rules\/r\d:(approve|revoke)$/.test(url))
-      return body({ ...RULES.rules[1], official: url.endsWith(':approve') });
-    if (url.includes('/api/factories/f1/rules')) return body(over.rules ?? RULES);
-    if (url.includes('/api/factories/f1/jobs') && init?.method === 'POST') {
-      const sent = init.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
-      return body({ ...JOB, id: 'j2', status: 'queued', kind: sent.kind, params: sent.params ?? {} }, 202);
-    }
-    if (url.includes('/api/factories/f1/jobs')) return body({ factory_id: 'f1', jobs: [JOB] });
-    if (url.includes('/api/factories/f1/access'))
-      return body({
-        access_mode: 'project',
-        grants: [],
-        can_manage_access: false,
-        candidates: [],
-        your_level: 'approve',
-        levels: ['view', 'modify', 'approve'],
-      });
-    if (url.includes('/api/factories/f1')) return body(over.detail ?? detail);
-    return body({});
-  });
-  vi.stubGlobal('fetch', fetchMock);
-  return fetchMock;
-}
-
-function renderPage(
-  ui: React.ReactElement,
-  value: Partial<ProjectValue> = {},
-  path = '/projects/demo/factory/f1',
-) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  const ctx: ProjectValue = {
-    project,
-    slug: 'demo',
-    readOnly: false,
-    archived: false,
-    viewer: false,
-    canManage: false,
-    ...value,
-  } as ProjectValue;
-  return render(
-    <QueryClientProvider client={qc}>
-      <ToastProvider>
-        <MemoryRouter initialEntries={[path]}>
-          <ProjectContext.Provider value={ctx}>{ui}</ProjectContext.Provider>
-        </MemoryRouter>
-      </ToastProvider>
-    </QueryClientProvider>,
-  );
-}
+import { JOB, LIST, detail, renderPage, stubFetch } from './factoryFixtures';
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 describe('factory routes', () => {
-  it('parses the list, the detail and its tab', () => {
+  it('parses the list, the detail, its tab and the open attempt', () => {
+    expect(parseFactoryRoute('f1', new URLSearchParams('tab=generation&job=j9'))).toMatchObject({
+      mode: 'detail',
+      factoryId: 'f1',
+      tab: 'generation',
+      jobId: 'j9',
+    });
+    // A job belongs to the Generation tab only.
+    expect(parseFactoryRoute('f1', new URLSearchParams('tab=rules&job=j9')).jobId).toBeNull();
+    expect(factoryPath('demo', 'f1', 'generation', 'j9')).toBe('/projects/demo/factory/f1?tab=generation&job=j9');
+    expect(factoryPath('demo', 'f1', 'rules', 'j9')).toBe('/projects/demo/factory/f1');
     expect(parseFactoryRoute('', new URLSearchParams())).toEqual({
       mode: 'list',
       factoryId: null,
       tab: 'rules',
+      jobId: null,
     });
     expect(parseFactoryRoute('f1', new URLSearchParams('tab=access'))).toEqual({
       mode: 'detail',
       factoryId: 'f1',
       tab: 'access',
+      jobId: null,
     });
     expect(parseFactoryRoute('f1/extra', new URLSearchParams('tab=nope'))).toEqual({
       mode: 'detail',
       factoryId: 'f1',
       tab: 'rules',
+      jobId: null,
     });
     expect(factoryPath('demo', 'f1', 'generation')).toBe('/projects/demo/factory/f1?tab=generation');
     expect(factoryPath('demo')).toBe('/projects/demo/factory');
@@ -321,9 +130,15 @@ describe('FactoryDetailPage', () => {
         dataset_name: null,
       });
     });
-    expect(await screen.findByTestId('generation-tab')).toBeInTheDocument();
+    // The new attempt opens in the Generation tab (?job=j2): its chart and its items.
+    expect(await screen.findByTestId('attempt-view')).toBeInTheDocument();
+    expect(await screen.findByTestId('attempt-dataset')).toHaveTextContent('Faq generated 1');
+    expect(screen.getByTestId('attempt-meta')).toHaveTextContent('6 items of at most 500 · layer 2 of 2');
+    expect(await screen.findAllByTestId('layer-row')).toHaveLength(3);
+    // Back to the attempts table.
+    await userEvent.click(screen.getByTestId('attempt-back'));
     expect(await screen.findByTestId('job-dataset')).toHaveTextContent('Faq generated 1');
-    expect(screen.getByText(/6 items of at most 500 · layer 2 of 2/)).toBeInTheDocument();
+    expect(screen.getByText('2 approved · 0 rejected · 4 pending')).toBeInTheDocument();
   });
 
   it('hides every change control for a viewer and shows the running job line', async () => {

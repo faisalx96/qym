@@ -49,6 +49,7 @@ FACTORY_TABLES = {
     "factory_rule_links",
     "factory_jobs",
 }
+GENERATED_TABLE = "factory_generated_items"
 
 
 def _seed_items(session_factory, rows):
@@ -1390,6 +1391,7 @@ def test_list_valued_group_key_files_items_in_every_group_and_prompts_carry_exam
             ("i1", {"tables": ["orders", "customers"]}, "Orders per customer?", "JOIN"),
             ("i2", {"tables": ["orders"]}, "Orders today?", "WHERE day"),
             ("i3", {}, "Hi", "Hello"),
+            ("i4", {"tables": ["orders", "customers"]}, "Orders by region?", "GROUP BY"),
         ],
     )
     client.patch(
@@ -1432,7 +1434,7 @@ def test_list_valued_group_key_files_items_in_every_group_and_prompts_carry_exam
     for call in extractions:
         group = call["user"].split("Group: ")[1].split("\n")[0]
         by_group[group] = call["user"]
-    # Three groups: customers (i1), orders (i1 and i2), ungrouped (i3); i1 is read in two of them.
+    # Three groups: customers (i1, i4), orders (i1, i2, i4), ungrouped (i3); i1 is read in two of them.
     assert len(by_group) == 3
     customers = next(v for k, v in by_group.items() if "'customers'" in k)
     orders = next(v for k, v in by_group.items() if "'orders'" in k)
@@ -1488,8 +1490,11 @@ def test_list_valued_group_key_files_items_in_every_group_and_prompts_carry_exam
         f"/api/factories/f1/jobs/{started.json()['id']}", headers=MEMBER
     ).json()
     calls = calls[before:]
-    # i1 takes the orders, customers and global rules (3); i2 orders and global (2); i3 global (1).
+    # i4 takes the orders, customers and global rules (3). i1 and i2 are evidence of the rules of their
+    # groups (the rules were extracted from them, so they already follow them): each takes the global
+    # rule only (1 + 1), as does i3 (1).
     assert job["progress"]["generated"] == 6 and len(calls) == 6
+    assert job["progress"]["already_applied"] == 0
 
     def prompt(base: str, title: str) -> str:
         return next(
@@ -1500,16 +1505,21 @@ def test_list_valued_group_key_files_items_in_every_group_and_prompts_carry_exam
         )
 
     examples = "Items of the dataset that already follow the new rule"
-    # i2 + orders: the example is i1 (i2 itself is left out). i1 + orders: the example is i2.
-    tail = prompt("Orders today?", "Rule of orders").split(examples)[1]
+    # i4 + orders: the examples are the evidence items i1 and i2; i4 + customers: i1 alone.
+    tail = prompt("Orders by region?", "Rule of orders").split(examples)[1]
+    assert "Orders per customer?" in tail and "Orders today?" in tail
+    assert "Orders by region?" not in tail
+    tail = prompt("Orders by region?", "Rule of customers").split(examples)[1]
     assert "Orders per customer?" in tail and "Orders today?" not in tail
-    tail = prompt("Orders per customer?", "Rule of orders").split(examples)[1]
-    assert "Orders today?" in tail and "Orders per customer?" not in tail
-    # i2 + customers never happens (i2 is not in that group); i1 + customers has no other evidence.
-    assert examples not in prompt("Orders per customer?", "Rule of customers")
+    # An evidence item never takes the rule extracted from it: no i1 + orders, i1 + customers or
+    # i2 + orders call (and i2 is not in the customers group at all).
     assert not any(
-        '"title": "Rule of customers"' in c["user"].split("New rule to apply")[1]
-        and '"question": "Orders today?"' in c["user"].split("Base item expected")[0]
+        '"title": "Rule of' in c["user"].split("New rule to apply")[1]
+        and (
+            '"question": "Orders today?"' in c["user"].split("Base item expected")[0]
+            or '"question": "Orders per customer?"'
+            in c["user"].split("Base item expected")[0]
+        )
         for c in calls
     )
     # The global rule has no evidence: no examples section.
@@ -1528,12 +1538,319 @@ def test_list_valued_group_key_files_items_in_every_group_and_prompts_carry_exam
     assert started.status_code == 202, started.text
     assert _run_jobs(session_factory) == ["succeeded"]
     calls = calls[before:]
-    assert len(calls) == 3 and all(
-        '"question": "Orders per customer?"' in c["user"] for c in calls
+    # The base items listing customers: i1 (the global rule) and i4 (its three rules).
+    assert len(calls) == 4 and all(
+        '"question": "Orders per customer?"' in c["user"]
+        or '"question": "Orders by region?"' in c["user"]
+        for c in calls
     )
 
 
-def test_params_and_group_helpers():
+
+def test_a_rule_the_item_already_follows_is_skipped_and_the_next_one_tried(
+    client, session_factory, fake_llm
+):
+    """Two ways an item already follows a rule: the rule's evidence names the item (it was extracted
+    from it: never offered), or the model says so (``already_applies``): the call writes no item and
+    the next rule of the item's pool is tried in its place."""
+    _seed_items(session_factory, [("i1", "", "How do I pay?", "By card.")])
+    with session_factory() as db:
+        db.get(FactoryJob, "fj1").status = "cancelled"
+        db.delete(db.get(FactoryRule, "fr1"))
+        db.commit()
+    for title, evidence in (
+        ("Already", []),
+        ("Currency", []),
+        ("Polite", []),
+        ("Extracted", ["i1"]),
+    ):
+        created = client.post(
+            "/api/factories/f1/rules",
+            json={"category_id": "fc1", "title": title, "description": f"{title}."},
+            headers=MEMBER,
+        )
+        assert created.status_code == 201, created.text
+        if evidence:
+            with session_factory() as db:
+                db.get(FactoryRule, created.json()["id"]).evidence = evidence
+                db.commit()
+        assert (
+            client.post(
+                f"/api/factories/f1/rules/{created.json()['id']}:approve", headers=MGR
+            ).status_code
+            == 200
+        )
+
+    def script(system, user):
+        assert '"already_applies": true' in system
+        rule = user.split("New rule to apply")[1]
+        if '"Already"' in rule:
+            return {"already_applies": True, "note": "the answer names the card already"}
+        name = "Currency" if '"Currency"' in rule else "Polite"
+        return {"input": {"question": f"[{name}] q"}, "expected_output": "a"}
+
+    calls = fake_llm(script)
+    # Branching 2 of a pool of 3 (Extracted is never offered): whichever two are drawn first, the
+    # refused rule is replaced by the one left, so the item gets Currency and Polite.
+    started = client.post(
+        "/api/factories/f1/jobs",
+        json={"kind": "generation", "params": {"max_layers": 1, "branching": 2}},
+        headers=MEMBER,
+    )
+    assert started.status_code == 202, started.text
+    assert _run_jobs(session_factory) == ["succeeded"]
+    job = client.get(
+        f"/api/factories/f1/jobs/{started.json()['id']}", headers=MEMBER
+    ).json()
+    assert job["progress"]["generated"] == 2
+    assert job["progress"]["already_applied"] in (0, 1)
+    assert job["progress"]["already_applied"] == len(calls) - 2
+    assert not any('"title": "Extracted"' in c["user"] for c in calls)
+    if job["progress"]["already_applied"]:
+        assert "already follows the rule" in job["log"]
+        assert "skipped as already followed" in job["log"]
+    with session_factory() as db:
+        output = db.query(Dataset).filter(Dataset.slug == "faq-gen-1").one()
+        version = (
+            db.query(DatasetVersion).filter(DatasetVersion.dataset_id == output.id).one()
+        )
+        inputs = sorted(
+            json.dumps(item.input)
+            for item in db.query(DatasetItem).filter(
+                DatasetItem.dataset_version_id == version.id
+            )
+        )
+        assert inputs == ['{"question": "[Currency] q"}', '{"question": "[Polite] q"}']
+        assert version.item_count == 2
+
+
+def test_generated_items_are_listed_per_layer_and_reviewed(
+    client, session_factory, fake_llm
+):
+    """An attempt's items come with their place in the tree and the counts per layer; the approve
+    level reviews them, and a rejected item is disabled in the output draft."""
+    _seed_items(
+        session_factory,
+        [("i1", "billing", "How do I pay?", "By card."), ("i2", "", "Hi", "Hello")],
+    )
+    client.patch(
+        "/api/factories/f1", json={"group_metadata_key": "topic"}, headers=MEMBER
+    )
+    with session_factory() as db:
+        db.get(FactoryJob, "fj1").status = "cancelled"
+        db.delete(db.get(FactoryRule, "fr1"))
+        db.commit()
+    for title, group in (("SAR", "billing"), ("Polite", "")):
+        created = client.post(
+            "/api/factories/f1/rules",
+            json={
+                "category_id": "fc1",
+                "group_value": group,
+                "title": title,
+                "description": f"{title} rule",
+            },
+            headers=MEMBER,
+        )
+        assert created.status_code == 201
+        assert (
+            client.post(
+                f"/api/factories/f1/rules/{created.json()['id']}:approve", headers=MGR
+            ).status_code
+            == 200
+        )
+
+    def script(system, user):
+        rule = user.split("New rule to apply")[1]
+        name = "SAR" if '"SAR"' in rule else "Polite"
+        return {"input": {"question": f"[{name}] q"}, "expected_output": f"[{name}] a"}
+
+    fake_llm(script)
+    started = client.post(
+        "/api/factories/f1/jobs",
+        json={"kind": "generation", "params": {"max_layers": 2, "branching": 3}},
+        headers=MEMBER,
+    )
+    assert started.status_code == 202, started.text
+    assert _run_jobs(session_factory) == ["succeeded"]
+    job_id = started.json()["id"]
+    # Layer 1: i1 + SAR, i1 + Polite, i2 + Polite (3); layer 2: i1's children take the other rule (2).
+    listed = client.get(f"/api/factories/f1/jobs/{job_id}/items", headers=MEMBER)
+    assert listed.status_code == 200, listed.text
+    body = listed.json()
+    assert body["total"] == 5 and body["base_items"] == 2 and body["dataset_draft"]
+    assert body["dataset"]["slug"] == "faq-gen-1"
+    assert body["layers"] == [
+        {"layer": 1, "pending": 3, "approved": 0, "rejected": 0, "total": 3},
+        {"layer": 2, "pending": 2, "approved": 0, "rejected": 0, "total": 2},
+    ]
+    assert body["review"] == {"pending": 5, "approved": 0, "rejected": 0, "total": 5}
+    first = body["items"][0]
+    assert first["layer"] == 1 and first["parent_item_id"] == first["base_item_id"]
+    assert first["rule"]["title"] in ("SAR", "Polite") and first["review"] == "pending"
+    assert first["input"]["question"].startswith("[") and not first["missing"]
+    deep = [i for i in body["items"] if i["layer"] == 2]
+    assert all(i["base_item_id"] == "i1" and i["parent_item_id"] != "i1" for i in deep)
+    assert all(
+        len(i["metadata"]["factory"]["rule_titles"]) == 2 and not i["disabled"]
+        for i in deep
+    )
+    # Filters: layer, review, a search over the item text; paging.
+    assert client.get(
+        f"/api/factories/f1/jobs/{job_id}/items",
+        params={"layer": 2},
+        headers=MEMBER,
+    ).json()["total"] == 2
+    assert client.get(
+        f"/api/factories/f1/jobs/{job_id}/items",
+        params={"q": "[SAR] q", "layer": 1},
+        headers=MEMBER,
+    ).json()["total"] == 1
+    page = client.get(
+        f"/api/factories/f1/jobs/{job_id}/items",
+        params={"limit": 2, "offset": 4},
+        headers=MEMBER,
+    ).json()
+    assert page["total"] == 5 and len(page["items"]) == 1
+    # The jobs list carries the review counts.
+    jobs = client.get("/api/factories/f1/jobs", headers=MEMBER).json()["jobs"]
+    assert jobs[0]["review"] == {"pending": 5, "approved": 0, "rejected": 0, "total": 5}
+    # Reviewing takes the approve level; an unknown item is 404; a body naming nothing is 422.
+    ids = [i["item_id"] for i in body["items"]]
+    assert (
+        client.post(
+            f"/api/factories/f1/jobs/{job_id}/items:review",
+            json={"review": "approved", "item_ids": ids[:1]},
+            headers=MEMBER,
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            f"/api/factories/f1/jobs/{job_id}/items:review",
+            json={"review": "approved", "item_ids": ["nope"]},
+            headers=MGR,
+        ).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            f"/api/factories/f1/jobs/{job_id}/items:review",
+            json={"review": "approved"},
+            headers=MGR,
+        ).status_code
+        == 422
+    )
+    deep_ids = [i["item_id"] for i in deep]
+    rejected = client.post(
+        f"/api/factories/f1/jobs/{job_id}/items:review",
+        json={"review": "rejected", "item_ids": deep_ids},
+        headers=MGR,
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["changed"] == 2 and rejected.json()["applied_to_dataset"]
+    assert rejected.json()["counts"] == {
+        "pending": 3,
+        "approved": 0,
+        "rejected": 2,
+        "total": 5,
+    }
+    with session_factory() as db:
+        output = db.query(Dataset).filter(Dataset.slug == "faq-gen-1").one()
+        version = (
+            db.query(DatasetVersion).filter(DatasetVersion.dataset_id == output.id).one()
+        )
+        disabled = {
+            item.item_id: item.disabled_reason
+            for item in db.query(DatasetItem).filter(
+                DatasetItem.dataset_version_id == version.id,
+                DatasetItem.disabled_at.isnot(None),
+            )
+        }
+        assert disabled == {i: "Rejected in the factory review" for i in deep_ids}
+    shown = client.get(
+        f"/api/factories/f1/jobs/{job_id}/items",
+        params={"review": "rejected"},
+        headers=MEMBER,
+    ).json()
+    assert {i["item_id"] for i in shown["items"]} == set(deep_ids)
+    assert all(
+        i["disabled"] and i["reviewed_by"]["id"] == "mgr" and i["reviewed_at"]
+        for i in shown["items"]
+    )
+    # Every pending item approved at once; a rejected one taken back to pending is enabled again.
+    approved = client.post(
+        f"/api/factories/f1/jobs/{job_id}/items:review",
+        json={"review": "approved", "all_pending": True},
+        headers=MGR,
+    ).json()
+    assert approved["changed"] == 3 and approved["counts"]["approved"] == 3
+    reset = client.post(
+        f"/api/factories/f1/jobs/{job_id}/items:review",
+        json={"review": "pending", "item_ids": deep_ids[:1]},
+        headers=MGR,
+    ).json()
+    assert reset["changed"] == 1 and reset["counts"] == {
+        "pending": 1,
+        "approved": 3,
+        "rejected": 1,
+        "total": 5,
+    }
+    with session_factory() as db:
+        assert (
+            db.query(DatasetItem)
+            .filter(
+                DatasetItem.dataset_version_id == version.id,
+                DatasetItem.disabled_at.isnot(None),
+            )
+            .count()
+            == 1
+        )
+    # Removing the output dataset leaves the attempt's rows: its items are "missing".
+    with session_factory() as db:
+        db.query(DatasetItem).filter(
+            DatasetItem.dataset_version_id == version.id
+        ).delete(synchronize_session=False)
+        db.commit()
+    gone = client.get(f"/api/factories/f1/jobs/{job_id}/items", headers=MEMBER).json()
+    assert gone["total"] == 5 and all(i["missing"] for i in gone["items"])
+
+
+def test_a_rule_detail_carries_its_evidence_items(client, session_factory):
+    _seed_items(
+        session_factory,
+        [("i1", "billing", "How do I pay?", "By card."), ("i2", "", "Hi", "Hello")],
+    )
+    with session_factory() as db:
+        db.get(FactoryRule, "fr1").evidence = ["i2", "gone", "i1"]
+        db.commit()
+    shown = client.get("/api/factories/f1/rules/fr1", headers=MEMBER)
+    assert shown.status_code == 200, shown.text
+    body = shown.json()
+    assert body["id"] == "fr1" and body["evidence"] == ["i2", "gone", "i1"]
+    assert [(e["item_id"], e["missing"]) for e in body["evidence_items"]] == [
+        ("i2", False),
+        ("gone", True),
+        ("i1", False),
+    ]
+    assert body["evidence_items"][2]["input"] == {"question": "How do I pay?"}
+    assert body["evidence_items"][2]["expected_output"] == "By card."
+    assert body["source_version"]["version"] == "v1"
+    assert (
+        client.get("/api/factories/f1/rules/nope", headers=MEMBER).status_code == 404
+    )
+    assert (
+        client.get("/api/factories/f1/rules/fr1", headers=OUTSIDER).status_code == 404
+    )
+
+
+def test_params_and_group_helpers(monkeypatch):
+    assert svc.max_items_per_job() == 5000
+    monkeypatch.setenv("QYM_FACTORY_MAX_ITEMS", "40")
+    assert svc.max_items_per_job() == 40
+    assert svc.validate_params("generation", {"max_items": 40})["max_items"] == 40
+    with pytest.raises(ValueError, match="1 to 40"):
+        svc.validate_params("generation", {"max_items": 41})
+    monkeypatch.delenv("QYM_FACTORY_MAX_ITEMS")
     assert svc.validate_params("generation", None) == {
         "max_layers": 1,
         "branching": 3,
@@ -1571,17 +1888,19 @@ def test_params_and_group_helpers():
     assert svc.body_problem([1], None) is not None
 
 
-def test_migrations_0105_and_0107_match_the_models_and_downgrade(
+def test_migrations_0105_0107_and_0108_match_the_models_and_downgrade(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from alembic.autogenerate import compare_metadata
 
     migration = _load_migration("0105_data_factory.py")
     bridges = _load_migration("0107_bridge_groups.py")
+    generated = _load_migration("0108_factory_generated_items.py")
+    all_tables = FACTORY_TABLES | {GENERATED_TABLE}
     engine = sa.create_engine("sqlite://")
     Base.metadata.create_all(
         engine,
-        tables=[t for t in Base.metadata.sorted_tables if t.name not in FACTORY_TABLES],
+        tables=[t for t in Base.metadata.sorted_tables if t.name not in all_tables],
     )
     with engine.begin() as connection:
         monkeypatch.setattr(
@@ -1642,16 +1961,26 @@ def test_migrations_0105_and_0107_match_the_models_and_downgrade(
         assert connection.execute(
             sa.text("SELECT id, role FROM factory_rule_links ORDER BY id")
         ).fetchall() == [("l2", "category")]
+        monkeypatch.setattr(
+            generated, "op", Operations(MigrationContext.configure(connection))
+        )
+        generated.upgrade()
+        assert {
+            fk["referred_table"]: fk["options"].get("ondelete")
+            for fk in sa.inspect(connection).get_foreign_keys(GENERATED_TABLE)
+        } == {"factory_jobs": "CASCADE", "data_factories": "CASCADE", "users": "SET NULL"}
 
         def only_factory(obj, name, kind, reflected, compare_to):  # type: ignore[no-untyped-def]
             table = obj if kind == "table" else getattr(obj, "table", None)
-            return getattr(table, "name", name) in FACTORY_TABLES
+            return getattr(table, "name", name) in all_tables
 
         context = MigrationContext.configure(
             connection, opts={"compare_type": True, "include_object": only_factory}
         )
         diffs = compare_metadata(context, Base.metadata)
         assert diffs == [], diffs
+        generated.downgrade()
+        assert GENERATED_TABLE not in sa.inspect(connection).get_table_names()
         bridges.downgrade()
         assert "bridge_to_groups" not in {
             c["name"] for c in sa.inspect(connection).get_columns("factory_rules")

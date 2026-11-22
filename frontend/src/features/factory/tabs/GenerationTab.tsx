@@ -1,7 +1,8 @@
 /**
- * Factory → Generation: the analysis and generation jobs, newest first, with their state, progress, the dataset a
- * generation wrote to (a link to its items, where the review and the edits happen), and the Cancel and Log actions.
- * The table refetches every 3 s while a job is queued or running ("Updates automatically").
+ * Factory → Generation: the attempts (analysis and generation jobs, newest first) with their state, progress, the
+ * dataset a generation wrote to and the review of its items; a generation row opens the attempt (the layer chart
+ * and the items to review, `?job=`), the Log action opens the job's log. The table refetches every 3 s while a
+ * job is queued or running ("Updates automatically").
  */
 import { useState } from 'react';
 import { datasetPath } from '@/features/datasets/lib/route';
@@ -13,9 +14,8 @@ import {
   useFactoryJobs,
   type FactoryDetail,
   type FactoryJob,
-  type FactoryJobStatus,
 } from '@/api/factory';
-import { APP_LOCALE, formatAgo } from '@/lib/dates';
+import { formatAgo } from '@/lib/dates';
 import { actionErrorMessage } from '@/lib/http';
 import { tableLoading, useDelayedPending } from '@/lib/pending';
 import {
@@ -26,64 +26,16 @@ import {
   Icon,
   IconButton,
   Skeleton,
-  StatusMark,
   Text,
   TextLink,
   UserName,
   useToast,
   type Column,
-  type StatusShape,
-  type StatusTone,
 } from '@/ui';
 import { jobTitle } from '../FactoryDetailPage';
 import styles from '../FactoryDetailPage.module.css';
-
-const MARK: Record<FactoryJobStatus, { tone: StatusTone; shape: StatusShape }> = {
-  queued: { tone: 'neutral', shape: 'ring' },
-  running: { tone: 'info', shape: 'orbit' },
-  cancel_requested: { tone: 'warning', shape: 'pause' },
-  succeeded: { tone: 'success', shape: 'full' },
-  failed: { tone: 'danger', shape: 'cross' },
-  cancelled: { tone: 'neutral', shape: 'pause' },
-};
-const LABEL: Record<FactoryJobStatus, string> = {
-  queued: 'Queued',
-  running: 'Running',
-  cancel_requested: 'Stopping',
-  succeeded: 'Done',
-  failed: 'Failed',
-  cancelled: 'Cancelled',
-};
-
-function progressText(job: FactoryJob): string {
-  const p = job.progress;
-  if (job.kind === 'generation' && typeof p.generated === 'number') {
-    const cap =
-      typeof p.max_items === 'number' ? ` of at most ${p.max_items.toLocaleString(APP_LOCALE)}` : '';
-    const layer =
-      typeof p.layer === 'number' && typeof p.layers === 'number' && p.layer > 0
-        ? ` · layer ${p.layer} of ${p.layers}`
-        : '';
-    return `${p.generated.toLocaleString(APP_LOCALE)} item${p.generated === 1 ? '' : 's'}${cap}${layer}`;
-  }
-  if (job.kind === 'analysis' && typeof p.rules_added === 'number') {
-    const done =
-      typeof p.done === 'number' && typeof p.total === 'number' ? ` · ${p.done} of ${p.total} calls` : '';
-    return `${p.rules_added} rule${p.rules_added === 1 ? '' : 's'} added${done}`;
-  }
-  return String(p.message ?? '');
-}
-
-function paramsText(job: FactoryJob): string {
-  const p = job.params;
-  if (job.kind !== 'generation') return 'Rule analysis';
-  const parts = [
-    `${p.max_layers ?? 1} layer${p.max_layers === 1 ? '' : 's'}`,
-    `${p.branching ?? 1} per item`,
-  ];
-  if (p.official_only === false) parts.push('proposed rules too');
-  return parts.join(' · ');
-}
+import { AttemptView } from './AttemptView';
+import { JobStatusMark, paramsText, progressText, reviewText } from './jobText';
 
 function LogDialog({
   factoryId,
@@ -125,12 +77,19 @@ export function GenerationTab({
   factory,
   slug,
   canModify,
+  canApprove,
+  jobId,
+  onOpenJob,
   onGenerate,
   busyReason,
 }: {
   factory: FactoryDetail;
   slug: string;
   canModify: boolean;
+  canApprove: boolean;
+  /** The attempt open in the tab (`?job=`), else null: the attempts table. */
+  jobId: string | null;
+  onOpenJob: (jobId: string | null) => void;
   onGenerate: () => void;
   busyReason?: string;
 }) {
@@ -142,10 +101,24 @@ export function GenerationTab({
   const [log, setLog] = useState<FactoryJob | null>(null);
   const jobs = list.data?.jobs ?? [];
 
+  if (jobId)
+    return (
+      <div className={styles.tab} data-testid="generation-tab">
+        <AttemptView
+          factory={factory}
+          slug={slug}
+          jobId={jobId}
+          canModify={canModify}
+          canApprove={canApprove}
+          onBack={() => onOpenJob(null)}
+        />
+      </div>
+    );
+
   const columns: Column<FactoryJob>[] = [
     {
       id: 'kind',
-      header: 'Job',
+      header: 'Attempt',
       width: 180,
       priority: 1,
       cardTitle: true,
@@ -157,14 +130,7 @@ export function GenerationTab({
       header: 'Status',
       width: 120,
       priority: 1,
-      cell: (j) => (
-        <StatusMark
-          tone={MARK[j.status].tone}
-          shape={MARK[j.status].shape}
-          label={LABEL[j.status]}
-          data-status={j.status}
-        />
-      ),
+      cell: (j) => <JobStatusMark job={j} />,
     },
     {
       id: 'progress',
@@ -175,6 +141,7 @@ export function GenerationTab({
       wrap: true,
       cell: (j) =>
         j.status === 'failed' && j.error ? <span className={styles.muted}>{j.error}</span> : progressText(j),
+      secondary: (j) => reviewText(j),
     },
     {
       id: 'output',
@@ -221,10 +188,19 @@ export function GenerationTab({
       id: 'actions',
       header: 'Actions',
       hideLabel: true,
-      width: 80,
+      width: 110,
       priority: 1,
       cell: (j) => (
         <span className={styles.rowActions}>
+          {j.kind === 'generation' ? (
+            <IconButton
+              tile
+              icon="review"
+              label="Open the attempt: its layers and the items to review"
+              onPress={() => onOpenJob(j.id)}
+              data-testid="job-open"
+            />
+          ) : null}
           <IconButton
             tile
             icon="file"
@@ -255,7 +231,8 @@ export function GenerationTab({
     <div className={styles.tab} data-testid="generation-tab">
       <div className={styles.toolbar}>
         <Text as="p" variant="base" tone="muted">
-          A generation writes its items to a new draft dataset; open it to review, edit and publish them.
+          A generation writes its items to a new draft dataset. Open an attempt to see the layers it grew and to
+          review its items; a rejected item is disabled in the dataset.
         </Text>
         <span className={styles.toolbarEnd}>
           {anyActive ? <span className={styles.toolbarNote}>Updates automatically</span> : null}
@@ -274,7 +251,7 @@ export function GenerationTab({
         </span>
       </div>
       <DataTable<FactoryJob>
-        aria-label="Factory jobs"
+        aria-label="Factory attempts"
         rows={jobs}
         rowKey={(j) => j.id}
         columns={columns}
@@ -282,11 +259,13 @@ export function GenerationTab({
         refreshing={list.isFetching && !list.isPending}
         error={list.error}
         onRetry={() => void list.refetch()}
-        errorTitle="Couldn’t load the jobs"
+        errorTitle="Couldn’t load the attempts"
+        onRowOpen={(j) => (j.kind === 'generation' ? onOpenJob(j.id) : setLog(j))}
+        rowOpenNow
         empty={
           <EmptyState
             compact
-            title="No job yet"
+            title="No attempt yet"
             body={
               canModify
                 ? 'Analyze the rules first, approve the ones you keep, then generate data.'
@@ -294,7 +273,7 @@ export function GenerationTab({
             }
           />
         }
-        rowProps={(j) => ({ 'data-status': j.status })}
+        rowProps={(j) => ({ 'data-status': j.status, 'data-kind': j.kind })}
       />
       <LogDialog factoryId={factory.id} job={log} onClose={() => setLog(null)} />
     </div>

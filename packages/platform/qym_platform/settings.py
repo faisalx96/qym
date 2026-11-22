@@ -245,6 +245,9 @@ class PlatformSettings(BaseSettings):
     analysis_job_max_workers: int = Field(default=2, ge=1)
     # Data factory: model calls in flight per job (generation and analysis batches).
     factory_llm_concurrency: int = Field(default=4, ge=1, le=16)
+    # The most items one generation job may write (the item cap's ceiling in the UI);
+    # every generated item is one model call, so the cap bounds a job's cost.
+    factory_max_items: int = Field(default=5000, ge=1, le=1_000_000)
     # One model call of a factory job: seconds before the client gives up (one retry
     # follows), and the items one rule-analysis call reads (the prompt size).
     factory_llm_timeout_seconds: int = Field(default=180, ge=10, le=3600)

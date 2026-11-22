@@ -118,6 +118,7 @@ ROUTE_ROLES: Dict[Tuple[str, str], str] = {
     ("PATCH", "/api/factories/{factory_id}/categories/{category_id}"): "member",
     ("POST", "/api/factories/{factory_id}/jobs"): "member",
     ("POST", "/api/factories/{factory_id}/jobs/{job_id}:cancel"): "member",
+    ("POST", "/api/factories/{factory_id}/jobs/{job_id}/items:review"): "factory_approver",
     ("POST", "/api/factories/{factory_id}/rules"): "member",
     ("DELETE", "/api/factories/{factory_id}/rules/{rule_id}"): "member",
     ("PATCH", "/api/factories/{factory_id}/rules/{rule_id}"): "member",

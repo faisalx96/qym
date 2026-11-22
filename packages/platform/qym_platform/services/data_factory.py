@@ -48,6 +48,7 @@ from qym_platform.db.models import (
     DatasetVersionChange,
     DatasetVersionStatus,
     FactoryGrant,
+    FactoryGeneratedItem,
     FactoryJob,
     FactoryJobKind,
     FactoryRule,
@@ -86,7 +87,7 @@ ANALYSIS_SAMPLE_DEFAULT = 60
 # Generation limits: layers of rules per item, children per parent and layer, items per job.
 MAX_LAYERS = 5
 MAX_BRANCHING = 10
-MAX_ITEMS_PER_JOB = 5000
+MAX_ITEMS_PER_JOB = 5000  # the default of QYM_FACTORY_MAX_ITEMS, see max_items_per_job()
 GENERATION_DEFAULTS = {
     "max_layers": 1,
     "branching": 3,
@@ -457,7 +458,10 @@ rule are given, apply the rule the way they do, in the same form and to the same
 from the base item, never from those examples. Keep the language, the domain, the tone and the exact data shape of
 the base item: when the input or the expected output is a JSON object, answer with the same keys.
 Answer with JSON only: {"input": <same shape as the base input>, "expected_output": <same shape as the base expected
-output>, "note": "<one sentence on what changed>"}."""
+output>, "note": "<one sentence on what changed>"}.
+When the base item already follows the new rule (the rule is already at work in its input or expected output, so
+applying it would change nothing of substance), do not write an item: answer {"already_applies": true, "note": "<why>"}
+instead, and another rule will be tried on the item."""
 
 
 def _text(value: Any, limit: int = FIELD_TEXT_MAX) -> str:
@@ -620,6 +624,11 @@ def generation_prompt(
 # ── Job parameters ───────────────────────────────────────────────────────────
 
 
+def max_items_per_job() -> int:
+    """The most items one generation job may write: ``QYM_FACTORY_MAX_ITEMS`` (5000 by default)."""
+    return int(PlatformSettings().factory_max_items)
+
+
 def validate_params(kind: str, params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """The normalized job parameters; raises ``ValueError`` with the problem."""
     raw = dict(params or {})
@@ -654,7 +663,7 @@ def validate_params(kind: str, params: Optional[Dict[str, Any]]) -> Dict[str, An
         for name, upper in (
             ("max_layers", MAX_LAYERS),
             ("branching", MAX_BRANCHING),
-            ("max_items", MAX_ITEMS_PER_JOB),
+            ("max_items", max_items_per_job()),
         ):
             value = raw.get(name, GENERATION_DEFAULTS[name])
             if (
@@ -1543,11 +1552,36 @@ def _with_groups(metadata: Dict[str, Any], key: Optional[str], groups: Tuple[str
 
 
 def _insert_generated(
-    db: Session, version_id: str, rows: List[Dict[str, Any]], start_index: int
+    db: Session,
+    version_id: str,
+    rows: List[Dict[str, Any]],
+    start_index: int,
+    *,
+    job_id: str,
+    factory_id: str,
 ) -> None:
+    """Write the generated items of one batch and their ``factory_generated_items`` rows (the caller commits)."""
     table = DatasetItem.__table__
     now = utc_now_naive()
     batch = []
+    tree = [
+        {
+            "job_id": job_id,
+            "factory_id": factory_id,
+            "dataset_version_id": version_id,
+            "item_id": row["item_id"],
+            "base_item_id": row["base_item_id"],
+            "parent_item_id": row["parent_item_id"],
+            "layer": row["layer"],
+            "rule_id": row.get("rule_id"),
+            "rule_title": (row.get("rule_title") or "")[:300],
+            "review": "pending",
+            "created_at": now,
+        }
+        for row in rows
+    ]
+    if tree:
+        db.execute(insert(FactoryGeneratedItem.__table__), tree)
     for offset, row in enumerate(rows):
         fingerprint = build_identity_fingerprint(
             input_value=row["input"],
@@ -1634,11 +1668,17 @@ async def _run_generation(ctx: JobContext) -> None:
     }
 
     def applicable(node: _Node) -> List[FactoryRule]:
-        """The rules of the item's groups, the ones its bridges opened included, and the global ones, not yet applied."""
+        """The rules of the item's groups, the ones its bridges opened included, and the global ones, not yet
+        applied. A rule whose evidence names the item's base item was extracted from it, so the item already
+        follows it: it is left out (the model refuses the others that already apply, see ``child``)."""
         done_ids = {r.id for r in node.applied}
         wanted = {*node.groups, UNGROUPED} if key else {UNGROUPED}
         return [
-            r for r in rules if r.group_value in wanted and r.id not in done_ids
+            r
+            for r in rules
+            if r.group_value in wanted
+            and r.id not in done_ids
+            and node.base_item_id not in (r.evidence or [])
         ]
 
     def examples_for(node: _Node, rule: FactoryRule) -> List[DatasetItem]:
@@ -1672,6 +1712,7 @@ async def _run_generation(ctx: JobContext) -> None:
     semaphore = asyncio.Semaphore(settings.factory_llm_concurrency)
     generated = 0
     failed_calls = 0
+    already_applied = 0
     existing_ids: set[str] = set()
     try:
         with ctx.session_factory() as db:
@@ -1733,11 +1774,14 @@ async def _run_generation(ctx: JobContext) -> None:
             base_items=len(frontier),
             rules=len(rules),
             failed_calls=0,
+            already_applied=0,
         )
 
         async def child(
-            parent: _Node, rule: FactoryRule, n: int
-        ) -> Optional[Dict[str, Any]]:
+            parent: _Node, rule: FactoryRule
+        ) -> Tuple[str, Optional[Dict[str, Any]]]:
+            """One model call: ``("ok", answer)``, ``("already", None)`` when the model found the rule already at
+            work in the item (another rule is tried), or ``("failed", None)``."""
             prompt = generation_prompt(
                 base_input=parent.input,
                 base_expected=parent.expected,
@@ -1760,12 +1804,24 @@ async def _run_generation(ctx: JobContext) -> None:
                 ctx.log(
                     f"{parent.item_id} + {rule.title}: model call failed ({type(exc).__name__}: {str(exc)[:200]})"
                 )
-                return None
+                return "failed", None
+            if answer.get("already_applies") is True and "input" not in answer:
+                ctx.log(
+                    f"{parent.item_id} + {rule.title}: the item already follows the rule"
+                    + (f" ({str(answer.get('note'))[:200]})" if answer.get("note") else "")
+                    + "; another rule is tried"
+                )
+                return "already", None
             if "input" not in answer:
                 ctx.log(
                     f"{parent.item_id} + {rule.title}: the model answered without an input"
                 )
-                return None
+                return "failed", None
+            return "ok", answer
+
+        def child_row(
+            parent: _Node, rule: FactoryRule, n: int, answer: Dict[str, Any]
+        ) -> Dict[str, Any]:
             layer = len(parent.applied) + 1
             applied = parent.applied + [rule]
             # A bridge extends the item into its groups: the next layer may take their rules.
@@ -1789,6 +1845,11 @@ async def _run_generation(ctx: JobContext) -> None:
                 "input": answer.get("input"),
                 "expected_output": answer.get("expected_output"),
                 "metadata": metadata,
+                "layer": layer,
+                "base_item_id": parent.base_item_id,
+                "parent_item_id": parent.item_id,
+                "rule_id": rule.id,
+                "rule_title": rule.title,
                 "node": _Node(
                     f"{parent.item_id}~L{layer}.{n}",
                     parent.base_item_id,
@@ -1813,35 +1874,56 @@ async def _run_generation(ctx: JobContext) -> None:
                 if generated >= max_items:
                     break
                 parents = frontier[start : start + batch_parents]
-                tasks = []
+                # Each parent takes `branching` rules from its pool, in a random order; a rule the model finds
+                # already at work in the item is dropped and the next rule of the pool is tried in its place,
+                # until the parent has its children or its pool is used up.
+                queues: Dict[str, List[FactoryRule]] = {}
+                need: Dict[str, int] = {}
+                made: Dict[str, int] = {}
                 for parent in parents:
                     pool = applicable(parent)
                     if not pool:
                         continue
-                    chosen = rng.sample(pool, min(branching, len(pool)))
-                    for n, rule in enumerate(chosen, start=1):
-                        if generated + len(tasks) >= max_items:
-                            break
-                        tasks.append(child(parent, rule, n))
-                if not tasks:
-                    continue
-                results = await asyncio.gather(*tasks)
-                rows = [
-                    r
-                    for r in results
-                    if r is not None and r["item_id"] not in existing_ids
-                ]
-                failed_calls += sum(1 for r in results if r is None)
+                    queue = list(pool)
+                    rng.shuffle(queue)
+                    queues[parent.item_id] = queue
+                    need[parent.item_id] = min(branching, len(pool))
+                    made[parent.item_id] = 0
+                rows: List[Dict[str, Any]] = []
+                while True:
+                    pending: List[Tuple[_Node, FactoryRule]] = []
+                    for parent in parents:
+                        queue = queues.get(parent.item_id, [])
+                        while queue and need[parent.item_id] > 0:
+                            if generated + len(rows) + len(pending) >= max_items:
+                                break
+                            need[parent.item_id] -= 1
+                            pending.append((parent, queue.pop()))
+                    if not pending:
+                        break
+                    results = await asyncio.gather(
+                        *(child(parent, rule) for parent, rule in pending)
+                    )
+                    for (parent, rule), (outcome, answer) in zip(pending, results):
+                        if outcome == "ok" and answer is not None:
+                            made[parent.item_id] += 1
+                            row = child_row(parent, rule, made[parent.item_id], answer)
+                            if row["item_id"] not in existing_ids:
+                                rows.append(row)
+                        elif outcome == "already":
+                            already_applied += 1
+                            need[parent.item_id] += 1
+                        else:
+                            failed_calls += 1
                 if rows:
                     with ctx.session_factory() as db:
                         _insert_generated(
                             db,
                             out_version_id,
-                            [
-                                {k: v for k, v in row.items() if k != "node"}
-                                for row in rows
-                            ],
+                            rows,
                             generated,
+                            job_id=ctx.job_id,
+                            factory_id=ctx.factory_id,
                         )
                         out_version = db.get(DatasetVersion, out_version_id)
                         generated += len(rows)
@@ -1858,6 +1940,7 @@ async def _run_generation(ctx: JobContext) -> None:
                     layer=layer,
                     generated=generated,
                     failed_calls=failed_calls,
+                    already_applied=already_applied,
                 )
             ctx.log(f"Layer {layer}: {len(next_frontier)} item(s) generated")
             frontier = next_frontier
@@ -1869,11 +1952,17 @@ async def _run_generation(ctx: JobContext) -> None:
     ctx.log(
         f"Done: {generated} item(s) in {output_name}"
         + (f", {failed_calls} failed call(s)" if failed_calls else "")
+        + (
+            f", {already_applied} rule(s) skipped as already followed"
+            if already_applied
+            else ""
+        )
     )
     ctx.commit(
         message=f"{generated} items generated",
         generated=generated,
         failed_calls=failed_calls,
+        already_applied=already_applied,
     )
 
 
@@ -1901,6 +1990,7 @@ __all__ = [
     "group_value_of",
     "group_values_of",
     "llm_connection_for",
+    "max_items_per_job",
     "metadata_key_choices",
     "normalize_title",
     "rule_category_map",

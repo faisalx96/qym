@@ -32,6 +32,7 @@ import {
   Textarea,
   ToggleChips,
 } from '@/ui';
+import { SchemaBuilder, initialSchemaState, schemaOutcome } from './SchemaBuilder';
 import styles from './FactoryDialogs.module.css';
 
 const NONE = '__none';
@@ -233,16 +234,16 @@ export function CategoryDialog(props: CategoryDialogProps) {
 function CategoryEditor({ onOpenChange, existing, onSave }: CategoryDialogProps) {
   const [name, setName] = useState(existing?.name ?? '');
   const [description, setDescription] = useState(existing?.description ?? '');
-  const [schema, setSchema] = useState(
-    existing?.json_schema ? JSON.stringify(existing.json_schema, null, 2) : '',
-  );
+  const [schema, setSchema] = useState(() => initialSchemaState(existing?.json_schema ?? null));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const parsed = parseJsonObject(schema);
+  const outcome = schemaOutcome(schema);
   const blocker = !name.trim()
     ? 'Give the category a name'
-    : parsed.error
-      ? 'Fix the schema first'
+    : outcome.problem
+      ? schema.mode === 'fields'
+        ? outcome.problem
+        : 'Fix the schema first'
       : undefined;
 
   async function submit() {
@@ -250,7 +251,7 @@ function CategoryEditor({ onOpenChange, existing, onSave }: CategoryDialogProps)
     setBusy(true);
     setError(null);
     try {
-      await onSave({ name: name.trim(), description: description.trim(), json_schema: parsed.value });
+      await onSave({ name: name.trim(), description: description.trim(), json_schema: outcome.schema });
       onOpenChange(false);
     } catch (e) {
       setError(actionErrorMessage(existing ? 'save the category' : 'add the category', e));
@@ -263,7 +264,7 @@ function CategoryEditor({ onOpenChange, existing, onSave }: CategoryDialogProps)
       open
       onOpenChange={onOpenChange}
       title={existing ? 'Edit category' : 'Add category'}
-      description="A kind of rule the agent looks for. The description tells it what counts; a JSON schema makes every rule carry a structured body."
+      description="A kind of rule the agent looks for. The description tells it what counts; the body fields make every rule of the category carry a structured body the agent fills."
       size="lg"
       footer={
         <Footer
@@ -293,20 +294,7 @@ function CategoryEditor({ onOpenChange, existing, onSave }: CategoryDialogProps)
           placeholder="Rules about amounts, currencies and discounts that an answer must respect."
           data-testid="category-description"
         />
-        <Textarea
-          label="Rule body JSON schema"
-          value={schema}
-          onChange={setSchema}
-          rows={8}
-          mono
-          spellCheck={false}
-          placeholder={
-            '{"type": "object", "required": ["field"], "properties": {"field": {"type": "string"}}}'
-          }
-          help="Optional. When set, every rule of this category carries a body that follows it (strictly checked); the agent fills it."
-          errorMessage={parsed.error ?? undefined}
-          data-testid="category-schema"
-        />
+        <SchemaBuilder state={schema} onChange={setSchema} />
         <ErrorLine error={error} />
       </div>
     </Dialog>
@@ -661,9 +649,9 @@ function GenerateEditor({ onOpenChange, factory, groups, onStart }: GenerateDial
             onChange={setMaxItems}
             minValue={1}
             maxValue={limits.max_items}
-            step={50}
+            step={1}
             width={140}
-            help="The job stops there"
+            help={`The job stops there; at most ${limits.max_items.toLocaleString(APP_LOCALE)}`}
           />
         </div>
         <Text as="p" variant="sm" tone="muted" data-testid="generate-estimate">

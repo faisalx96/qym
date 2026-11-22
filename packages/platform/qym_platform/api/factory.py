@@ -21,13 +21,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from qym_platform.auth import Principal, require_ui_principal
 from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
-from qym_platform.db.models import (FACTORY_GRANT_LEVELS, DataFactory, Dataset,
-                                    DatasetVersion, FactoryGrant, FactoryJob,
-                                    FactoryJobKind, FactoryRule,
-                                    FactoryRuleCategory, FactoryRuleLink,
-                                    Project, ProjectLlmConnection,
-                                    ProjectMembership, ProjectRole, User,
-                                    UserRole)
+from qym_platform.db.models import (FACTORY_GRANT_LEVELS, FACTORY_REVIEW_STATES,
+                                    DataFactory, Dataset, DatasetItem,
+                                    DatasetVersion, FactoryGeneratedItem,
+                                    FactoryGrant, FactoryJob, FactoryJobKind,
+                                    FactoryRule, FactoryRuleCategory,
+                                    FactoryRuleLink, Project,
+                                    ProjectLlmConnection, ProjectMembership,
+                                    ProjectRole, User, UserRole)
 from qym_platform.deps import get_db
 from qym_platform.log import get_logger
 from qym_platform.permissions import (can_view_dataset_items,
@@ -57,6 +58,10 @@ FACTORY_DELETE_DETAIL = (
 )
 RULES_PAGE_MAX = 500
 JOBS_PAGE_MAX = 100
+ITEMS_PAGE_MAX = 200
+REVIEW_BATCH_MAX = 1000
+EVIDENCE_ITEMS_MAX = 20
+REJECTED_REASON = "Rejected in the factory review"
 
 
 # ── Request bodies ───────────────────────────────────────────────────────────
@@ -119,6 +124,14 @@ class RulePatch(BaseModel):
 class JobCreate(BaseModel):
     kind: Literal["analysis", "generation"]
     params: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ItemReviewRequest(BaseModel):
+    """Set the review of generated items: the listed ones, or every pending item of the job."""
+
+    review: Literal["pending", "approved", "rejected"]
+    item_ids: Optional[List[str]] = Field(default=None, max_length=REVIEW_BATCH_MAX)
+    all_pending: bool = False
 
 
 class GrantEntry(BaseModel):
@@ -375,6 +388,7 @@ def _job_payload(
     users: Dict[str, User],
     datasets: Dict[str, Dataset],
     include_log: bool = False,
+    review: Optional[Dict[str, int]] = None,
 ) -> Dict[str, Any]:
     output = datasets.get(job.output_dataset_id or "")
     payload = {
@@ -393,10 +407,37 @@ def _job_payload(
         "started_at": to_api_timestamp(job.started_at),
         "finished_at": to_api_timestamp(job.finished_at),
         "updated_at": to_api_timestamp(job.updated_at),
+        "review": _review_counts(review),
     }
     if include_log:
         payload["log"] = job.log or ""
     return payload
+
+
+def _review_counts(counts: Optional[Dict[str, int]]) -> Dict[str, int]:
+    out = {state: int((counts or {}).get(state, 0)) for state in FACTORY_REVIEW_STATES}
+    out["total"] = sum(out.values())
+    return out
+
+
+def _review_by_job(db: Session, job_ids: List[str]) -> Dict[str, Dict[str, int]]:
+    """Generated items per job and review state."""
+    out: Dict[str, Dict[str, int]] = {}
+    if not job_ids:
+        return out
+    rows = (
+        db.query(
+            FactoryGeneratedItem.job_id,
+            FactoryGeneratedItem.review,
+            func.count(FactoryGeneratedItem.id),
+        )
+        .filter(FactoryGeneratedItem.job_id.in_(job_ids))
+        .group_by(FactoryGeneratedItem.job_id, FactoryGeneratedItem.review)
+        .all()
+    )
+    for job_id, state, count in rows:
+        out.setdefault(job_id, {})[state] = int(count)
+    return out
 
 
 def _jobs_payload(
@@ -409,8 +450,15 @@ def _jobs_payload(
         if ids
         else {}
     )
+    review = _review_by_job(db, [j.id for j in jobs])
     return [
-        _job_payload(j, users=users, datasets=datasets, include_log=include_log)
+        _job_payload(
+            j,
+            users=users,
+            datasets=datasets,
+            include_log=include_log,
+            review=review.get(j.id),
+        )
         for j in jobs
     ]
 
@@ -780,7 +828,7 @@ def get_factory(
             "generation_limits": {
                 "max_layers": svc.MAX_LAYERS,
                 "max_branching": svc.MAX_BRANCHING,
-                "max_items": svc.MAX_ITEMS_PER_JOB,
+                "max_items": svc.max_items_per_job(),
                 "defaults": dict(svc.GENERATION_DEFAULTS),
             },
         }
@@ -1390,6 +1438,51 @@ def _set_official(
     return _one_rule_payload(db, rule)
 
 
+@router.get("/api/factories/{factory_id}/rules/{rule_id}")
+def get_rule(
+    factory_id: str,
+    rule_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """One rule with the source items its evidence names (the review popup)."""
+    factory, _level = _factory_for_caller(db, principal, factory_id)
+    rule = _rule_or_404(db, factory, rule_id)
+    payload = _one_rule_payload(db, rule)
+    dataset = _dataset_of(db, factory)
+    version = (
+        svc.resolve_source_version(db, dataset)
+        if dataset and dataset.deleted_at is None
+        else None
+    )
+    wanted = [e for e in (rule.evidence or []) if isinstance(e, str)][
+        :EVIDENCE_ITEMS_MAX
+    ]
+    found: Dict[str, DatasetItem] = {}
+    if version and wanted:
+        found = {
+            item.item_id: item
+            for item in db.query(DatasetItem).filter(
+                DatasetItem.dataset_version_id == version.id,
+                DatasetItem.item_id.in_(wanted),
+            )
+        }
+    payload["evidence_items"] = [
+        {
+            "item_id": item_id,
+            "input": found[item_id].input if item_id in found else None,
+            "expected_output": (
+                found[item_id].expected_output if item_id in found else None
+            ),
+            "metadata": found[item_id].item_metadata or {} if item_id in found else {},
+            "missing": item_id not in found,
+        }
+        for item_id in wanted
+    ]
+    payload["source_version"] = _version_brief(version)
+    return payload
+
+
 @router.post("/api/factories/{factory_id}/rules/{rule_id}:approve")
 def approve_rule(
     factory_id: str,
@@ -1543,3 +1636,267 @@ def cancel_job(
     job.updated_at = utc_now_naive()
     db.commit()
     return _jobs_payload(db, [job], include_log=True)[0]
+
+
+# ── Generated items (the review of one attempt) ─────────────────────────────
+
+
+def _output_version(
+    db: Session, job: FactoryJob
+) -> tuple[Optional[Dataset], Optional[DatasetVersion]]:
+    """The output dataset of a generation job and its version (None when deleted)."""
+    if not job.output_dataset_id:
+        return None, None
+    dataset = db.get(Dataset, job.output_dataset_id)
+    if dataset is None:
+        return None, None
+    version = (
+        db.query(DatasetVersion)
+        .filter(DatasetVersion.dataset_id == dataset.id)
+        .order_by(DatasetVersion.created_at.asc())
+        .first()
+    )
+    return dataset, version
+
+
+def _is_draft(version: Optional[DatasetVersion]) -> bool:
+    if version is None:
+        return False
+    status = getattr(version.status, "value", version.status)
+    return str(status) == "draft"
+
+
+def _layer_counts(db: Session, job_id: str) -> List[Dict[str, Any]]:
+    rows = (
+        db.query(
+            FactoryGeneratedItem.layer,
+            FactoryGeneratedItem.review,
+            func.count(FactoryGeneratedItem.id),
+        )
+        .filter(FactoryGeneratedItem.job_id == job_id)
+        .group_by(FactoryGeneratedItem.layer, FactoryGeneratedItem.review)
+        .all()
+    )
+    by_layer: Dict[int, Dict[str, int]] = {}
+    for layer, state, count in rows:
+        by_layer.setdefault(int(layer), {})[state] = int(count)
+    return [
+        {"layer": layer, **_review_counts(counts)}
+        for layer, counts in sorted(by_layer.items())
+    ]
+
+
+def _generated_item_payload(
+    row: FactoryGeneratedItem,
+    item: Optional[DatasetItem],
+    users: Dict[str, User],
+) -> Dict[str, Any]:
+    return {
+        "item_id": row.item_id,
+        "layer": row.layer,
+        "base_item_id": row.base_item_id,
+        "parent_item_id": row.parent_item_id,
+        "rule": (
+            {"id": row.rule_id, "title": row.rule_title}
+            if row.rule_id or row.rule_title
+            else None
+        ),
+        "review": row.review,
+        "reviewed_by": _user_brief(
+            users.get(row.reviewed_by_user_id), row.reviewed_by_user_id
+        ),
+        "reviewed_at": to_api_timestamp(row.reviewed_at),
+        "created_at": to_api_timestamp(row.created_at),
+        "missing": item is None,
+        "index": item.index if item else None,
+        "input": item.input if item else None,
+        "expected_output": item.expected_output if item else None,
+        "metadata": (item.item_metadata or {}) if item else {},
+        "disabled": bool(item and item.disabled_at is not None),
+    }
+
+
+@router.get("/api/factories/{factory_id}/jobs/{job_id}/items")
+def list_generated_items(
+    factory_id: str,
+    job_id: str,
+    layer: Optional[int] = Query(default=None, ge=1),
+    review: Optional[Literal["pending", "approved", "rejected"]] = None,
+    q: Optional[str] = Query(default=None, max_length=200),
+    limit: int = Query(default=50, ge=1, le=ITEMS_PAGE_MAX),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """The items a generation job wrote, with their place in the tree and their review, and the counts per
+    layer (the Generation tab's chart). Items of the output dataset that were deleted are ``missing``."""
+    factory, _level = _factory_for_caller(db, principal, factory_id)
+    job = _job_or_404(db, factory, job_id)
+    dataset, version = _output_version(db, job)
+    query = db.query(FactoryGeneratedItem).filter(FactoryGeneratedItem.job_id == job.id)
+    if layer is not None:
+        query = query.filter(FactoryGeneratedItem.layer == layer)
+    if review:
+        query = query.filter(FactoryGeneratedItem.review == review)
+    text = (q or "").strip().lower()
+    if text and version is not None:
+        matches = (
+            db.query(DatasetItem.item_id)
+            .filter(
+                DatasetItem.dataset_version_id == version.id,
+                DatasetItem.search_text.ilike(f"%{text}%"),
+            )
+            .subquery()
+        )
+        query = query.filter(FactoryGeneratedItem.item_id.in_(db_select(matches.c.item_id)))
+    elif text:
+        query = query.filter(FactoryGeneratedItem.item_id.ilike(f"%{text}%"))
+    total = int(query.with_entities(func.count(FactoryGeneratedItem.id)).scalar() or 0)
+    rows = (
+        query.order_by(FactoryGeneratedItem.layer, FactoryGeneratedItem.id)
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    items: Dict[str, DatasetItem] = {}
+    if rows and version is not None:
+        items = {
+            item.item_id: item
+            for item in db.query(DatasetItem).filter(
+                DatasetItem.dataset_version_id == version.id,
+                DatasetItem.item_id.in_([r.item_id for r in rows]),
+            )
+        }
+    users = _users_by_id(db, {r.reviewed_by_user_id for r in rows})
+    layers = _layer_counts(db, job.id)
+    totals: Dict[str, int] = {}
+    for entry in layers:
+        for state in FACTORY_REVIEW_STATES:
+            totals[state] = totals.get(state, 0) + entry[state]
+    progress = dict(job.progress or {})
+    return {
+        "job_id": job.id,
+        "factory_id": factory.id,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "items": [
+            _generated_item_payload(r, items.get(r.item_id), users) for r in rows
+        ],
+        "layers": layers,
+        "base_items": int(progress.get("base_items") or 0),
+        "review": _review_counts(totals),
+        "dataset": _dataset_brief(dataset),
+        "dataset_version": _version_brief(version),
+        "dataset_draft": _is_draft(version),
+    }
+
+
+@router.post("/api/factories/{factory_id}/jobs/{job_id}/items:review")
+def review_generated_items(
+    factory_id: str,
+    job_id: str,
+    req: ItemReviewRequest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Approve, reject or reset generated items (approve level). A rejected item is disabled in the output
+    dataset while it is a draft, so a run skips it; approving or resetting enables it again."""
+    factory, _level = _factory_for_caller(
+        db, principal, factory_id, need="approve", write=True
+    )
+    job = _job_or_404(db, factory, job_id)
+    if req.item_ids is None and not req.all_pending:
+        raise HTTPException(
+            status_code=422, detail="List the item ids, or set all_pending to true"
+        )
+    query = db.query(FactoryGeneratedItem).filter(FactoryGeneratedItem.job_id == job.id)
+    if req.item_ids is not None:
+        wanted = list(dict.fromkeys(i for i in req.item_ids if isinstance(i, str)))
+        if not wanted:
+            raise HTTPException(status_code=422, detail="No item id given")
+        query = query.filter(FactoryGeneratedItem.item_id.in_(wanted))
+    else:
+        query = query.filter(FactoryGeneratedItem.review == "pending")
+    rows = query.all()
+    if req.item_ids is not None and len(rows) != len(set(req.item_ids)):
+        raise HTTPException(status_code=404, detail="Generated item not found")
+    now = utc_now_naive()
+    changed = [r for r in rows if r.review != req.review]
+    for row in changed:
+        row.review = req.review
+        row.reviewed_by_user_id = principal.user.id if req.review != "pending" else None
+        row.reviewed_at = now if req.review != "pending" else None
+    _dataset, version = _output_version(db, job)
+    applied_to_dataset = False
+    if changed and _is_draft(version):
+        from qym_platform.api.datasets import (_record_item_revision,
+                                               _revision_count)
+
+        revision = _revision_count(db, version)
+        ids = [r.item_id for r in changed]
+        items = (
+            db.query(DatasetItem)
+            .filter(
+                DatasetItem.dataset_version_id == version.id,
+                DatasetItem.item_id.in_(ids),
+            )
+            .all()
+        )
+        for item in items:
+            disabled = item.disabled_at is not None
+            if req.review == "rejected" and not disabled:
+                before = {"item_id": item.item_id, "disabled": False, "reason": ""}
+                item.disabled_at = now
+                item.disabled_by_user_id = principal.user.id
+                item.disabled_reason = REJECTED_REASON
+                item.updated_at = now
+                _record_item_revision(
+                    db,
+                    version,
+                    item,
+                    change_type="disabled",
+                    before=before,
+                    after={"item_id": item.item_id, "disabled": True, "reason": REJECTED_REASON},
+                    actor_user_id=principal.user.id,
+                    revision_number=revision + 1,
+                )
+                revision += 1
+                applied_to_dataset = True
+            elif (
+                req.review != "rejected"
+                and disabled
+                and (item.disabled_reason or "") == REJECTED_REASON
+            ):
+                before = {"item_id": item.item_id, "disabled": True, "reason": REJECTED_REASON}
+                item.disabled_at = None
+                item.disabled_by_user_id = None
+                item.disabled_reason = ""
+                item.updated_at = now
+                _record_item_revision(
+                    db,
+                    version,
+                    item,
+                    change_type="enabled",
+                    before=before,
+                    after={"item_id": item.item_id, "disabled": False, "reason": ""},
+                    actor_user_id=principal.user.id,
+                    revision_number=revision + 1,
+                )
+                revision += 1
+                applied_to_dataset = True
+    job.updated_at = now
+    db.commit()
+    layers = _layer_counts(db, job.id)
+    totals: Dict[str, int] = {}
+    for entry in layers:
+        for state in FACTORY_REVIEW_STATES:
+            totals[state] = totals.get(state, 0) + entry[state]
+    return {
+        "job_id": job.id,
+        "review": req.review,
+        "changed": len(changed),
+        "applied_to_dataset": applied_to_dataset,
+        "layers": layers,
+        "counts": _review_counts(totals),
+    }

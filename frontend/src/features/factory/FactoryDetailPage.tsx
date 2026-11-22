@@ -95,7 +95,7 @@ export function FactoryDetailPage({ factoryId }: { factoryId: string }) {
       </div>
     );
   if (!factory) return null;
-  return <DetailBody slug={slug} factory={factory} tab={route.tab} readOnly={readOnly} />;
+  return <DetailBody slug={slug} factory={factory} tab={route.tab} jobId={route.jobId} readOnly={readOnly} />;
 }
 
 /** The rule groups of the factory (from the unfiltered rules list) for the pickers. */
@@ -108,11 +108,13 @@ function DetailBody({
   slug,
   factory,
   tab,
+  jobId,
   readOnly,
 }: {
   slug: string;
   factory: FactoryDetail;
   tab: FactoryTab;
+  jobId: string | null;
   readOnly: boolean;
 }) {
   const navigate = useNavigate();
@@ -133,18 +135,20 @@ function DetailBody({
   const groups = useRuleGroups(factory.id);
   const categoryWord = factory.counts.categories === 1 ? 'category' : 'categories';
 
-  function go(next: FactoryTab) {
+  function go(next: FactoryTab, job: string | null = null) {
     const params = new URLSearchParams(search);
     if (next === 'rules') params.delete('tab');
     else params.set('tab', next);
+    if (next === 'generation' && job) params.set('job', job);
+    else params.delete('job');
     const qs = params.toString();
     navigate({ search: qs ? `?${qs}` : '' });
   }
 
   async function startGeneration(params: GenerationParams) {
-    await start.mutateAsync({ kind: 'generation', params });
+    const job = await start.mutateAsync({ kind: 'generation', params });
     toast.show('Generation started', { tone: 'success' });
-    go('generation');
+    go('generation', job.id);
   }
 
   const tabItems = [
@@ -230,7 +234,7 @@ function DetailBody({
       ) : null}
       <Tabs label="Factory sections" items={tabItems} selected={tab} onSelect={(id) => go(id as FactoryTab)}>
         <TabPanel id="rules">
-          <RulesTab factory={factory} canModify={canModify} canApprove={canApprove} groups={groups} />
+          <RulesTab factory={factory} slug={slug} canModify={canModify} canApprove={canApprove} groups={groups} />
         </TabPanel>
         <TabPanel id="categories">
           <CategoriesTab factory={factory} canModify={canModify} />
@@ -240,6 +244,9 @@ function DetailBody({
             factory={factory}
             slug={slug}
             canModify={canModify}
+            canApprove={canApprove}
+            jobId={jobId}
+            onOpenJob={(job) => go('generation', job)}
             onGenerate={() => setGenerating(true)}
             busyReason={busyReason ?? noVersionReason}
           />

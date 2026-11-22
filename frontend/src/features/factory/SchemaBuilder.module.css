@@ -1,0 +1,64 @@
+/* The category schema builder: a head with the mode switch, one row per field, the add / strict foot. */
+.builder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+.fieldRow {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(140px, 0.8fr) minmax(180px, 1.4fr) auto;
+  gap: var(--space-sm);
+  align-items: end;
+}
+
+@media (max-width: 720px) {
+  .fieldRow {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.fieldEnd {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  align-self: end;
+}
+
+.empty {
+  margin: 0;
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+}

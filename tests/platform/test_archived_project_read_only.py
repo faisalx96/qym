@@ -287,6 +287,7 @@ REFUSED = [
     ("POST", "/api/factories/{factory_id}/rules/{rule_id}:revoke", "/api/factories/f1/rules/fr1:revoke", None, MGR),
     ("POST", "/api/factories/{factory_id}/jobs", "/api/factories/f1/jobs", {"json": {"kind": "analysis", "params": {}}}, MEMBER),
     ("POST", "/api/factories/{factory_id}/jobs/{job_id}:cancel", "/api/factories/f1/jobs/fj1:cancel", None, MEMBER),
+    ("POST", "/api/factories/{factory_id}/jobs/{job_id}/items:review", "/api/factories/f1/jobs/fj1/items:review", {"json": {"review": "approved", "all_pending": True}}, MGR),
     ("PUT", "/api/runs/{run_id}/bookmark", "/api/runs/r1/bookmark", {"json": {"visibility": "public", "note": "keep"}}, MEMBER),
     ("DELETE", "/api/runs/{run_id}/bookmark", "/api/runs/r1/bookmark", None, MEMBER),
     ("POST", "/api/projects/{project_slug}/bookmark-groups", "/api/projects/pa/bookmark-groups", {"json": {"name": "Baselines"}}, MEMBER),

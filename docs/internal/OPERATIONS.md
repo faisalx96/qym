@@ -58,7 +58,7 @@ sure one process runs a given job.
 | `QYM_DB_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement guard on API connections |
 | `QYM_DB_LOCK_TIMEOUT_MS` | `5000` | Lock-wait guard (all roles) |
 | `QYM_DASHBOARD_LIVE_REFRESH_SECONDS` | `2` | How often the summary worker rebuilds a live run's dashboard numbers after its events committed. A rebuild never waits for a row held by another transaction (`NOWAIT`): it is skipped and retried after this interval, counted in the worker's `live_refresh_busy`. Raise it under heavy ingest |
-| `QYM_FACTORY_LLM_CONCURRENCY` / `QYM_FACTORY_LLM_TIMEOUT_SECONDS` / `QYM_FACTORY_ANALYSIS_BATCH_ITEMS` | `4` / `180` / `25` | Data factory jobs: model calls in flight per job; seconds one model call may take before the client gives up (one retry follows; a job has no overall deadline, and its lease is renewed by a heartbeat while calls run); items one rule-analysis call reads (the prompt size). A slow model wants a smaller batch and lower concurrency before a longer timeout |
+| `QYM_FACTORY_LLM_CONCURRENCY` / `QYM_FACTORY_LLM_TIMEOUT_SECONDS` / `QYM_FACTORY_ANALYSIS_BATCH_ITEMS` / `QYM_FACTORY_MAX_ITEMS` | `4` / `180` / `25` / `5000` | Data factory jobs: model calls in flight per job; seconds one model call may take before the client gives up (one retry follows; a job has no overall deadline, and its lease is renewed by a heartbeat while calls run); items one rule-analysis call reads (the prompt size); the most items one generation job may write (the ceiling of the item cap in the Generate dialog; every generated item is one model call). A slow model wants a smaller batch and lower concurrency before a longer timeout |
 | `QYM_RUN_LIVE_REFRESH_SECONDS` | `15` | How often an open run page probes a live run (`/live-status`) and the floor of its row reloads. The page reads it from the run payload and every probe answer, so a change applies to every viewer on their next load. Each reload of a large repeat run costs the API a few hundred ms; raise this when many people watch long runs |
 | `QYM_REQUEST_TIMING` | `false` | `Server-Timing` header + per-request log line (logger `qym_platform.middleware.timing`, was `qym.timing`) |
 | `QYM_LOG_LEVEL` | `INFO` | Platform log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). See "Logging" |
@@ -220,12 +220,12 @@ A component that tries to write anywhere else now fails loudly
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0107`, following `0050` through
+The combined migration chain has one head, `0108`, following `0050` through
 `0051`–`0085`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
-Migrations `0058`–`0084`, `0086`–`0097`, `0099`, `0100` and `0102`–`0107` are quick DDL or small job/queue inserts.
+Migrations `0058`–`0084`, `0086`–`0097`, `0099`, `0100` and `0102`–`0108` are quick DDL or small job/queue inserts.
 `0098` builds one partial index on `dashboard_change_events`; when that table is over
 256 MB it queues the build (`create_deferred_indexes`, CONCURRENTLY) instead.
 `0101` builds two covering indexes (`run_item_pass_scores`, and `spans` on every partition);
@@ -267,6 +267,7 @@ replica and worker.
 | 0068 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (on every database, an empty one included, since the job also builds the index): fills search text in id windows (one statement per 500-item window), stores lineage counts of published versions, builds the small partial index `ix_dataset_items_unindexed_version` CONCURRENTLY, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the trigram index; search stays correct, only unindexed. Until the job reaches a row, search rebuilds that row's text on read; results match except a search for a JSON fragment spanning several keys of one object, whose key order PostgreSQL's JSONB text may differ. If the job ever failed (Admin → Maintenance shows it), start `backfill_dataset_search_text` again there: it resumes and is safe to repeat |
 | 0069 | Empty `dashboard_run_overview` (each run's overview inputs) and `dashboard_overview_snapshots` (the overview shared by every process and pod) tables | `backfill_dashboard_overview` — **queued, runs by itself** (on every database; on SQLite, or with no runs, it finishes at once): stores each run's overview inputs in run-key windows (one statement per 500-run window; about 0.4 s per 1,000 runs on the perf lab). Until it reaches a run, the overview reads that run's JSON, with the same numbers; the summary worker stores every run it publishes from the start. Resumable and safe to start again from Admin → Maintenance |
 | 0070 | — (one job insert) | `build_runs_search_index` — **queued, runs by itself**: runs `CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public`, then builds `ix_dashboard_run_dimensions_search_trgm` (the Runs search box) CONCURRENTLY. Without the privilege to create the extension it logs "runs search index skipped" and finishes; the search stays correct, only unindexed. Safe to start again: it rebuilds the index |
+| 0108 | `factory_generated_items`: one row per item a generation job wrote (its layer, parent and base items, the rule applied, the review state) | None. Quick DDL; items of earlier generation jobs are not backfilled: their attempt pages show counts only |
 | 0107 | `factory_rules.bridge_to_groups` (the groups a bridge rule opens, JSON list) | Data: the `bridge` rows of `factory_rule_links` are deleted and bridge rules become plain rules (name their groups again, or run the analysis). Small table, quick |
 | 0106 | `bookmark_groups` (a user's named folder of bookmarks in a project, pinned or not) and `run_bookmarks.group_id`; `run_bookmarks.pinned` / `pinned_at` dropped | Data: one `General` group per author and project is created and every existing bookmark filed in it (a pinned bookmark pins that group). Small tables, quick |
 | 0105 | Six empty data factory tables: `data_factories`, `factory_grants`, `factory_rule_categories`, `factory_rules`, `factory_rule_links`, `factory_jobs` (rows go with their factory, a factory with its dataset, by `ON DELETE CASCADE`) | None. Quick DDL, nothing to backfill. The factory worker loop (`services/data_factory.py`) starts with the API in `all` mode and with the workers service in split mode |
@@ -436,7 +437,7 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0107` and a healthy API. The API process then runs every queued job itself.
+   `0108` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -660,7 +661,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0107`.
+deployment only after the API has migrated to `0108`.
 
 ```yaml
 apiVersion: apps/v1

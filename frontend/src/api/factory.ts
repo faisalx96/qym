@@ -16,6 +16,9 @@ export type RuleStatusFilter = 'all' | 'official' | 'proposed';
 /** A plain rule constrains an item; a bridge extends it into other categories (a join, a cross-sell). */
 export type RuleKind = 'rule' | 'bridge';
 export type RuleKindFilter = 'all' | RuleKind;
+/** The review of a generated item: pending until someone with the approve level approves or rejects it. */
+export type ReviewState = 'pending' | 'approved' | 'rejected';
+export type ReviewFilter = 'all' | ReviewState;
 
 export const ACTIVE_JOB_STATUSES: FactoryJobStatus[] = ['queued', 'running', 'cancel_requested'];
 
@@ -172,6 +175,13 @@ export interface FactoryRulesList {
   groups: RuleGroupCount[];
 }
 
+export interface ReviewCounts {
+  pending: number;
+  approved: number;
+  rejected: number;
+  total: number;
+}
+
 export interface FactoryJob {
   id: string;
   factory_id: string;
@@ -186,7 +196,84 @@ export interface FactoryJob {
   started_at: string | null;
   finished_at: string | null;
   updated_at: string | null;
+  /** The review of the items a generation wrote (all zero on an analysis). */
+  review: ReviewCounts;
   log?: string;
+}
+
+/** A source item a rule's evidence names, as the rule popup shows it. */
+export interface EvidenceItem {
+  item_id: string;
+  input: unknown;
+  expected_output: unknown;
+  metadata: Record<string, unknown>;
+  /** The item is no longer in the source version. */
+  missing: boolean;
+}
+
+export interface FactoryRuleDetail extends FactoryRule {
+  evidence_items: EvidenceItem[];
+  source_version: SourceVersion | null;
+}
+
+/** One item a generation attempt wrote, with its place in the tree and its review. */
+export interface GeneratedItem {
+  item_id: string;
+  layer: number;
+  base_item_id: string;
+  parent_item_id: string;
+  /** The rule applied at this step (null on rows written before the review existed). */
+  rule: { id: string | null; title: string } | null;
+  review: ReviewState;
+  reviewed_by: FactoryUser | null;
+  reviewed_at: string | null;
+  created_at: string | null;
+  /** The item was removed from the output dataset. */
+  missing: boolean;
+  index: number | null;
+  input: unknown;
+  expected_output: unknown;
+  metadata: Record<string, unknown>;
+  /** Disabled in the output dataset (a rejected item, or disabled by hand). */
+  disabled: boolean;
+}
+
+export interface LayerCounts extends ReviewCounts {
+  layer: number;
+}
+
+export interface GeneratedItemsList {
+  job_id: string;
+  factory_id: string;
+  total: number;
+  offset: number;
+  limit: number;
+  items: GeneratedItem[];
+  /** Per layer, in layer order (the chart). */
+  layers: LayerCounts[];
+  base_items: number;
+  review: ReviewCounts;
+  dataset: FactoryDatasetBrief | null;
+  dataset_version: SourceVersion | null;
+  /** The output dataset is still a draft: a review changes its items' state. */
+  dataset_draft: boolean;
+}
+
+export interface GeneratedItemsFilters {
+  layer?: number | null;
+  review?: ReviewFilter;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface ReviewResult {
+  job_id: string;
+  review: ReviewState;
+  changed: number;
+  applied_to_dataset: boolean;
+  layers: LayerCounts[];
+  counts: ReviewCounts;
 }
 
 export interface AccessPerson {
@@ -276,6 +363,19 @@ export const factoryKeys = {
     ] as const,
   jobs: (id: string) => ['factory', 'jobs', id] as const,
   job: (id: string, jobId: string) => ['factory', 'job', id, jobId] as const,
+  rule: (id: string, ruleId: string) => ['factory', 'rule', id, ruleId] as const,
+  generated: (id: string, jobId: string, filters: GeneratedItemsFilters) =>
+    [
+      'factory',
+      'generated',
+      id,
+      jobId,
+      filters.layer ?? null,
+      filters.review ?? 'all',
+      filters.q ?? '',
+      filters.limit ?? 50,
+      filters.offset ?? 0,
+    ] as const,
   access: (id: string) => ['factory', 'access', id] as const,
 };
 
@@ -334,12 +434,46 @@ export function useFactoryJobs(id: string, options: { refetchInterval?: number |
 export function useFactoryJob(
   id: string,
   jobId: string | null,
-  options: { refetchInterval?: number | false } = {},
+  options: { refetchInterval?: number | false; liveWhileActive?: boolean } = {},
 ) {
   return useQuery({
     queryKey: factoryKeys.job(id, jobId ?? ''),
     queryFn: () => api.get<FactoryJob>(`/api/factories/${enc(id)}/jobs/${enc(jobId ?? '')}`),
     enabled: Boolean(jobId),
+    refetchInterval: options.liveWhileActive
+      ? (query) => (isActiveJob(query.state.data) ? JOB_REFRESH_MS : false)
+      : (options.refetchInterval ?? false),
+  });
+}
+
+export function useFactoryRuleDetail(id: string, ruleId: string | null) {
+  return useQuery({
+    queryKey: factoryKeys.rule(id, ruleId ?? ''),
+    queryFn: () => api.get<FactoryRuleDetail>(`/api/factories/${enc(id)}/rules/${enc(ruleId ?? '')}`),
+    enabled: Boolean(ruleId),
+  });
+}
+
+export function useGeneratedItems(
+  id: string,
+  jobId: string | null,
+  filters: GeneratedItemsFilters,
+  options: { refetchInterval?: number | false } = {},
+) {
+  const params = new URLSearchParams();
+  if (filters.layer !== null && filters.layer !== undefined) params.set('layer', String(filters.layer));
+  if (filters.review && filters.review !== 'all') params.set('review', filters.review);
+  if (filters.q) params.set('q', filters.q);
+  params.set('limit', String(filters.limit ?? 50));
+  params.set('offset', String(filters.offset ?? 0));
+  return useQuery({
+    queryKey: factoryKeys.generated(id, jobId ?? '', filters),
+    queryFn: () =>
+      api.get<GeneratedItemsList>(
+        `/api/factories/${enc(id)}/jobs/${enc(jobId ?? '')}/items?${params.toString()}`,
+      ),
+    enabled: Boolean(jobId),
+    placeholderData: keepPreviousData,
     refetchInterval: options.refetchInterval ?? false,
   });
 }
@@ -481,6 +615,19 @@ export function useStartJob(id: string) {
         | { kind: 'generation'; params: GenerationParams },
     ) => api.post<FactoryJob>(`/api/factories/${enc(id)}/jobs`, body),
     onSuccess: () => void invalidate(),
+  });
+}
+
+export function useReviewItems(id: string, jobId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { review: ReviewState; item_ids?: string[]; all_pending?: boolean }) =>
+      api.post<ReviewResult>(`/api/factories/${enc(id)}/jobs/${enc(jobId)}/items:review`, body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['factory', 'generated', id, jobId] });
+      void qc.invalidateQueries({ queryKey: factoryKeys.jobs(id) });
+      void qc.invalidateQueries({ queryKey: factoryKeys.job(id, jobId) });
+    },
   });
 }
 

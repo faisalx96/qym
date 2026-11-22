@@ -1669,6 +1669,56 @@ class FactoryRuleLink(Base):
     )
 
 
+FACTORY_REVIEW_STATES = ("pending", "approved", "rejected")
+
+
+class FactoryGeneratedItem(Base):
+    """One item a generation job wrote, with its place in the tree and its review.
+
+    The item itself is a ``DatasetItem`` of the job's output dataset (draft
+    v1), found by ``(dataset_version_id, item_id)``; this row keeps what the
+    review and the layer chart need without reading every item's metadata:
+    the layer, the parent and base items, the rule applied at this step, and
+    the review state (``pending`` | ``approved`` | ``rejected``). A rejected
+    item is disabled in the output dataset so a run skips it.
+    """
+
+    __tablename__ = "factory_generated_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    job_id: Mapped[str] = mapped_column(
+        ForeignKey("factory_jobs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    factory_id: Mapped[str] = mapped_column(
+        ForeignKey("data_factories.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    dataset_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    item_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    base_item_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    parent_item_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    layer: Mapped[int] = mapped_column(Integer, nullable=False)
+    rule_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    rule_title: Mapped[str] = mapped_column(
+        String(300), default="", server_default="", nullable=False
+    )
+    review: Mapped[str] = mapped_column(
+        String(16), default="pending", server_default="pending", nullable=False
+    )
+    reviewed_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("job_id", "item_id", name="uq_factory_generated_items_job_item"),
+        Index("ix_factory_generated_items_job_layer", "job_id", "layer"),
+        Index("ix_factory_generated_items_job_review", "job_id", "review"),
+    )
+
+
 class FactoryJob(Base):
     """A factory job (rule analysis or data generation) run by the workers loop.
 

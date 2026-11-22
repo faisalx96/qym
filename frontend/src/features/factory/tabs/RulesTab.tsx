@@ -36,6 +36,7 @@ import {
   type Column,
 } from '@/ui';
 import { RuleDialog } from '../dialogs';
+import { RuleViewDialog } from '../RuleViewDialog';
 import styles from '../FactoryDetailPage.module.css';
 
 const ALL = '__all';
@@ -52,11 +53,13 @@ const STATUS: { value: RuleStatusFilter; label: string; title: string }[] = [
 
 export function RulesTab({
   factory,
+  slug,
   canModify,
   canApprove,
   groups,
 }: {
   factory: FactoryDetail;
+  slug: string;
   canModify: boolean;
   canApprove: boolean;
   groups: string[];
@@ -83,11 +86,15 @@ export function RulesTab({
   const [editing, setEditing] = useState<FactoryRule | null>(null);
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<FactoryRule | null>(null);
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null);
   const isFiltered = Boolean(
     filters.q || filters.category_id || filters.group !== null || filters.kind !== 'all' || status !== 'all',
   );
   const rules = list.data?.rules ?? [];
+  // The popup follows the list: a rule edited or approved shows its new state, a removed one closes it.
+  const viewingIndex = viewingId ? rules.findIndex((r) => r.id === viewingId) : -1;
+  const viewing = viewingIndex >= 0 ? rules[viewingIndex]! : null;
 
   async function toggleOfficial(rule: FactoryRule) {
     setActing(rule.id);
@@ -316,6 +323,8 @@ export function RulesTab({
         error={list.error}
         onRetry={() => void list.refetch()}
         errorTitle="Couldn’t load the rules"
+        onRowOpen={(r) => setViewingId(r.id)}
+        rowOpenNow
         isFiltered={isFiltered}
         filteredEmpty={
           <EmptyState
@@ -335,6 +344,23 @@ export function RulesTab({
           />
         }
         rowProps={(r) => ({ 'data-official': r.official ? '' : undefined })}
+      />
+      <RuleViewDialog
+        factory={factory}
+        slug={slug}
+        rule={viewing}
+        onClose={() => setViewingId(null)}
+        position={viewing ? { index: viewingIndex, total: rules.length } : undefined}
+        onNavigate={(delta) => {
+          const next = rules[viewingIndex + delta];
+          if (next) setViewingId(next.id);
+        }}
+        canModify={canModify}
+        canApprove={canApprove}
+        busy={Boolean(viewing && acting === viewing.id)}
+        onToggleOfficial={(rule) => void toggleOfficial(rule)}
+        onEdit={setEditing}
+        onRemove={setRemoving}
       />
       <RuleDialog
         open={adding || Boolean(editing)}
