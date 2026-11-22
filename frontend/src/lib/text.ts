@@ -175,7 +175,10 @@ export function renderMarkdown(text: unknown): string {
           if (heading) return `<strong class="qym-text__heading">${renderInline(heading[2] ?? '')}</strong>`;
           return renderInline(line);
         })
-        .join('\n');
+        .join('\n')
+        // A heading is a block, so it ends its own line. The line break after it would show as an
+        // empty line in the pre-wrap block.
+        .replace(/(<strong class="qym-text__heading">[^\n]*<\/strong>)\n/g, '$1');
     }
   }
   return out;

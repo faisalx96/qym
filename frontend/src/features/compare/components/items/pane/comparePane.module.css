@@ -42,24 +42,6 @@ a.runLink:focus-visible {
 }
 
 /* ---------- Expected and one Output per run, side by side ---------- */
-.outsWrap {
-  display: grid;
-  gap: var(--space-sm);
-  min-width: 0;
-}
-
-.outsBar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm) var(--space-lg);
-  align-items: center;
-  justify-content: space-between;
-}
-
-.outsBar:empty {
-  display: none;
-}
-
 .runPick,
 .marksPick {
   display: flex;
@@ -68,6 +50,7 @@ a.runLink:focus-visible {
   align-items: center;
 }
 
+/* in the head of the Output row, after the run chips: at the end of the line */
 .marksPick {
   margin-inline-start: auto;
 }
@@ -87,11 +70,6 @@ a.runLink:focus-visible {
   min-width: 0;
 }
 
-/* three runs or more: Expected takes a line of its own, the outputs share the next */
-.outs[data-expected-row] > section[data-part='expected'] {
-  grid-column: 1 / -1;
-}
-
 /* the head of a run's output: the run on the first line, its status and the actions on the second, in every column */
 .outs > section[data-part='output'] > header {
   padding-block-start: var(--space-sm);
@@ -107,12 +85,57 @@ a.runLink:focus-visible {
 .byRun {
   display: grid;
   min-width: 0;
+  /* one line per metric (or run) at every width (I16): past the smallest width of its columns the table scrolls
+     sideways in its own block, the header row with it, the arrow and the name pinned at its start */
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.matrix > *,
+.byRun > * {
+  min-width: min-content;
+}
+
+/* the pinned start of a line: opaque on the block fill, each covering the padding or the gap beside it */
+:is(.mhead, .mrow, .brHead, .brRow) > .lead,
+:is(.mhead, .mrow) > :is(.colTitle, .nameCell),
+:is(.brHead, .brRow) > :is(.colTitle, .brRun) {
+  position: sticky;
+  align-self: stretch;
+  background: var(--bg-elevated);
+}
+
+:is(.mhead, .mrow, .brHead, .brRow) > .lead {
+  z-index: 2;
+  inset-inline-start: 0;
+  margin-inline: calc(-1 * var(--space-md)) calc(-1 * var(--space-sm));
+  padding-inline: var(--space-md) var(--space-sm);
+}
+
+/* after the row's padding, the arrow column (24px) and the gap */
+:is(.mhead, .mrow) > :is(.colTitle, .nameCell),
+:is(.brHead, .brRow) > :is(.colTitle, .brRun) {
+  z-index: 1;
+  inset-inline-start: calc(var(--space-md) + 24px + var(--space-sm));
+  margin-inline-end: calc(-1 * var(--space-sm));
+  padding-inline-end: var(--space-sm);
+}
+
+/* scrolled: the pinned name shows its edge over the runs (or metrics) under it */
+:is(.matrix, .byRun)[data-scrolled] > * > :is(.colTitle, .nameCell, .brRun) {
+  box-shadow: inset -1px 0 0 var(--border-default);
+}
+
+.mhead > .colTitle,
+.brHead > .colTitle {
+  display: flex;
 }
 
 .mhead,
 .mrow {
   display: grid;
-  grid-template-columns: 24px minmax(132px, 184px) repeat(var(--runs), minmax(0, 1fr));
+  /* the complete template comes from ComparePane.tsx (byMetricColumns): no track list is built here from a property */
+  grid-template-columns: var(--cmp-cols, 24px minmax(132px, 184px) minmax(0, 1fr));
   column-gap: var(--space-sm);
   padding-inline: var(--space-md) var(--space-sm);
 }
@@ -186,11 +209,6 @@ a.runLink:focus-visible {
   min-height: 24px;
 }
 
-/* the run letter of a cell: only where the cells no longer stand under their column title */
-.cellRun {
-  display: none;
-}
-
 .cellAct {
   display: inline-flex;
   margin-inline-start: auto;
@@ -217,10 +235,15 @@ a.runLink:focus-visible {
   color: var(--text-muted);
 }
 
-/* what the scorer recorded for a metric, under its row over the full width: one deeper tile per run */
+/* what the scorer recorded for a metric, under its row over the width of the block in view: one deeper tile per run.
+   Pinned at the row's start: when the runs scroll sideways the tiles stay where they are and keep their width. */
 .details {
+  position: sticky;
+  inset-inline-start: var(--space-md);
   display: grid;
   grid-column: 1 / -1;
+  justify-self: start;
+  width: calc(100cqi - var(--space-md) - var(--space-sm));
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr));
   gap: var(--space-sm);
   min-width: 0;
@@ -272,35 +295,42 @@ a.runLink:focus-visible {
   min-width: 0;
 }
 
-/* a narrow pane: the runs of a metric go under its name */
-@container metrics (max-width: 719px) {
-  .mhead,
-  .mrow {
-    grid-template-columns: 24px minmax(0, 1fr);
-  }
+/* the pinned cells also cover the row's block padding, so the pinned edge runs the full height of the line; their
+   content stays where it was */
+:is(.mhead, .brHead) > :is(.lead, .colTitle),
+.mrow > .lead {
+  align-items: center;
+  margin-block: calc(-1 * var(--space-sm));
+  padding-block: var(--space-sm);
+}
 
-  .runHead {
-    display: none;
-  }
+/* the head of the table by run sets its titles on the lower edge, as its metric names */
+.brHead > :is(.lead, .colTitle) {
+  align-items: flex-end;
+}
 
-  .cell {
-    grid-column: 1 / -1;
-  }
+.mrow > .lead {
+  align-items: flex-start;
+  padding-block-start: calc(var(--space-sm) + var(--space-xs));
+}
 
-  .cellRun {
-    display: inline-flex;
-  }
+.mrow > .nameCell {
+  margin-block: calc(-1 * var(--space-sm));
+  padding-block: calc(var(--space-sm) + var(--space-xs));
+}
 
-  .mrow {
-    row-gap: var(--space-xs);
-  }
+.brRow > :is(.lead, .brRun) {
+  align-items: center;
+  margin-block: calc(-1 * var(--space-xs));
+  padding-block: var(--space-xs);
 }
 
 /* ---------- metrics, five runs or more: a row per run, a column per metric ---------- */
 .brHead,
 .brRow {
   display: grid;
-  grid-template-columns: 24px minmax(200px, 1.6fr) repeat(var(--metrics), minmax(84px, 1fr));
+  /* the complete template comes from ComparePane.tsx (byRunColumns) */
+  grid-template-columns: var(--cmp-cols, 24px minmax(200px, 1.6fr) minmax(84px, 1fr));
   column-gap: var(--space-sm);
   align-items: center;
   padding-inline: var(--space-md) var(--space-sm);
@@ -352,10 +382,14 @@ a.runLink:focus-visible {
   padding-block-start: 0;
 }
 
-/* an open run: its reasons and what the scorer recorded, metric by metric, in one deeper tile */
+/* an open run: its reasons and what the scorer recorded, metric by metric, in one deeper tile, pinned as .details */
 .brDetail {
+  position: sticky;
+  inset-inline-start: var(--space-md);
   display: grid;
   grid-column: 1 / -1;
+  justify-self: start;
+  width: calc(100cqi - var(--space-md) - var(--space-sm));
   min-width: 0;
   margin-block-start: var(--space-sm);
   padding: var(--space-xs) var(--space-md);

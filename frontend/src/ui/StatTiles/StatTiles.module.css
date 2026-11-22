@@ -1,11 +1,9 @@
-/* Stat tiles (round 10): one framed strip, cells parted by hairlines, label over value, centred. */
+/* Stat tiles (owner 2026-11-18: the first qym's tiles): separate framed tiles, label over a large value, centred;
+   a banded value draws its band colour as a rail along the tile's bottom edge. */
 .tiles {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  overflow: hidden;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--card-bg);
+  gap: var(--space-sm);
 }
 
 .tiles[data-count='3'] {
@@ -20,8 +18,16 @@
   gap: var(--space-xs);
   min-width: 0;
   padding: var(--space-md) var(--space-sm);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--card-bg);
   text-align: center;
-  box-shadow: -1px 0 0 var(--border-subtle);
+}
+
+/* The rail is an inset shadow, so a tile with a rail and a tile without one have the same height. */
+.tile[data-band] {
+  box-shadow: inset 0 calc(-1 * var(--rail-width)) 0 var(--tone);
 }
 
 .label {
@@ -29,14 +35,16 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-xs);
-  font-size: var(--font-md);
-  font-weight: 600;
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-secondary);
 }
 
 .value {
   font-family: var(--font-mono);
-  font-size: var(--font-xl);
+  font-size: var(--font-stat);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
@@ -60,7 +68,7 @@
   white-space: nowrap;
 }
 
-/* Narrow (480 to 899): a 12-column grid, cells 1 to 4 span 3 and cells 5 to 7 span 4; a hairline under the first row. */
+/* Narrow (480 to 899): a 12-column grid, tiles 1 to 4 span 3 and tiles 5 to 7 span 4. */
 @container (max-width: 899px) {
   .tiles:not([data-count='3']) {
     grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -68,7 +76,6 @@
 
   .tiles:not([data-count='3']) > :nth-child(-n + 4) {
     grid-column: span 3;
-    border-block-end: 1px solid var(--border-subtle);
   }
 
   .tiles:not([data-count='3']) > :nth-child(n + 5) {
@@ -76,11 +83,10 @@
   }
 }
 
-/* Compact (under 480): rows of two and a full-width last cell; three cells stack. */
+/* Compact (under 480): rows of two and a full-width last tile; three tiles stack. */
 @container (max-width: 479px) {
   .tiles:not([data-count='3']) > :nth-child(-n + 6) {
     grid-column: span 6;
-    border-block-end: 1px solid var(--border-subtle);
   }
 
   .tiles:not([data-count='3']) > :nth-child(7) {

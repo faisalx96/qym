@@ -1,6 +1,7 @@
 /**
- * One heading scale (final review F13): H1 22/650, section H2 18/650, panel H3 15/600. Every visible heading on
- * the audited pages is one of these (a heading that wraps a disclosure button is styled by its button).
+ * One heading scale (final review F13; sizes from G1, owner 2026-11-17): H1 18/650, section H2 16/650 (SectionHeader
+ * and ReportSection), Subsection H3 15/650, panel / card H3 14/600. Every visible heading on the audited pages is one
+ * of these (a heading that wraps a disclosure button is styled by its button).
  */
 import { expect, test, type Page } from '@playwright/test';
 import { gotoApp } from '../helpers';
@@ -16,7 +17,7 @@ test.beforeAll(async ({ request }) => {
 });
 test.use({ viewport: { width: 1440, height: 900 } });
 
-const SCALE = new Set(['22px/650', '18px/650', '15px/600']);
+const SCALE = new Set(['18px/650', '16px/650', '15px/650', '14px/600']);
 
 async function headings(page: Page): Promise<string[]> {
   // lazy sections mount as they scroll into view
@@ -68,11 +69,11 @@ for (const p of pages) {
     const found = await headings(page);
     expect(found.length).toBeGreaterThan(0);
     const off = found.filter((h) => !SCALE.has(h.split(' ')[0]!));
-    expect(off, `${p.name}: headings off the 22/18/15 scale`).toEqual([]);
+    expect(off, `${p.name}: headings off the 18/16/15/14 scale`).toEqual([]);
   });
 }
 
-test('analysis: sections are H2 18px, panels H3 15px, no H3 larger than an H2', async ({ page }) => {
+test('analysis: sections are H2 16px, panels H3 at most 15px, no H3 larger than an H2', async ({ page }) => {
   await gotoApp(page, `/projects/${areas.analysisSlug}/analysis?run=${areas.runId}`);
   await expect(page.getByRole('main')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Setup', exact: true })).toBeVisible();
@@ -85,6 +86,6 @@ test('analysis: sections are H2 18px, panels H3 15px, no H3 larger than an H2', 
     return { h2: size('h2'), h3: size('h3') };
   });
   expect(sizes.h2.length).toBeGreaterThanOrEqual(3);
-  expect(new Set(sizes.h2), 'every section H2').toEqual(new Set([18]));
-  for (const h3 of sizes.h3) expect(h3, 'an H3 is a panel heading (15px)').toBeLessThanOrEqual(15);
+  expect(new Set(sizes.h2), 'every section H2').toEqual(new Set([16]));
+  for (const h3 of sizes.h3) expect(h3, 'an H3 is a subsection or panel heading (15px at most)').toBeLessThanOrEqual(15);
 });

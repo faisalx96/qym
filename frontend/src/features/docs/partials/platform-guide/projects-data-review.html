@@ -38,7 +38,7 @@ QYM_API_KEY=&lt;token-shown-once&gt;</pre>
 <p>For a repeat run the analyzer first asks which sample (pass) to analyze, and loads only that sample's items. Switching samples with the <strong>Sample</strong> selector stays on the page; it waits while a background analysis is still running.</p>
 
 <h2>Datasets</h2>
-<p>The dataset catalog is project-scoped. Import CSV or JSONL to create a dataset, then work through its version lifecycle:</p>
+<p>The dataset catalog is project-scoped. Its header holds sort, search, <strong>New dataset</strong> and the <strong>Deleted datasets</strong> link; each card shows when the dataset was created and last updated, and by whom (the dataset page header shows the same). Import CSV or JSONL to create a dataset, then work through its version lifecycle:</p>
 <ol>
   <li>Create or clone a <strong>draft</strong>.</li>
   <li>Add, edit, bulk upsert, or remove items while it is a draft.</li>
@@ -51,7 +51,7 @@ QYM_API_KEY=&lt;token-shown-once&gt;</pre>
 
 <p>Inside a dataset, use:</p>
 <ul>
-  <li><strong>Items</strong> for search (it matches item IDs, inputs, expected outputs and metadata values), labels, item editing, revision history, neighboring items, and each item's linked runs. Each row's index is a link: Tab reaches it, Enter opens the item, and it opens in a new tab like any link;</li>
+  <li><strong>Items</strong> for search (it matches item IDs, inputs, expected outputs and metadata values), labels, item editing, revision history, neighboring items, and each item's linked runs. Each row's index is a link: Tab reaches it, Enter opens the item, and it opens in a new tab like any link. Clicking a row opens the item in a side pane, where <strong>Copy as JSON</strong> copies the whole item; a field that holds SQL or JSON shows as a coloured code block;</li>
   <li><strong>Runs</strong> for evaluations that used the dataset or selected version;</li>
   <li><strong>Lineage</strong> for version ancestry and change counts, with each version's creation and publish time, and a <strong>Change log</strong> listing every upload, draft, publish and alias move oldest first, with its time and who made it; and</li>
   <li><strong>Compare</strong> for item-level differences between two versions. Changes are listed in the order they happened, oldest first, each with its time (the head version's creation time when an item has no recorded edit). Each list loads 50 rows at a time (<strong>Show more</strong> loads the next 50), the first rows open expanded, and the open list stays in the URL. Word changes are highlighted; a field too large to highlight is shown side by side with a note. <strong>Download diff</strong> saves the complete diff.</li>
@@ -79,4 +79,4 @@ QYM_API_KEY=&lt;token-shown-once&gt;</pre>
 <p>Keyboard: <code>j</code>/<code>k</code> move between corrections, <code>a</code> approves and moves to the next, <code>r</code> rejects with a reason, <code>e</code> edits, <code>o</code> opens details, <code>x</code> selects, <code>Shift</code>+<code>A</code> approves the selection, <code>/</code> searches, and <code>?</code> lists the shortcuts.</p>
 
 <h2>Deleted runs</h2>
-<p>Deleting a run is soft-delete: it leaves active views but keeps its data and deletion audit details. <strong>Deleted runs</strong> is visible only to platform admins, who can restore a run to its project. Retention permanently removes a deleted run and all its results when its Retention ends (<code>QYM_DELETED_RUN_GRACE_DAYS</code>, 30 days by default; <code>0</code> turns Retention Off, so deleted runs are kept until restored); the page shows each run's purge date and flags runs with fewer than 3 days left. It lists every deleted run, 50 per page, with its project; search by run name or ID, filter by project, and select several runs to restore them at once. Restore stays pinned to the right edge of the table.</p>
+<p>Deleting a run is soft-delete: it leaves active views but keeps its data and deletion audit details. <strong>Deleted runs</strong> is visible only to platform admins, who can restore a run to its project. Retention permanently removes a deleted run and all its results when its Retention ends (<code>QYM_DELETED_RUN_GRACE_DAYS</code>, 30 days by default; <code>0</code> turns Retention Off, so deleted runs are kept until restored); the page shows each run's purge date and flags runs with fewer than 3 days left. It lists every deleted run, 50 per page, with its project; search by run name or ID, filter by project, and select several runs to restore them at once. The row menu with Restore is the last column and scrolls with the table.</p>

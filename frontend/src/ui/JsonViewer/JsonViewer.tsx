@@ -1,9 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Button as AriaButton } from 'react-aria-components';
-import { Button } from '../Button';
 import { CopyButton } from '../CopyButton';
 import { Dialog } from '../Dialog';
 import { Icon } from '../Icon';
+import { FoldButton } from '../IconButton';
 import styles from './JsonViewer.module.css';
 
 export function parseJson(value: unknown): unknown | null {
@@ -121,24 +121,20 @@ export function JsonTree({ data, expandDepth = 2, label = 'JSON', toolbar = true
     <div className={styles.tree}>
       {toolbar ? (
         <div className={styles.toolbar}>
-          <Button
-            variant="neutral"
+          <FoldButton
+            action="open"
             onPress={() => {
               setForced('open');
               setGen((g) => g + 1);
             }}
-          >
-            Expand all
-          </Button>
-          <Button
-            variant="neutral"
+          />
+          <FoldButton
+            action="close"
             onPress={() => {
               setForced('closed');
               setGen((g) => g + 1);
             }}
-          >
-            Collapse all
-          </Button>
+          />
           <CopyButton text={() => JSON.stringify(data, null, 2)} label="Copy JSON" />
         </div>
       ) : null}

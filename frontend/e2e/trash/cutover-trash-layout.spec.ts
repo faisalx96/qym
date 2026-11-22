@@ -64,7 +64,9 @@ test('a deleted reasoning-model run carries the reasoning badge and Task/Dataset
   await gotoApp(page, `/trash?q=${prefix}`);
   const grid = page.getByRole('grid', { name: 'Deleted runs' });
   const body = grid.locator('[role=row]:has([role=gridcell])').first();
-  await expect(body).toContainText('reasoning');
+  // 17 Nov G2: the reasoning mark is the light bulb (named "Reasoning model"), not the word
+  await expect(body.getByRole('img', { name: 'Reasoning model' })).toBeVisible();
+  await expect(body.locator('[data-kind="model"]')).not.toContainText('reasoning');
   const fits = await page.evaluate(() => {
     const g = document.querySelector('[role=grid][aria-label="Deleted runs"]') as HTMLElement;
     const heads = Array.from(g.querySelectorAll<HTMLElement>('[role=columnheader]')).filter((h) =>

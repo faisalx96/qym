@@ -71,7 +71,9 @@ async function glyphColours(plot: Locator) {
       iqrFill: cs('rect[class*=iqr]', 'fill'),
       whisker: cs('line[class*=whisker]', 'stroke'),
       cap: cs('line[class*=cap]', 'stroke'),
+      // 17 Nov RD5 + round 2 RD3: the median is a line across the box again, the 90th percentile a filled triangle
       median: cs('line[class*=median]', 'stroke'),
+      p90: cs('path[class*=p90Mark]', 'fill'),
       mean: cs('path[class*=meanMark]', 'stroke'),
       dots: Array.from(el.querySelectorAll('circle[class*=outlier]')).map((c) => ({
         fill: getComputedStyle(c).fill,
@@ -149,11 +151,12 @@ for (const width of [1440, 390] as const) {
       // "Mean" is a label of the response-time KPI, never of an overview box card
       expect(cells).toEqual([]);
       await expect(page.locator('dl[aria-label="Distribution values"]')).toHaveCount(0);
-      // R2-8: Total in the header of the tokens card, not under the plot; none for scores
-      const total = tokens.getByTestId('box-total');
-      await expect(total).toBeVisible();
-      expect(await total.evaluate((el) => !!el.closest('[class*=_header_]'))).toBe(true);
-      await expect(card(page, 'quality').getByTestId('box-total')).toHaveCount(0);
+      // R2-8, 17 Nov RD3: the count is a quiet caption on the number row, not a header tag; none for scores
+      // (round 2: the caption is the count only, no total)
+      const total = tokens.getByTestId('number-card-caption');
+      await expect(total).toHaveText(/^[\d,]+ items?$/);
+      expect(await total.evaluate((el) => !!el.closest('[class*=_header_]'))).toBe(false);
+      await expect(card(page, 'quality').getByTestId('number-card-caption')).toHaveCount(0);
       // R2-9: height and the 16px rule
       // natural height: a row neighbour (the histograms) may stretch the card, so measure it aligned to the start
       const info = await tokens.evaluate((el) => {
@@ -167,9 +170,11 @@ for (const width of [1440, 390] as const) {
         });
         return { height: r.height, gap: r.bottom - lowest };
       });
-      // amended (spec R2-9): 220 at 1440; 232 at 390, where the header wraps and the card carries the 18px error note line
+      // amended (spec R2-9): 220 at 1440; 232 at 390, where the header wraps and the card carries the 18px error note line.
+      // 17 Nov RD5: the owner asked for the KPI row back (Median · 50% interval · 90th percentile, keyed by the plot
+      // symbols) under the mean; measured 269 at 1440 and 296 at 390 with it.
       console.log(`R2-9 tokens_used ${width}px height ${info.height} gap ${info.gap}`);
-      expect(info.height).toBeLessThanOrEqual(width === 390 ? 232 : 220);
+      expect(info.height).toBeLessThanOrEqual(width === 390 ? 310 : 280);
       expect(info.gap).toBeLessThanOrEqual(16);
       // R2-12: a help marker in the header, no five-entry legend list
       await expect(tokens.getByRole('button', { name: 'How to read the box plot' })).toBeVisible();
@@ -188,7 +193,7 @@ for (const width of [1440, 390] as const) {
       await settle(page);
       const chart1 = await token(page, '--chart-1');
       const g = await glyphColours(plot);
-      for (const k of ['iqrStroke', 'whisker', 'cap', 'median', 'mean'] as const)
+      for (const k of ['iqrStroke', 'whisker', 'cap', 'median', 'p90', 'mean'] as const)
         expect(g[k], k).toBe(chart1);
       for (const d of g.dots) expect(d.fill).toBe(chart1);
       // R2-4: stroke against the surface and against the 20% box fill (computed from tokens)
@@ -214,7 +219,7 @@ for (const width of [1440, 390] as const) {
       await expect(rt.getByRole('button', { name: 'How to read the box plot' })).toBeVisible();
     });
 
-    test('R2-5, R2-6, R2-7, R2-13: median above the line, min and max under the baseline, six numbers in the tooltip and the aria-label', async ({
+    test('R2-5, R2-6, R2-7, R2-13 (17 Nov RD5: no median label; a p90 triangle above the box): min and max under the baseline, all numbers in the tooltip and the aria-label', async ({
       page,
     }) => {
       await openRun(page, s.slug, classic);
@@ -225,8 +230,10 @@ for (const width of [1440, 390] as const) {
       const t = await plot.evaluate((svg) => {
         const box = svg.querySelector('rect[class*=iqr]')!.getBoundingClientRect();
         const line = svg.querySelector('line[class*=axisLine]')!.getBoundingClientRect();
+        const p90 = svg.querySelector('path[class*=p90Mark]')!.getBoundingClientRect();
         return {
           boxTop: box.top,
+          p90Bottom: p90.bottom,
           axisY: line.top,
           texts: Array.from(svg.querySelectorAll('text')).map((x) => ({
             text: x.textContent ?? '',
@@ -238,25 +245,35 @@ for (const width of [1440, 390] as const) {
       });
       const median = t.texts.filter((x) => /medianLabel/.test(x.cls));
       const ends = t.texts.filter((x) => /endLabel/.test(x.cls));
-      expect(median).toHaveLength(1);
-      expect(median[0]!.bottom).toBeLessThanOrEqual(t.boxTop + 0.5);
+      // RD5: the median is the line in the box (round 2 RD3), not a printed number; the p90 triangle points down onto the box
+      expect(median).toHaveLength(0);
+      expect(t.p90Bottom).toBeLessThanOrEqual(t.boxTop + 0.5);
       expect(ends.length === 2 || (ends.length === 1 && / to /.test(ends[0]!.text))).toBe(true);
       for (const e of ends) expect(e.top).toBeGreaterThanOrEqual(t.axisY - 0.5);
       expect(t.texts).toHaveLength(median.length + ends.length);
       // R2-7: the sentence names the six numbers and the total
       const label = (await plot.getAttribute('aria-label'))!;
-      for (const w of ['minimum', '25th percentile', 'median', 'mean', '75th percentile', 'maximum', 'total'])
+      for (const w of [
+        'minimum',
+        '25th percentile',
+        'median',
+        'mean',
+        '75th percentile',
+        '90th percentile',
+        'maximum',
+        'total',
+      ])
         expect(label, w).toContain(w);
-      // R2-6: hover and focus show all six numbers and the IQR
+      // R2-6: hover and focus show all the numbers (p90 since 17 Nov RD5) and the IQR
       await settle(page);
       const mark = c.locator('[data-mark-kind=box]').first();
       await mark.focus();
       const tip = page.getByRole('tooltip');
-      for (const w of ['Min', 'P25', 'Median', 'Mean', 'P75', 'Max', 'IQR'])
+      for (const w of ['Min', 'p25', 'Median', 'Mean', 'p75', 'p90', 'Max', 'IQR'])
         await expect(tip).toContainText(w);
       await page.keyboard.press('Escape');
       await mark.hover({ position: { x: 3, y: 5 }, force: true });
-      for (const w of ['Min', 'P25', 'Median', 'Mean', 'P75', 'Max', 'IQR'])
+      for (const w of ['Min', 'p25', 'Median', 'Mean', 'p75', 'p90', 'Max', 'IQR'])
         await expect(tip).toContainText(w);
     });
 
@@ -321,27 +338,24 @@ for (const width of [1440, 390] as const) {
       await expect(dist.getByText(/Box: middle 50%/)).toHaveCount(1); // rows cards keep one key line
     });
 
-    test('R2-3: Steps rows take series 1 and keep one key line', async ({ page }) => {
+    test('R2-3 (round 3 L2): Step timings plots take the kind colour of the trace', async ({ page }) => {
       await mockSteps(page);
       await openRun(page, s.slug, classic, 'panel=latency');
-      const steps = page.getByRole('region', { name: 'Steps' });
-      await steps.getByRole('button', { name: 'Expand all steps' }).click();
+      const steps = page.getByRole('region', { name: 'Step timings' });
+      // By step starts open (as the trace drawer): no Expand all
+      await expect(steps.getByRole('table')).toBeVisible();
       await settle(page);
-      const tracks = await steps.locator('[data-box-track]').evaluateAll((els) =>
-        els.map((e) => ({
-          series: e.getAttribute('data-series'),
-          band: e.getAttribute('data-band'),
-          border: getComputedStyle(e.children[1]!).borderTopColor,
-        })),
-      );
-      expect(tracks.length).toBeGreaterThan(1);
-      const chart1 = await token(page, '--chart-1');
-      for (const t of tracks) {
-        expect(t.series).toBe('1');
-        expect(t.band).toBeNull();
-        expect(t.border).toBe(chart1);
-      }
-      await expect(steps.getByText(/Box: middle 50%/)).toHaveCount(1);
+      const tone = (name: string) =>
+        steps
+          .getByRole('row')
+          .filter({ hasText: name })
+          .first()
+          .locator('[style*="--tone"]')
+          .first()
+          .evaluate((e) => (e as HTMLElement).style.getPropertyValue('--tone').trim());
+      // one source: KIND_TONE in traces/spanKinds.ts (LLM amber chart-4, Tool indigo chart-5)
+      expect(await tone('llm:generate')).toBe('var(--chart-4)');
+      expect(await tone('tool:search')).toBe('var(--chart-5)');
     });
   });
 }

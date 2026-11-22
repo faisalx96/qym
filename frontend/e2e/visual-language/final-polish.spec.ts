@@ -152,7 +152,7 @@ test.describe('1440', () => {
     expect(stuck, 'sticky elements in the lower half other than the bar').toHaveLength(0);
   });
 
-  test('sweep: sections use the 18px H2 and the compare tabs rhythm', async ({ page }) => {
+  test('sweep: sections use the 16px H2 and the compare tabs rhythm', async ({ page }) => {
     const [a, b, c, d] = tour.compareIds as [string, string, string, string];
     await gotoApp(page, cohortUrl([a, b], [c, d], { tab: 'sweep' }));
     const sweep = page.getByTestId('sweep-view');
@@ -163,7 +163,7 @@ test.describe('1440', () => {
       .evaluateAll((els) => els.map((e) => getComputedStyle(e).fontSize));
     // round 8 reduced the sweep to one titled section (the verdict) plus tables; the framed report sections are measured by r8b-sections
     expect(sizes.length).toBeGreaterThanOrEqual(1);
-    expect(new Set(sizes)).toEqual(new Set(['18px']));
+    expect(new Set(sizes)).toEqual(new Set(['16px']));
     const lead = async (sections: ReturnType<Page['locator']>) =>
       sections.evaluateAll((els) =>
         els.slice(1, 3).map((el, i) => {

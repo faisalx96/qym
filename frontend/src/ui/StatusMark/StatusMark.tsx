@@ -1,12 +1,13 @@
-import type { HTMLAttributes } from 'react';
+import type { CSSProperties, HTMLAttributes } from 'react';
 import styles from './StatusMark.module.css';
 
 export type StatusTone = 'success' | 'info' | 'danger' | 'warning' | 'neutral';
 
 /**
  * The 3 x 3 pixel figure of a status (the identicon grammar of the project marks):
- * `full` done, `check` approved, `cross` failed or rejected, `pause` stopped, `orbit` running (the ring with one
- * lit pixel), `ring` waiting to start, `hourglass` waiting for review, `dot` draft.
+ * `full` done, `check` approved, `cross` failed or rejected, `pause` stopped, `orbit` running (one lit pixel goes
+ * round the ring, CSS only; still under reduced motion), `ring` waiting to start, `hourglass` waiting for review,
+ * `dot` draft.
  */
 export type StatusShape = 'full' | 'check' | 'cross' | 'pause' | 'orbit' | 'ring' | 'hourglass' | 'dot';
 
@@ -74,6 +75,8 @@ export function StatusMark({ tone, shape, label, className, ...rest }: StatusMar
               rx={0.6}
               data-on={on.has(i) ? '' : undefined}
               data-ring={ringed && ring >= 0 ? '' : undefined}
+              // the orbit's phase: each ring pixel lights one step after the one before it (17 Nov R7)
+              style={shape === 'orbit' && ring >= 0 ? ({ '--ring-i': ring } as CSSProperties) : undefined}
             />
           );
         })}

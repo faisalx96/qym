@@ -197,23 +197,43 @@
   color: var(--text-muted);
 }
 
-/* two blocks that read side by side (Expected beside Output) */
-.pair {
+/* ---------- the Output row (feedback round 2): Input, Expected and the output each on a row of their own ---------- */
+/* the row: its head on the pane ground ("Output" once, then the row's own controls), then the outputs in view */
+.outRow {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-md);
-  align-items: stretch;
+  gap: var(--space-xs);
   min-width: 0;
 }
 
-.pair > :only-child {
-  grid-column: 1 / -1;
+/* the head lines its title up with the titles inside the blocks (the block rail, then the block padding) */
+.outRowHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+  align-items: center;
+  min-width: 0;
+  min-height: 36px;
+  padding-inline: calc(var(--rail-width) + var(--space-md)) 0;
 }
 
-@container (max-width: 700px) {
-  .pair {
-    grid-template-columns: minmax(0, 1fr);
-  }
+/* the controls of the row: they follow the title and wrap under it when the pane is narrow */
+.outRowControls {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+  align-items: center;
+  min-width: 0;
+}
+
+/* the outputs in view: one column each (one output takes the full width); a column that no longer fits goes to the
+   next line. Each block keeps its own height: a long output never stretches its neighbour. */
+.outs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--space-md);
+  align-items: start;
+  min-width: 0;
 }
 
 /* ---------- block: an inset fill, the meaning of the part on a 3px start rail ---------- */
@@ -232,6 +252,20 @@
 
 .block[data-fill] {
   height: 100%;
+}
+
+/* the passes in view of a multi-pass item (in the head of the Output row): the rule beside the chips, then the shortcut */
+.passHint {
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.passShortcuts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
 }
 
 .blockHead {
@@ -258,7 +292,17 @@
   white-space: nowrap;
 }
 
-.block:not([data-tone='neutral']) > .blockHead > .blockTitle > .eyebrow {
+/* Input, Expected and Output never read muted (feedback round 3), whether the title is a plain label or the button
+   that folds the part (the Eyebrow is then inside the button, so the rules match any depth under the title): a part
+   with a tone shows its label in the tone; a part with no single tone (an output that was not scored, the Output row
+   with several passes or runs in view) shows it bright. */
+.blockHead > .blockTitle .eyebrow,
+.outRowHead > .blockTitle .eyebrow {
+  color: var(--text-primary);
+}
+
+.block:not([data-tone='neutral']) > .blockHead > .blockTitle .eyebrow,
+.outRow[data-tone]:not([data-tone='neutral']) > .outRowHead > .blockTitle .eyebrow {
   color: var(--tone-text);
 }
 
@@ -270,9 +314,10 @@
   min-width: 0;
 }
 
+/* the icon row of a head: the 24px buttons stand edge to edge (10px between the glyphs), so the six icons of a large
+   output (difference marks, Expand all, Collapse all, raw JSON, trace, copy) stay on the head's line in a 3-pass view */
 .blockActions {
   display: inline-flex;
-  gap: var(--space-xs);
   align-items: center;
   margin-inline-start: auto;
 }
@@ -280,6 +325,91 @@
 .blockBody {
   min-width: 0;
   padding: 0 var(--space-md) var(--space-md);
+}
+
+.blockFrame {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* a text block as tall as its value up to the cap of its part, then its body scrolls inside the block (the platform
+   scrollbar; nothing lifts the cap, no fade over the text). The cap (blocks.tsx CAPS) is a share of the viewport. */
+.blockBody[data-cap] {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* the scrollbar of a capped body is always on screen, so the reader sees the box scrolls without trying it: where
+   the browser has the platform's classic scrollbar (base.css ::-webkit-scrollbar, 10px, the --scrollbar-* tokens),
+   the inherited thin overlay one gives way to it (Chromium and Safari; Firefox keeps the inherited token colours) */
+@supports selector(::-webkit-scrollbar) {
+  .blockBody[data-cap] {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+}
+
+.blockBody[data-cap]:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+  border-radius: var(--radius-md);
+}
+
+/* a short note after a block title (which pass Expected is marked against) */
+.blockNote {
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* the title of a part that opens and closes: the title itself is the control, its arrow first */
+.partToggle {
+  display: inline-flex;
+  gap: var(--space-xs);
+  align-items: center;
+  min-height: 28px;
+  margin-inline-start: calc(-1 * var(--space-xs));
+  padding: 0 var(--space-xs);
+  border: 0;
+  border-radius: var(--control-radius);
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.partToggle:hover {
+  background: var(--row-hover);
+}
+
+.partToggle:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.arrow {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-muted);
+}
+
+/* a closed Output row: its head alone */
+.outRow[data-closed] > .outs {
+  display: none;
+}
+
+/* a closed block: its head alone */
+.block[data-closed] > .blockHead {
+  min-height: 36px;
+}
+
+.sectionBody {
+  min-width: 0;
 }
 
 /* a block with no head of its own (the section title is above it) */
@@ -648,50 +778,107 @@
   container: metrics / inline-size;
 }
 
+/* The column template comes complete from metrics.tsx (metricColumns) as --m-cols, always set and never empty, so no
+   template here builds a track list from an optional property (I13: a missing `var(--c-reason)` voided the template
+   and every cell of a row stacked in one column).
+   One line per metric at every width (I16): every track has a smallest width, the pane grows to the table (up to 75%
+   of the page, Frame.tsx), and past that the table scrolls sideways in its own block, the header row with it, while
+   the arrow and the name stay pinned at its start. */
 .mgrid {
-  --cols: 24px minmax(148px, 0.8fr) repeat(var(--scores), 68px) var(--c-passif) var(--c-reason) 24px;
-
   display: grid;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
 }
 
 .mhead,
 .mrow {
+  /* the fill of the row state; the pinned cells paint it over the block fill, so a score never shows through them */
+  --m-fill: transparent;
+
   display: grid;
-  grid-template-columns: var(--cols);
+  grid-template-columns: var(--m-cols, minmax(0, 1fr));
   column-gap: var(--space-md);
+  min-width: min-content;
   padding-inline: var(--space-sm);
+  background: var(--m-fill);
 }
 
 /* the loading frame: one column of bones under the title row */
 .mgrid[data-loading] {
-  --cols: minmax(0, 1fr);
+  --m-cols: minmax(0, 1fr);
 }
 
-/* one line: the column titles, in the type of a DataTable header (--font-sm, 650, 0.05em, upper case, muted) */
+/* one line: the column titles, in the type of a DataTable header (--font-sm, 650, 0.05em, upper case) on the header
+   fill of a table */
 .mhead {
+  --m-fill: var(--bg-active);
+
   align-items: center;
   min-height: 36px;
+  border-start-start-radius: var(--radius-md);
+  border-start-end-radius: var(--radius-md);
   font-size: var(--font-sm);
   font-weight: 650;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .mtitle {
+  display: flex;
+  align-items: center;
   min-width: 0;
 }
 
-/* no metric has a reason: the score edit takes a line of its own under the row */
+/* no metric has a reason: the score edit takes a line of its own under the row, pinned as the details are */
 .mgrid[data-noreason] .reasonCell {
+  position: sticky;
+  inset-inline-start: calc(var(--space-sm) + 24px + var(--space-md));
   grid-column: 2 / -1;
+  justify-self: start;
+  width: calc(100cqi - 2 * var(--space-sm) - 24px - var(--space-md));
+  margin-block-start: var(--space-sm);
 }
 
 .mrow {
-  align-items: start;
+  position: relative;
+  align-items: center;
+  min-height: 44px;
   padding-block: var(--space-sm);
   border-block-start: 1px solid var(--border-subtle);
+  transition: background-color var(--transition-fast);
+}
+
+/* a row with details opens from anywhere on it: the hover step of the row ladder */
+.mrow[data-expandable] {
+  cursor: pointer;
+}
+
+.mrow[data-expandable]:hover {
+  --m-fill: var(--row-hover);
+}
+
+/* the opened row: the selected step of the row ladder, an accent bar at its start. The bar is a pinned grid item over
+   the arrow column (rows 1 to 3: the line, the score edit, the details), so it stays at the start while the table
+   scrolls sideways. */
+.mrow[data-open] {
+  --m-fill: var(--row-selected);
+}
+
+.mrow[data-open]::before {
+  content: '';
+  position: sticky;
+  z-index: 3;
+  inset-inline-start: 0;
+  grid-row: 1 / span 3;
+  grid-column: 1;
+  align-self: stretch;
+  justify-self: start;
+  width: 2px;
+  margin-block: calc(-1 * var(--space-sm));
+  margin-inline-start: calc(-1 * var(--space-sm));
+  background: var(--accent-primary);
 }
 
 .mrow:last-child {
@@ -700,13 +887,74 @@
 }
 
 /* the one wash: a metric below its threshold */
-.mrow[data-failing] {
-  background: color-mix(in srgb, var(--error) var(--tint-faint), transparent);
+.mrow[data-failing]:not([data-open]) {
+  --m-fill: color-mix(in srgb, var(--error) var(--tint-faint), transparent);
+}
+
+.mrow[data-failing][data-expandable]:not([data-open]):hover {
+  --m-fill: color-mix(in srgb, var(--error) var(--tint-soft), transparent);
 }
 
 /* the row whose score is in edit: the selected step of the row ladder (cv4 F11) */
 .mrow[data-editing] {
-  background: var(--row-selected);
+  --m-fill: var(--row-selected);
+}
+
+/* The pinned start of a line (I16): the arrow and the name stay in view while the scores scroll under them. They are
+   opaque: the block fill, then the row's own fill as an inset shadow (it eases with the row on hover). Each covers
+   the padding or the gap beside it, so no score shows between them. */
+.mhead > .leadCell,
+.mrow > .leadCell,
+.mhead > .mtitle,
+.mrow > .nameCell {
+  position: sticky;
+  align-self: stretch;
+  /* stretched to the line's height, the content stays centred in it */
+  align-content: center;
+  align-items: center;
+  background-color: var(--bg-elevated);
+  box-shadow: inset 0 0 0 100vmax var(--m-fill);
+  transition: box-shadow var(--transition-fast);
+}
+
+/* the arrow that opens the details of a metric: the first thing in its row */
+.mhead > .leadCell,
+.mrow > .leadCell {
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  inset-inline-start: 0;
+  grid-row: 1;
+  grid-column: 1;
+  margin-inline: calc(-1 * var(--space-sm)) calc(-1 * var(--space-md));
+  padding-inline: var(--space-sm) var(--space-md);
+}
+
+.mhead > .leadCell {
+  border-start-start-radius: var(--radius-md);
+}
+
+/* in a metric row they also cover the row's block padding, so the pinned edge runs the full height of the line */
+.mrow > .leadCell,
+.mrow > .nameCell {
+  margin-block: calc(-1 * var(--space-sm));
+  padding-block: var(--space-sm);
+}
+
+/* after the row's padding, the arrow column (24px, metricColumns) and the gap */
+.mhead > .mtitle,
+.mrow > .nameCell {
+  z-index: 1;
+  inset-inline-start: calc(var(--space-sm) + 24px + var(--space-md));
+  margin-inline-end: calc(-1 * var(--space-md));
+  padding-inline-end: var(--space-md);
+}
+
+/* scrolled: the pinned name shows its edge over the scores under it */
+.mgrid[data-scrolled] > * > :is(.mtitle, .nameCell) {
+  box-shadow:
+    inset -1px 0 0 var(--border-default),
+    inset 0 0 0 100vmax var(--m-fill);
 }
 
 .mrow > [role='cell'] {
@@ -728,38 +976,6 @@
   font-size: var(--font-base);
   line-height: 1.5;
   color: var(--text-muted);
-}
-
-/* a pass column title is the control that picks the pass in view: the tab look (accent label, 2px underline) */
-.passHead {
-  display: inline-flex;
-  gap: var(--space-xs);
-  align-items: center;
-  height: 24px;
-  padding: 0 2px;
-  border: 0;
-  border-block-end: 2px solid transparent;
-  background: none;
-  font: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: color var(--transition-fast);
-}
-
-.passHead:hover {
-  color: var(--text-primary);
-}
-
-.passHead[aria-pressed='true'] {
-  border-block-end-color: var(--accent-primary);
-  color: var(--accent-primary);
-}
-
-.passHead:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
 }
 
 .mrow > .nameCell {
@@ -796,9 +1012,10 @@
   border-radius: var(--control-radius);
 }
 
-/* the pass in view: the selected step of the row ladder */
-.cellScore[data-focus] {
-  background: var(--row-selected);
+/* The tinted pill mixes into the block fill, not into the row: on a failing wash, a hover or the open row its band text
+   keeps the 4.5:1 of a pill on the block (a transparent tint over the accent row fell to 3.7:1). */
+.cellScore > [data-variant='pill']:is([data-band], [data-verdict]) {
+  background: color-mix(in srgb, var(--tone) var(--tint-soft), var(--bg-elevated));
 }
 
 .passIf {
@@ -835,15 +1052,57 @@
   color: var(--text-muted);
 }
 
-/* what the scorer recorded for a metric: one deeper tile under the row, over the full width of the table */
+/* what the scorer recorded for a metric: one deeper tile under the row, over the width of the block in view. It is
+   pinned with the name: when the scores scroll sideways, the details stay where they are and keep their width. */
 .mrow > .mdetail {
+  position: sticky;
+  inset-inline-start: calc(var(--space-sm) + 24px + var(--space-md));
   display: block;
+  grid-row: auto;
   grid-column: 2 / -1;
+  justify-self: start;
+  width: calc(100cqi - 2 * var(--space-sm) - 24px - var(--space-md));
   min-width: 0;
   margin-block-start: var(--space-sm);
   padding: var(--space-md);
   border-radius: var(--control-radius);
   background: var(--bg-surface);
+  /* the opened details are read, not clicked: the row's pointer stops at them */
+  cursor: auto;
+}
+
+/* several passes in view: the reasons and the details of a metric side by side, one column per pass */
+.mrow > .mdetail[data-cols] {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-md) var(--space-lg);
+  align-items: start;
+}
+
+.passDetail {
+  display: grid;
+  gap: var(--space-sm);
+  align-content: start;
+  min-width: 0;
+}
+
+.passDetail + .passDetail {
+  padding-inline-start: var(--space-lg);
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+.passDetailHead {
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.editStack {
+  display: grid;
+  gap: var(--space-sm);
+  min-width: 0;
 }
 
 .mrow > .actionCell,
@@ -853,72 +1112,10 @@
   justify-content: flex-end;
 }
 
-/* the arrow that opens the details of a metric: the first thing in its row */
-.mrow > .leadCell,
-.mhead > .leadCell {
-  display: flex;
-  justify-content: center;
-}
-
-/* a pane too narrow for a reason column: the reason goes under its metric, on the name's edge */
-@container metrics (max-width: 599px) {
-  .mgrid:not([data-multi]) {
-    --cols: 24px minmax(0, 1fr) repeat(var(--scores), 68px) var(--c-passif) 24px;
-  }
-
-  .mgrid:not([data-multi]) .reasonHead {
-    display: none;
-  }
-
-  .mgrid:not([data-multi]) .reasonCell {
-    grid-row: 2;
-    grid-column: 2 / -1;
-    padding-block-start: var(--space-xs);
-  }
-
-  .mgrid:not([data-multi]) .reasonCell:empty {
-    display: none;
-  }
-}
-
-@container metrics (max-width: 819px) {
-  .mgrid[data-multi] {
-    --cols: 24px minmax(0, 1fr) repeat(var(--scores), 68px) var(--c-passif) 24px;
-  }
-
-  .mgrid[data-multi] .reasonHead {
-    display: none;
-  }
-
-  .mgrid[data-multi] .reasonCell {
-    grid-row: 2;
-    grid-column: 2 / -1;
-    padding-block-start: var(--space-xs);
-  }
-
-  .mgrid[data-multi] .reasonCell:empty {
-    display: none;
-  }
-}
-
-/* narrower still: a multi-pass metric puts its name on one line and its score columns on the next */
-@container metrics (max-width: 519px) {
-  .mgrid[data-multi] {
-    --cols: 24px repeat(var(--scores), minmax(0, 1fr)) var(--c-passif) 24px;
-  }
-
-  .mgrid[data-multi] .mtitle,
-  .mgrid[data-multi] .nameCell {
-    grid-column: 2 / -1;
-  }
-
-  .mgrid[data-multi] .reasonCell {
-    grid-row: 3;
-  }
-
-  .mgrid[data-multi] > .mhead {
-    padding-block: var(--space-xs);
-  }
+/* the edit tile stays on the metric's line, also while the score edit takes the line under it (I16) */
+.mrow > .actionCell {
+  grid-row: 1;
+  grid-column: -2 / -1;
 }
 
 /* ---------- score edit ---------- */
@@ -967,4 +1164,71 @@
 
 .rootCause:empty {
   display: none;
+}
+
+/* one root-cause review per pass in view, side by side */
+.passCols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-md);
+  align-items: start;
+  min-width: 0;
+}
+
+.passCol {
+  min-width: 0;
+}
+
+/* a pass with nothing to review (its task failed before a score) takes no column */
+.passCol:empty {
+  display: none;
+}
+
+/* ---------- a large JSON value: its groups open and close ---------- */
+.tree {
+  display: grid;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+/* G4: Expand all / Collapse all are two quiet icon actions; the bar moves back by --space-xs so their glyphs line up
+   with the key arrows below, as the key toggles do */
+.treeBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-inline-start: calc(-1 * var(--space-xs));
+}
+
+/* the key line of a group that opens and closes: the key is the control, its arrow first, its count after */
+.keyToggle {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  align-items: center;
+  margin-inline-start: calc(-1 * var(--space-xs));
+  padding: 0 var(--space-xs);
+  border: 0;
+  border-radius: var(--control-radius);
+  background: none;
+  font: inherit;
+  text-align: start;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.keyToggle:hover {
+  background: var(--row-hover);
+}
+
+.keyToggle:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.keyArrow {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-muted);
 }

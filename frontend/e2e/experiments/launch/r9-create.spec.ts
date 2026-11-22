@@ -560,17 +560,17 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
       expect(dd.width).toBeLessThanOrEqual(measure + 1);
       expect((await box(rows.nth(i))).height).toBeGreaterThanOrEqual(31.5);
     }
-    // C-5-3: row height 32 ± 1, facts readable without a click
-    for (let n = 1; n <= 6; n++) near((await box(runRow(page, n))).height, 32, 1, `run ${n} row`);
+    // C-5-3: a compact row (--row-compact, 36 since feedback 17 Nov R1) ± 1, facts readable without a click
+    for (let n = 1; n <= 6; n++) near((await box(runRow(page, n))).height, 36, 1, `run ${n} row`);
     // C-5-4: columns = #, only those that vary, Priority
     const headers = await page.locator('[data-part=runs-table] [role=columnheader]').allInnerTexts();
     // R10 C-2-1: one column per swept setting, named as the form names it
     expect(
       headers.map((h) => h.replace(/\s+/g, ' ').trim().split(' ')[0]!.toLowerCase()).filter(Boolean),
     ).toEqual(['#', 'environment', 'timeout', 'priority']);
-    // C-5-5: 18 px / 700 mono next to "runs to launch"
+    // C-5-5: --font-xl (16 px since G1) / 700 mono next to "runs to launch"
     const count = await computed(part(page, 'run-count'), ['font-size', 'font-weight', 'font-family']);
-    expect(count['font-size']).toBe('18px');
+    expect(count['font-size']).toBe('16px');
     expect(count['font-weight']).toBe('700');
     expect(count['font-family']).toMatch(/mono/i);
     // C-5-7: Summary, Runs, Changes, Checks are cards; Changes and Checks share a row with a 14 px gap
@@ -678,7 +678,8 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     await prio(page, 1).click();
     await page.getByRole('option', { name: /^Low/ }).click();
     await expect(page.locator('[data-part=run-changed]')).toHaveCount(1);
-    near((await box(runRow(page, 1))).height, 32, 1, 'row with the marker');
+    // a compact row is 36 since feedback 17 Nov R1
+    near((await box(runRow(page, 1))).height, 36, 1, 'row with the marker');
   });
 
   test('C-6-3, C-6-6 High on run 1: only run 1 changes, the dry run names it, the acknowledgement gates Launch, the job stores it', async ({

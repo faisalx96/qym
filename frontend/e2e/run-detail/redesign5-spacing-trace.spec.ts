@@ -188,7 +188,7 @@ for (const width of [1440, 390]) {
       const rows = dialog.getByRole('treeitem');
       await expect(rows.first()).toBeVisible();
       await rows.nth(1).click({ force: true });
-      // the span facts are a stat strip above the tabs now: the drawer has no Metrics tab. Raw is a metadata tab.
+      // the span facts are one line under the span name, above the tabs: the drawer has no Metrics tab. Raw is a metadata tab.
       await dialog.getByRole('tab', { name: /^Raw/ }).click();
       const tree = dialog.getByRole('radio', { name: 'Tree' });
       if (await tree.count()) await tree.check({ force: true });

@@ -199,9 +199,21 @@ export function FilterBar({ display, end }: { display: DisplayState; end?: React
         </Text>
         {chips.length ? (
           <span className={styles.chipList}>
+            {/* RD11: every active filter is labelled (its field apart from its value), clamped to one short line with
+                the full text on hover, and removable with its own × */}
             {chips.map((chip) => (
-              <Chip key={chip.key} isSelected>
-                {chip.label}
+              <Chip
+                key={chip.key}
+                isSelected
+                className={styles.activeChip}
+                aria-label={`Filter: ${chip.label}`}
+                removeLabel={`Remove filter: ${chip.label}`}
+                onRemove={() => api.replaceView(chip.clear(view))}
+              >
+                <span className={styles.chipText} title={chip.label} data-testid="active-filter">
+                  {chip.field ? <span className={styles.chipField}>{chip.field}</span> : null}
+                  <span className={styles.chipValue}>{chip.field ? chip.value : chip.label}</span>
+                </span>
               </Chip>
             ))}
           </span>

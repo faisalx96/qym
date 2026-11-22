@@ -83,6 +83,32 @@ test.describe('report sections', () => {
     const first = tops.filter((t) => t === tops[0]).length;
     expect(first).toBeGreaterThanOrEqual(2);
   });
+
+  test('RD12: the metric cards of every overview row fill the row width', async ({ page }) => {
+    await openRun(page, s.slug, classic);
+    await expect(page.getByTestId('metric-card').first()).toBeVisible();
+    const gaps = await page.evaluate(() => {
+      const cards = Array.from(document.querySelectorAll('[data-testid=metric-card], [data-testid=trace-card]'));
+      const grids = Array.from(new Set(cards.map((c) => c.parentElement!)));
+      return grids.flatMap((g) => {
+        const gr = g.getBoundingClientRect();
+        const rows = new Map<number, DOMRect[]>();
+        for (const c of Array.from(g.children)) {
+          const r = c.getBoundingClientRect();
+          rows.set(Math.round(r.top), [...(rows.get(Math.round(r.top)) ?? []), r]);
+        }
+        // the first card starts at the grid's left edge and the last ends at its right edge
+        return Array.from(rows.values()).map((row) => ({
+          left: Math.round(Math.min(...row.map((r) => r.left)) - gr.left),
+          right: Math.round(gr.right - Math.max(...row.map((r) => r.right))),
+        }));
+      });
+    });
+    for (const g of gaps) {
+      expect(Math.abs(g.left), JSON.stringify(gaps)).toBeLessThanOrEqual(1);
+      expect(Math.abs(g.right), JSON.stringify(gaps)).toBeLessThanOrEqual(1);
+    }
+  });
 });
 
 test.describe('errors section', () => {

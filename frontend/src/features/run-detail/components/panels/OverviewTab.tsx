@@ -1,12 +1,13 @@
 /**
  * Overview: one card per metric. cv4 C1-3 and C1-4 give every card one anatomy, top to bottom: the metric name as the
- * card title with the count at the end; the main number (a score's ring and mean in its band colour, or plain green or
- * red against a pass threshold, C220; a plain number's mean in the box plot's tone, keyed by the plot's mean diamond);
- * the plot (histogram with its hatch key at the end of the number row, or the Total, Min, Median and Max strip over the
- * box plot); then a foot under a hairline with the error note. No side rail, no header band. Tokens show only when the
+ * card title with the count at the end (a plain number: a quiet "N items" caption at the end of the number row,
+ * RD3); the main number (a score's ring and mean in its band colour, or plain green or red against a pass threshold,
+ * C220; a plain number's mean in the box plot's tone, keyed by the plot's mean diamond); the plot (histogram with its
+ * hatch key at the end of the number row, or the Median, 50% interval and 90th percentile strip, each keyed by its plot
+ * symbol, over the box plot, RD4/RD5); then a foot under a hairline with the error note. No side rail, no header band. Tokens show only when the
  * traces carry them. Cost per item is not shown: every attempt reports it by default, so it says nothing about the run.
  */
-import { useMemo } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import { Card, CardTitle, EmptyState, HelpMarker, Icon, Tag } from '@/ui';
 import { useRunPage } from '../../RunContext';
 import { metricBand } from '@/lib/metrics';
@@ -14,10 +15,12 @@ import { metricPassesFor } from '../../lib/filterRules';
 import { metricHasPassThreshold } from '../../lib/runModel';
 import { metricEntries, traceEntries, MIN_TRACE_ITEMS } from '../../lib/boxEntries';
 import { metricCardModel, type MetricCardModel } from '../../lib/overviewModel';
+import { metricGridStyles } from '../../lib/metricGrid';
 import { boxStats } from '../../lib/boxStats';
 import { boxFormatter, type BoxKind } from '../../lib/boxFormat';
 import { BandValue, BoolBars, Histogram } from '../charts/Charts';
 import { BOX_HELP, BoxCardBody, type BoxEntry } from '../charts/BoxCard';
+import { BoxGlyph, type BoxGlyphKind } from '../charts/BoxPlot';
 import { useChartFilters } from './useChartFilters';
 import styles from './Panels.module.css';
 
@@ -94,9 +97,12 @@ function ScoreCard({
   card,
   reserveFoot,
   sharedNote = false,
+  style,
 }: {
   card: MetricCardModel;
   reserveFoot: boolean;
+  /** RD12: the card's span in the metric grid, per column count. */
+  style?: CSSProperties;
   /** cv4 Y9: the grid shows the note and the hatch key once, under the cards; the card has neither. */
   sharedNote?: boolean;
 }) {
@@ -117,6 +123,7 @@ function ScoreCard({
       fill
       aria-label={card.metric}
       className={styles.metricCard}
+      style={style}
       data-testid="metric-card"
       data-metric={card.metric}
     >
@@ -169,16 +176,18 @@ function ScoreCard({
 }
 
 /**
- * A plain-number quantity (a numeric metric, tokens per item): the mean as the value, "mean per item" beside the
- * name, a Total · Min · Median · Max line, then the box plot. The help marker explains the plot.
+ * A plain-number quantity (a numeric metric, tokens per item): the mean as the value with "◇ mean per item" and the
+ * quiet "N items" caption on its row, a Median · 50% interval · 90th percentile strip (the plot's legend), then the
+ * box plot. The help marker explains the plot.
  */
-function NumberCard({
+export function NumberCard({
   title,
   kind,
   entries,
   field,
   note,
   reserveFoot = false,
+  style,
 }: {
   title: string;
   kind: BoxKind;
@@ -186,17 +195,21 @@ function NumberCard({
   field: string;
   note?: MetricCardModel['errorNote'];
   reserveFoot?: boolean;
+  /** RD12: the card's span in the metric grid, per column count. */
+  style?: CSSProperties;
 }) {
   const values = useMemo(() => entries.map((e) => e.v), [entries]);
   const stats = useMemo(() => boxStats(values), [values]);
   const fmt = boxFormatter(kind);
-  const additive = values.length > 0 && values.every((v) => v >= 0);
-  const facts: Array<[string, string]> = [
-    ...(additive ? ([['Total', fmt(stats.sum)]] as Array<[string, string]>) : []),
-    ['Min', fmt(stats.min)],
-    ['Median', fmt(stats.median)],
-    ['Max', fmt(stats.max)],
+  // RD4, RD5: exactly the plot's marks, each named by its symbol (the row is the plot's legend). Min and max are the
+  // plot's end labels; the mean is the main number above.
+  const facts: Array<[BoxGlyphKind, string, string]> = [
+    ['median', 'Median', fmt(stats.median)],
+    ['interval', '50% interval', `${fmt(stats.p25)} – ${fmt(stats.p75)}`],
+    ['p90', '90th percentile', fmt(stats.p90)],
   ];
+  // RD3: the count is a quiet caption, not a tag between the name and the number; round 2: the count only, no total
+  const caption = `${entries.length.toLocaleString('en-US')} ${entries.length === 1 ? 'item' : 'items'}`;
   const metric = field.startsWith('metric:') ? field.slice(7) : null;
   return (
     <Card
@@ -204,31 +217,35 @@ function NumberCard({
       fill
       aria-label={title}
       className={styles.metricCard}
+      style={style}
       data-testid={metric ? 'metric-card' : 'trace-card'}
       data-metric={metric ?? kind}
     >
-      <CardHead
-        title={title}
-        end={
-          <>
-            <Tag kind="count">{entries.length} items</Tag>
-            <HelpMarker label={BOX_HELP.label}>{BOX_HELP.text}</HelpMarker>
-          </>
-        }
-      />
+      <CardHead title={title} end={<HelpMarker label={BOX_HELP.label}>{BOX_HELP.text}</HelpMarker>} />
       {/* C1-4: the mean is the main number; its key is the plot's hollow diamond, so the number names a mark */}
-      <div className={styles.metricScore} data-tone={entries.length ? 'series' : undefined}>
+      <div
+        className={styles.metricScore}
+        data-tone={entries.length ? 'series' : undefined}
+        data-series="1"
+        data-compact=""
+      >
         <span className={styles.heroValue}>{entries.length ? fmt(stats.mean) : '—'}</span>
         <span className={styles.meanKey}>
-          <span className={styles.meanGlyph} aria-hidden="true" />
+          <BoxGlyph kind="mean" />
           mean per item
+        </span>
+        <span className={styles.numberCaption} data-testid="number-card-caption">
+          {caption}
         </span>
       </div>
       {entries.length ? (
-        <dl className={styles.numberFacts}>
-          {facts.map(([k, v]) => (
-            <div key={k} className={styles.numberFact}>
-              <dt>{k}</dt>
+        <dl className={styles.numberFacts} data-series="1">
+          {facts.map(([glyph, k, v]) => (
+            <div key={k} className={styles.numberFact} data-kpi={glyph}>
+              <dt>
+                <BoxGlyph kind={glyph} />
+                {k}
+              </dt>
               <dd>{v}</dd>
             </div>
           ))}
@@ -278,12 +295,22 @@ export function OverviewTab() {
       ? firstNote
       : null;
   const numberNotes = numericCards.some((c) => c.errorNote);
+  // RD12: each grid fills its rows (fewest, most even rows; a row's cards share its width). The score cards and the
+  // box plot cards keep their own grids, in that order, so each grid balances its own rows.
+  const scoreGrid = metricGridStyles(scoreCards.length);
+  const numberGrid = metricGridStyles(numericCards.length + +showTokens);
   return (
     <div className={styles.overviewStack}>
       {scoreCards.length ? (
-        <div className={styles.metricGrid} data-count={scoreCards.length}>
-          {scoreCards.map((c) => (
-            <ScoreCard key={c.metric} card={c} reserveFoot={scoreNotes} sharedNote={!!sharedNote} />
+        <div className={styles.metricGrid} style={scoreGrid.grid} data-count={scoreCards.length}>
+          {scoreCards.map((c, i) => (
+            <ScoreCard
+              key={c.metric}
+              card={c}
+              reserveFoot={scoreNotes}
+              sharedNote={!!sharedNote}
+              style={scoreGrid.items[i]}
+            />
           ))}
         </div>
       ) : null}
@@ -297,8 +324,8 @@ export function OverviewTab() {
         </p>
       ) : null}
       {numericCards.length || showTokens ? (
-        <div className={styles.metricGrid} data-count={numericCards.length + +showTokens}>
-          {numericCards.map((c) => (
+        <div className={styles.metricGrid} style={numberGrid.grid} data-count={numericCards.length + +showTokens}>
+          {numericCards.map((c, i) => (
             <NumberCard
               key={c.metric}
               title={c.metric}
@@ -307,6 +334,7 @@ export function OverviewTab() {
               field={`metric:${c.metric}`}
               note={c.errorNote}
               reserveFoot={numberNotes}
+              style={numberGrid.items[i]}
             />
           ))}
           {showTokens ? (
@@ -316,6 +344,7 @@ export function OverviewTab() {
               entries={tokens}
               field="tokens"
               reserveFoot={numberNotes}
+              style={numberGrid.items[numericCards.length]}
             />
           ) : null}
         </div>

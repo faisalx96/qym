@@ -69,6 +69,34 @@ describe('ToggleChips (cv5 H4)', () => {
   });
 });
 
+describe('ToggleChips variant="plain" (feedback round 2)', () => {
+  it('has no check box: on is the selected chip look and aria-pressed, the hint of an option still shows', async () => {
+    const user = userEvent.setup();
+    render(
+      <ToggleChips
+        aria-label="Passes in view"
+        variant="plain"
+        options={[
+          { value: '1', label: 'Pass 1', title: 'Show pass 1 in place of pass 2' },
+          { value: '2', label: 'Pass 2', tone: 'danger' },
+        ]}
+        value={['2']}
+        onChange={() => {}}
+      />,
+    );
+    const group = screen.getByRole('group', { name: 'Passes in view' });
+    expect(group.getAttribute('data-variant')).toBe('plain');
+    const on = screen.getByRole('button', { name: /Pass 2/ });
+    expect(on.getAttribute('aria-pressed')).toBe('true');
+    expect(on.querySelector('svg')).toBeNull();
+    // round 3: a toned option carries its tone; an option with no tone carries none
+    expect(on.getAttribute('data-tone')).toBe('danger');
+    expect(screen.getByRole('button', { name: /Pass 1/ }).hasAttribute('data-tone')).toBe(false);
+    await user.tab();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Show pass 1 in place of pass 2');
+  });
+});
+
 describe('ToggleChips label (cv5 Z4)', () => {
   it('a visible label names the group through aria-labelledby', () => {
     render(
@@ -90,8 +118,20 @@ describe('ToggleChips label (cv5 Z4)', () => {
 
 describe('Timeline (cv5 H5)', () => {
   const items = [
-    { key: 'v1', time: 'Sep 4 · 01:51', dateTime: '2026-09-04T01:51:00Z', title: 'v1 created', meta: 'Dev User' },
-    { key: 'v2', time: 'Sep 5 · 13:51', icon: 'check' as const, tone: 'accent' as const, title: 'v2 published' },
+    {
+      key: 'v1',
+      time: 'Sep 4 · 01:51',
+      dateTime: '2026-09-04T01:51:00Z',
+      title: 'v1 created',
+      meta: 'Dev User',
+    },
+    {
+      key: 'v2',
+      time: 'Sep 5 · 13:51',
+      icon: 'check' as const,
+      tone: 'accent' as const,
+      title: 'v2 published',
+    },
   ];
 
   it('is an ordered list of events with their times', () => {

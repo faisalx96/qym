@@ -71,3 +71,34 @@ describe('fillWeight (cv4 E7)', () => {
     expect(fillWeight('x'.repeat(10_000))).toBe(8);
   });
 });
+
+describe('FieldEditor code strings (feedback 17 Nov D4)', () => {
+  it('shows a SQL string as a mono code block with the keywords coloured', () => {
+    const { container } = render(
+      <FieldEditor label="Expected output" value="select id, name from users where id = 1" editable={false} />,
+    );
+    const pre = container.querySelector('pre[data-lang="sql"]')!;
+    expect(pre).toBeInTheDocument();
+    expect(pre).toHaveAttribute('data-kind', 'code');
+    const words = Array.from(pre.querySelectorAll('span')).map((s) => s.textContent?.trim().toUpperCase());
+    expect(words).toEqual(expect.arrayContaining(['SELECT', 'FROM', 'WHERE']));
+  });
+
+  it('shows a JSON string as a JSON code block', () => {
+    const { container } = render(<FieldEditor label="Output" value='{"a": 1}' editable={false} />);
+    expect(container.querySelector('pre[data-lang="json"]')).toBeInTheDocument();
+  });
+
+  it('keeps prose as prose, even when it starts with a SQL word', () => {
+    const { container } = render(
+      <FieldEditor label="Input" value="Select the best answer from the list below." editable={false} />,
+    );
+    expect(container.querySelector('pre[data-lang]')).toBeNull();
+    expect(screen.getByText('Select the best answer from the list below.')).toBeInTheDocument();
+  });
+
+  it('colours SQL keywords under the textarea while a SQL string is edited', () => {
+    const { container } = render(<Editable value="select * from t where a = 1" />);
+    expect(container.querySelector('textarea')).toHaveAttribute('data-mode', 'sql');
+  });
+});

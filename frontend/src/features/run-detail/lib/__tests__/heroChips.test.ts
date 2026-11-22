@@ -1,6 +1,6 @@
 /** Round 3 P6: the header chips, their order, caps and summaries. */
 import { describe, expect, it } from 'vitest';
-import { headerChip, headerChips, runNotice } from '../heroModel';
+import { headerChip, headerChips, isEmptyValue, runNotice } from '../heroModel';
 import type { Run } from '../../types';
 
 const run = (over: Partial<Run>) => ({ run_id: 'r1', ...over }) as Run;
@@ -41,6 +41,29 @@ describe('headerChips', () => {
 
   it('a run with nothing to show has no groups (no band 3)', () => {
     expect(headerChips(run({}))).toEqual([]);
+  });
+
+  it('RD2: leaves out empty objects, arrays, strings and nulls, keeps 0 and false', () => {
+    const groups = headerChips(
+      run({
+        versioning_details: { prompt: 'v8', adapter: '', dataset_filter: {}, flags: [] },
+        config: { seed: 0, stream: false, input_mapping: {}, stop: [], system_prompt: '  ', tools: null },
+        metadata: { notes: '', labels: [], extra: {} },
+      }),
+    );
+    expect(groups.map((g) => g.label)).toEqual(['Versioning', 'Config']);
+    expect(groups[0]!.chips.map((c) => c.key)).toEqual(['prompt']);
+    expect(groups[1]!.chips.map((c) => [c.key, c.text])).toEqual([
+      ['seed', '0'],
+      ['stream', 'false'],
+    ]);
+  });
+});
+
+describe('isEmptyValue', () => {
+  it('is true for nothing to show and false for 0, false and real values', () => {
+    for (const v of [null, undefined, '', '   ', [], {}]) expect(isEmptyValue(v)).toBe(true);
+    for (const v of [0, false, 'x', [0], { a: null }]) expect(isEmptyValue(v)).toBe(false);
   });
 });
 

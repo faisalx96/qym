@@ -15,7 +15,6 @@ import {
   describeViolations,
   itemPane,
   metricRow,
-  metricTable,
   openMetric,
   openRun,
   seedProject,
@@ -91,15 +90,14 @@ for (const width of [1440, 390] as const) {
       await expect(edit).toBeFocused();
     });
 
-    test('the header switch opens the details of every metric and the choice is remembered', async ({
-      page,
-    }) => {
+    test('Expand all opens the details of every metric and the choice is remembered', async ({ page }) => {
       const pane = await openItemPane(page, width);
-      const table = metricTable(pane);
-      await table.getByRole('button', { name: 'Show the details of every metric', exact: true }).click();
-      await expect(
-        table.getByRole('button', { name: 'Hide the details of every metric', exact: true }),
-      ).toHaveAttribute('aria-expanded', 'true');
+      const section = pane.locator('[data-part="metrics-section"]');
+      await section.getByRole('button', { name: 'Expand all', exact: true }).click();
+      await expect(section.getByRole('button', { name: 'Collapse all', exact: true })).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
       await expect(pane.getByRole('group', { name: 'Details of rubric_judge' })).toBeVisible();
       await expect(pane.getByRole('group', { name: 'Details of arabic_judge' })).toBeVisible();
       // the preference is one for every pane (localStorage)
@@ -146,7 +144,9 @@ for (const width of [1440, 390] as const) {
       const bodyRows = grid.locator('[role=row]:has([role=gridcell])');
       await expect(bodyRows).toHaveCount(3);
       // sorting: a click on the column title puts the rows in order
-      const firstCell = () => bodyRows.first().locator('[role=gridcell]').first().textContent();
+      // the first column is the row header (17 Nov D3: the identity column of a table)
+      const firstCell = () =>
+        bodyRows.first().locator('[role=rowheader], [role=gridcell]').first().textContent();
       expect(await firstCell()).toContain('policy-handbook.pdf');
       const head = grid.getByRole('columnheader', { name: /doc/ });
       await expect(head).toHaveAttribute('aria-sort', /none|ascending|descending/);

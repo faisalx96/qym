@@ -144,6 +144,8 @@ test.describe('sticky section nav and filter bar', () => {
 
 test('hide_field also hides the complexity and domain fields of the item metadata', async ({ page }) => {
   await openRun(page, s.slug, custom, 'item=zero');
+  // the Metadata section starts closed (17 Nov I4); the choice lasts for the session, so the second visit keeps it open
+  await card(page, 'zero').getByRole('button', { name: 'Metadata', exact: true }).click();
   await expect(metaKey(card(page, 'zero'), 'complexity')).toBeVisible();
   await expect(metaKey(card(page, 'zero'), 'domain')).toBeVisible();
   await openRun(page, s.slug, custom, 'item=zero&hide_field=complexity&hide_field=domain');
@@ -359,8 +361,8 @@ test.describe('repeat runs', () => {
     const pane = itemPane(page);
     const table = metricTable(pane);
     await expect(metricRow(pane, 'quality')).toBeVisible();
-    // one column for each of the 3 passes (its header puts that pass in view), then the mean
-    await expect(table.getByRole('columnheader').getByRole('button', { name: /^Pass \d$/ })).toHaveCount(3);
+    // one column for each of the 3 passes in view, then the mean
+    await expect(table.getByRole('columnheader', { name: /^Pass \d/ })).toHaveCount(3);
     await expect(table.getByRole('columnheader', { name: 'Mean', exact: true })).toBeVisible();
     // the metric name, 3 pass scores and the mean come before the other cells of the row
     expect(await metricRow(pane, 'quality').getByRole('cell').count()).toBeGreaterThanOrEqual(5);

@@ -1,9 +1,9 @@
 /**
  * The runs list table: columns, cells and runs-specific selection rules on the
- * shared DataTable (pinned Run and Actions columns, header bands, zebra rows,
+ * shared DataTable (pinned Run column, header bands, zebra rows,
  * passes panel as the expanded row, select mode as `selection`).
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { RunRow } from '@/api/dashboardTypes';
 import { useDeletePasses, useRunPassesMany } from '@/api/dashboard';
@@ -18,7 +18,6 @@ import {
   type Key,
   type ToolbarProps,
 } from '@/ui';
-import { formatNumericValue } from '@/lib/format';
 import {
   AnalysisCell,
   BoltLabel,
@@ -29,11 +28,11 @@ import {
   LatencyCell,
   MetricCell,
   ModelCell,
-  Mono,
   OwnerCell,
   RowActions,
   RunNameCell,
   StatusCell,
+  TraceStatCell,
   VersionCell,
   type RowPermissions,
 } from './cells';
@@ -59,6 +58,7 @@ import {
   childRowsOf,
   resolveMetric,
   runKeyOf,
+  runRowState,
   type ChildOf,
   type PassesState,
   type TableRow,
@@ -109,6 +109,38 @@ export interface RunsTableProps {
   className?: string;
 }
 
+/**
+ * The Status column's floor: the widest status cell drawn (status, progress, signals), so signals that appear after
+ * the table measured its columns (a live run's first errors, an opened run's pass rows) widen the column instead of
+ * overlapping the next one (17 Nov R9). It only widens while the table is shown, as the DataTable's own fit. A
+ * ResizeObserver on the drawn cells measures them when they appear and whenever their content changes size.
+ */
+function useStatusFloor(host: RefObject<HTMLElement | null>, deps: unknown[]): number {
+  const [floor, setFloor] = useState(0);
+  useLayoutEffect(() => {
+    const el = host.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const cells = el.querySelectorAll<HTMLElement>('td[data-col="status"] [data-status-fit]');
+    if (!cells.length) return;
+    const measure = () => {
+      let widest = 0;
+      cells.forEach((cell) => {
+        widest = Math.max(widest, cell.getBoundingClientRect().width);
+      });
+      const td = cells[0]?.closest('td');
+      const cs = td ? getComputedStyle(td) : null;
+      const pad = cs ? (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) : 0;
+      const next = widest ? Math.ceil(widest + pad) : 0;
+      setFloor((f) => (next > f + 1 ? next : f));
+    };
+    const ro = new ResizeObserver(measure);
+    cells.forEach((cell) => ro.observe(cell));
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-observed when the drawn rows change
+  }, deps);
+  return floor;
+}
+
 interface CellHandlers {
   expanded: Set<string>;
   onToggleExpand: (id: string) => void;
@@ -120,15 +152,8 @@ interface CellHandlers {
 function runCell(col: ColumnDef, row: RunRow, p: RunsTableProps, h: CellHandlers): ReactNode {
   if (col.id.startsWith('metric-'))
     return <MetricCell row={row} metric={col.id.slice(7)} onErrorDetails={p.onSignalDetails} />;
-  if (col.id.startsWith('trace-')) {
-    const v = row.trace_stats?.[col.id.slice(6)];
-    if (typeof v !== 'number') return <span>—</span>;
-    return (
-      <Mono>
-        {col.id === 'trace-tool_success_rate' ? `${(v * 100).toFixed(1)}%` : formatNumericValue(v, 1)}
-      </Mono>
-    );
-  }
+  if (col.id.startsWith('trace-'))
+    return <TraceStatCell stat={col.id.slice(6)} value={row.trace_stats?.[col.id.slice(6)]} />;
   switch (col.id) {
     case 'run':
       return (
@@ -171,8 +196,8 @@ function runCell(col: ColumnDef, row: RunRow, p: RunsTableProps, h: CellHandlers
 
 /**
  * A child row shows the pass's own values in the run's columns. Task, Model, Dataset and Owner are facts of the run:
- * a pass row repeats them with the run row's chips (cv4 B2: the owner wants them filled, not empty). Experiment and
- * Version stay empty; the group columns (Pass@k ...) belong to the strip.
+ * a pass row repeats them with the run row's chips (cv4 B2: the owner wants them filled, not empty), and Version too
+ * (17 Nov R8). Experiment stays empty; the group columns (Pass@k ...) belong to the strip.
  */
 function childCell(col: ColumnDef, tr: ChildOf, h: CellHandlers): ReactNode {
   const id = col.id;
@@ -195,13 +220,8 @@ function childCell(col: ColumnDef, tr: ChildOf, h: CellHandlers): ReactNode {
   }
   const { run, pass, status } = tr;
   if (id.startsWith('metric-')) return <PassMetricCell run={run} pass={pass} metric={id.slice(7)} />;
-  if (id.startsWith('trace-')) {
-    const v = pass.trace_stats?.[id.slice(6)];
-    if (typeof v !== 'number') return <span>—</span>;
-    return (
-      <Mono>{id === 'trace-tool_success_rate' ? `${(v * 100).toFixed(1)}%` : formatNumericValue(v, 1)}</Mono>
-    );
-  }
+  if (id.startsWith('trace-'))
+    return <TraceStatCell stat={id.slice(6)} value={pass.trace_stats?.[id.slice(6)]} />;
   switch (id) {
     case 'run':
       return <PassNameCell run={run} pass={pass} status={status} />;
@@ -215,6 +235,9 @@ function childCell(col: ColumnDef, tr: ChildOf, h: CellHandlers): ReactNode {
       return <DatasetCell row={run} />;
     case 'owner':
       return <OwnerCell row={run} />;
+    case 'version':
+      // every pass ran on the run's version (17 Nov R8)
+      return <VersionCell row={run} />;
     case 'time':
       return <PassDate pass={pass} />;
     case 'analysis':
@@ -361,6 +384,8 @@ export function RunsTable(p: RunsTableProps) {
     () => (anyAnalysis ? p.columns : p.columns.filter((c) => c.id !== 'analysis')),
     [p.columns, anyAnalysis],
   );
+  const hostRef = useRef<HTMLDivElement>(null);
+  const statusFloor = useStatusFloor(hostRef, [runRows, tableColumns]);
   const columns = useMemo<Column<TableRow>[]>(() => {
     let metricRank = 0;
     const h: CellHandlers = {
@@ -380,13 +405,10 @@ export function RunsTable(p: RunsTableProps) {
         group: bandOf(def),
         sort: def.sortKey ? { key: def.sortKey, first: defaultDirection(def.sortKey) } : undefined,
         width: def.width,
+        minWidth: def.id === 'status' && statusFloor ? statusFloor : undefined,
         align: def.align,
-        pin:
-          def.id === 'run' || (wide && def.id === 'status')
-            ? 'start'
-            : def.id === 'actions'
-              ? 'end'
-              : undefined,
+        // the identity columns pin; the Actions column never does (feedback 17 Nov D3)
+        pin: def.id === 'run' || (wide && def.id === 'status') ? 'start' : undefined,
         lockOrder: def.id === 'actions',
         // one row menu handle per row (owner decision, Nov 1); see-through while columns remain past the end
         menuColumn: def.id === 'actions',
@@ -408,6 +430,7 @@ export function RunsTable(p: RunsTableProps) {
     p.onAction,
     p.onSignalDetails,
     p.onToggleExpand,
+    statusFloor,
   ]);
 
   // The DataTable's selection: checked runs, plus every picked pass (and the passes of a run picked whole).
@@ -460,7 +483,7 @@ export function RunsTable(p: RunsTableProps) {
   const cardMetric = openRuns[0] ? activeFor(openRuns[0]) : null;
 
   return (
-    <div className={[styles.host, p.className].filter(Boolean).join(' ')} data-testid="runs-table">
+    <div ref={hostRef} className={[styles.host, p.className].filter(Boolean).join(' ')} data-testid="runs-table">
       <DataTable<TableRow>
         aria-label="Runs"
         storageKey="runs.v2"
@@ -490,15 +513,7 @@ export function RunsTable(p: RunsTableProps) {
           if (tr.kind === 'run') p.onOpen(tr.row);
           else if (tr.kind === 'pass') openPass(tr.run, tr.pass.pass_number);
         }}
-        rowState={(tr) =>
-          tr.kind !== 'run'
-            ? undefined
-            : tr.row.status === 'RUNNING'
-              ? 'live'
-              : tr.row.status === 'FAILED'
-                ? 'error'
-                : undefined
-        }
+        rowState={runRowState}
         rowProps={(tr) =>
           tr.kind === 'run'
             ? {

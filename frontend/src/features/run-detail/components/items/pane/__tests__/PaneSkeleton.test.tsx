@@ -6,7 +6,7 @@ import { PaneSkeleton } from '../Frame';
 describe('PaneSkeleton', () => {
   it('draws the blocks of the pane in order, the Metrics head and one row for each metric', () => {
     const { container } = render(
-      <PaneSkeleton blocks={['input', 'pair', 'metrics']} metricRows={4} outputs={2} />,
+      <PaneSkeleton blocks={['input', 'expected', 'outputs', 'metrics']} metricRows={4} outputs={2} />,
     );
     const parts = Array.from(container.querySelectorAll('[data-part]'))
       .map((n) => n.getAttribute('data-part'))
@@ -19,7 +19,7 @@ describe('PaneSkeleton', () => {
   });
 
   it('shows Skeleton shapes only: no value, no Loading word', () => {
-    const { container } = render(<PaneSkeleton blocks={['input', 'pair', 'metrics']} />);
+    const { container } = render(<PaneSkeleton blocks={['input', 'expected', 'outputs', 'metrics']} />);
     expect(container.querySelectorAll('[role="status"]').length).toBeGreaterThan(3);
     expect(container.textContent).toBe('InputExpectedOutputMetricsMetric');
   });

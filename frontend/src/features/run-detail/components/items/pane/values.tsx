@@ -5,8 +5,9 @@
  * With `other` and `side`, the words that differ from the other value are marked (Expected against Output).
  */
 import {
-  Fragment,
   createContext,
+  Fragment,
+  useCallback,
   useContext,
   useMemo,
   useState,
@@ -18,7 +19,16 @@ import { diffSide, wordDiff } from '@/features/datasets/lib/wordDiff';
 import { keyWithBreaks } from '@/lib/keyBreaks';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { textDirAttrs, type TextMode } from '@/lib/text';
-import { Button, DataTable, TextBlock, parseStructured, type Column, type SortState } from '@/ui';
+import {
+  Button,
+  DataTable,
+  FoldButton,
+  Icon,
+  TextBlock,
+  parseStructured,
+  type Column,
+  type SortState,
+} from '@/ui';
 import { TABLE_PAGE, TABLE_ROW_CAP, detectTable } from '../../../lib/metricTables';
 import { Act } from './actions';
 import { formatSql, jsonTokens, looksLikeSql, sqlWords } from './code';
@@ -34,6 +44,9 @@ const CODE_KEY = /sql|query|code|script|regex/i;
 
 /** Rendered or raw text, from the page that hosts the pane (the run page and the compare page each keep their own). */
 export const PaneTextMode = createContext<TextMode | undefined>(undefined);
+
+/** False inside a block that scrolls (Input, Expected, Output): a long text shows in full, no "Show more". A table still pages. */
+export const PaneFold = createContext(true);
 
 /* ---------- the difference marks preference (one for every pane) ---------- */
 
@@ -159,7 +172,8 @@ export function isLongText(text: string, lines = FOLD_LINES): boolean {
  */
 function Fold({ text, children }: { text: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
-  if (!isLongText(text)) return <>{children}</>;
+  const fold = useContext(PaneFold);
+  if (!fold || !isLongText(text)) return <>{children}</>;
   return (
     <div className={s.fold}>
       <div
@@ -324,6 +338,45 @@ function ScalarText({ v, changed }: { v: Scalar; changed?: boolean }) {
     </span>
   );
   return changed ? <mark className={s.mark}>{inner}</mark> : inner;
+}
+
+/* ---------- a large value: its nested groups open closed ---------- */
+
+/** A JSON value with more parts than this is large: its groups below the first level open closed. */
+export const BIG_VALUE = 40;
+
+interface Tree {
+  /** The value is large: its groups and lists of objects open and close. */
+  big: boolean;
+  /** How deep the field list is (0: the fields of the value itself). */
+  depth: number;
+  /** The last "Expand all" or "Collapse all" (gen 0: neither yet); it wins over the choices made before it. */
+  all: { gen: number; open: boolean };
+}
+
+const TreeCtx = createContext<Tree>({ big: false, depth: 0, all: { gen: 0, open: true } });
+
+/** How many values a JSON value holds, counted up to `cap`. */
+export function countParts(v: unknown, cap = BIG_VALUE + 1): number {
+  let n = 0;
+  const walk = (x: unknown) => {
+    if (n > cap) return;
+    n += 1;
+    if (x && typeof x === 'object') for (const y of Object.values(x)) walk(y);
+  };
+  walk(v);
+  return n;
+}
+
+/** How many groups (objects that are not a table) a value holds below its own level, counted up to `cap`. */
+function groupCount(v: unknown, top = true, cap = 2): number {
+  if (!v || typeof v !== 'object' || tableOf(v)) return 0;
+  let n = !top && isPlain(v) ? 1 : 0;
+  for (const x of Object.values(v)) {
+    if (n >= cap) break;
+    n += groupCount(x, false, cap);
+  }
+  return n;
 }
 
 /* ---------- shapes ---------- */
@@ -529,6 +582,7 @@ export function Table({
     });
   }, [data, sort]);
   const fit = tableFits(table);
+  // a long table shows its first rows, then "Show N more": also inside a box that scrolls (owner's call)
   const paged = data.length > TABLE_PAGE && !all;
   return (
     <div
@@ -560,6 +614,14 @@ export function Table({
             center={
               <Button size="sm" variant="neutral" onPress={() => setAll(true)}>
                 {`Show ${data.length - TABLE_PAGE} more`}
+              </Button>
+            }
+          />
+        ) : all && data.length > TABLE_PAGE ? (
+          <DataTable.Footer
+            center={
+              <Button size="sm" variant="neutral" onPress={() => setAll(false)}>
+                Show fewer
               </Button>
             }
           />
@@ -616,48 +678,17 @@ export function FieldList({
   detail?: boolean;
 }) {
   const base = isPlain(other) ? other : undefined;
-  const entries = Object.entries(data).map(([k, v]) => {
+  const entries: FieldEntry[] = Object.entries(data).map(([k, v]) => {
     const shape = shapeOf(k, v);
     // a value that fits on part of a line shares the line: a short value, a short list, one short sentence
     // right-to-left text takes the line, so it starts at the right edge of the block
     const inline = inlineShape(shape, v) && !(shape === 'prose' && textDirAttrs(v).dir === 'rtl');
     return { k, v, shape, inline, rank: shape === 'list' && !inline ? 1 : DETAIL_RANK[shape] };
   });
-  const field = ({ k, v, shape, inline }: (typeof entries)[number]) => {
-    const table = shape === 'table' ? tableOf(v) : null;
-    const members = shape === 'group' ? Object.keys(v as object).length : 0;
-    // short values stand on one rhythm: a field is one, two or three steps wide by its longest text
-    const chars = inline
-      ? Math.max(k.length, shape === 'list' ? (v as unknown[]).join(', ').length : String(v).length)
-      : 0;
-    const steps = Math.min(4, Math.max(1, Math.ceil((chars * 8.2) / 116)));
-    return (
-      <div
-        key={k}
-        className={s.field}
-        style={inline ? { flexBasis: steps * 116 + (steps - 1) * 24 } : undefined}
-        data-flow={inline ? 'inline' : 'block'}
-        data-shape={shape}
-        data-fit={table && tableFits(table) ? '' : undefined}
-      >
-        <dt className={s.key} data-part="key" {...textDirAttrs(k)}>
-          {keyWithBreaks(k)}
-          {table ? (
-            <span className={s.keyCount}>{table.total === 1 ? '1 row' : `${table.total} rows`}</span>
-          ) : null}
-          {members ? (
-            <span className={s.keyCount}>{members === 1 ? '1 field' : `${members} fields`}</span>
-          ) : null}
-        </dt>
-        <dd className={s.fieldValue}>
-          <Node k={k} v={v} other={base?.[k]} side={side} />
-        </dd>
-      </div>
-    );
-  };
+  const field = (e: FieldEntry) => <Field key={e.k} entry={e} other={base?.[e.k]} side={side} />;
   if (detail) {
     // the short facts on their own line, then the text, the tables and the groups under them
-    entries.sort((a, b) => a.rank - b.rank);
+    entries.sort((x, y) => x.rank - y.rank);
     const facts = entries.filter((e) => e.rank === 0);
     const rest = entries.filter((e) => e.rank > 0);
     return (
@@ -678,6 +709,90 @@ export function FieldList({
   );
 }
 
+interface FieldEntry {
+  k: string;
+  v: unknown;
+  shape: Shape;
+  inline: boolean;
+  rank: number;
+}
+
+/**
+ * One key above its value. In a large value a group or a list of objects opens and closes from its key line (the
+ * key and its count stay in view); below the first level it opens closed.
+ */
+function Field({ entry, other, side }: { entry: FieldEntry; other?: unknown; side?: Side }) {
+  const { k, v, shape, inline } = entry;
+  const tree = useContext(TreeCtx);
+  const [own, setOwn] = useState<{ gen: number; open: boolean } | null>(null);
+  const foldable = tree.big && (shape === 'group' || shape === 'items');
+  const open = !foldable
+    ? true
+    : own && own.gen === tree.all.gen
+      ? own.open
+      : tree.all.gen
+        ? tree.all.open
+        : tree.depth < 1;
+  const table = shape === 'table' ? tableOf(v) : null;
+  const members = shape === 'group' ? Object.keys(v as object).length : 0;
+  const entriesOf = shape === 'items' ? (v as unknown[]).length : 0;
+  // short values stand on one rhythm: a field is one, two or three steps wide by its longest text
+  const chars = inline
+    ? Math.max(k.length, shape === 'list' ? (v as unknown[]).join(', ').length : String(v).length)
+    : 0;
+  const steps = Math.min(4, Math.max(1, Math.ceil((chars * 8.2) / 116)));
+  const count = table ? (
+    <span className={s.keyCount}>{table.total === 1 ? '1 row' : `${table.total} rows`}</span>
+  ) : members ? (
+    <span className={s.keyCount}>{members === 1 ? '1 field' : `${members} fields`}</span>
+  ) : entriesOf && foldable ? (
+    <span className={s.keyCount}>{entriesOf === 1 ? '1 item' : `${entriesOf} items`}</span>
+  ) : null;
+  return (
+    <div
+      className={s.field}
+      style={inline ? { flexBasis: steps * 116 + (steps - 1) * 24 } : undefined}
+      data-flow={inline ? 'inline' : 'block'}
+      data-shape={shape}
+      data-fit={table && tableFits(table) ? '' : undefined}
+      data-closed={open ? undefined : ''}
+    >
+      <dt className={s.key} data-part="key" {...textDirAttrs(k)}>
+        {foldable ? (
+          <button
+            type="button"
+            className={s.keyToggle}
+            aria-expanded={open}
+            onClick={() => setOwn({ gen: tree.all.gen, open: !open })}
+          >
+            <span className={s.keyArrow} aria-hidden="true">
+              <Icon name={open ? 'chevron-down' : 'chevron-right'} size={12} />
+            </span>
+            {keyWithBreaks(k)}
+            {count}
+          </button>
+        ) : (
+          <>
+            {keyWithBreaks(k)}
+            {count}
+          </>
+        )}
+      </dt>
+      {open ? (
+        <dd className={s.fieldValue}>
+          {foldable ? (
+            <TreeCtx.Provider value={{ ...tree, depth: tree.depth + 1 }}>
+              <Node k={k} v={v} other={other} side={side} />
+            </TreeCtx.Provider>
+          ) : (
+            <Node k={k} v={v} other={other} side={side} />
+          )}
+        </dd>
+      ) : null}
+    </div>
+  );
+}
+
 function RawJson({ data, label }: { data: unknown; label: string }) {
   const segs = useMemo<Seg[]>(() => jsonTokens(JSON.stringify(data, null, 2)), [data]);
   const text = useMemo(() => segs.map((x) => x.text).join(''), [segs]);
@@ -695,12 +810,48 @@ function loneText(data: Record<string, unknown> | unknown[]): string | undefined
   return values.length === 1 && typeof values[0] === 'string' ? values[0] : undefined;
 }
 
+/** Whether a value is large with groups in groups: its groups then open closed below the first level. */
+function isBigValue(value: unknown): boolean {
+  const parsed = parseStructured(value);
+  return parsed.structured && countParts(parsed.data) > BIG_VALUE && groupCount(parsed.data) >= 2;
+}
+
+/** The Expand all / Collapse all state of one large value: the block owns it, its head shows the two icons. */
+export interface ValueFold {
+  /** The value is large: it has the two icons. */
+  big: boolean;
+  all: { gen: number; open: boolean };
+  set: (open: boolean) => void;
+}
+
+export function useValueFold(value: unknown): ValueFold {
+  const big = useMemo(() => isBigValue(value), [value]);
+  const [all, setAll] = useState({ gen: 0, open: true });
+  const set = useCallback((open: boolean) => setAll((cur) => ({ gen: cur.gen + 1, open })), []);
+  return useMemo(() => ({ big, all, set }), [big, all, set]);
+}
+
+/**
+ * Expand all / Collapse all of a large value, as two icons in the icon row of its block's head (G4, owner: "the
+ * placement can be improved": they had a row of their own above the value). Nothing for a small value or raw JSON.
+ */
+export function FoldActs({ fold, raw }: { fold: ValueFold; raw?: boolean }) {
+  if (!fold.big || raw) return null;
+  return (
+    <>
+      <FoldButton action="open" onPress={() => fold.set(true)} />
+      <FoldButton action="close" onPress={() => fold.set(false)} />
+    </>
+  );
+}
+
 export function Value({
   value,
   label,
   other,
   side,
   raw,
+  fold,
 }: {
   value: unknown;
   label: string;
@@ -709,7 +860,11 @@ export function Value({
   side?: Side;
   /** Show a JSON value as its raw text (the switch of the block). */
   raw?: boolean;
+  /** The fold state of the block (`useValueFold`): the icons are then in the block's head (`FoldActs`). */
+  fold?: ValueFold;
 }) {
+  const own = useValueFold(value);
+  const { big, all } = fold ?? own;
   const parsed = useMemo(() => parseStructured(value), [value]);
   const against = useMemo(() => (other === undefined ? undefined : parseStructured(other)), [other]);
   if (!parsed.structured) {
@@ -719,17 +874,33 @@ export function Value({
   }
   if (raw) return <RawJson data={parsed.data} label={label} />;
   const data = parsed.data;
+  let body: ReactNode;
   if (Array.isArray(data)) {
-    return <Node k="" v={data} other={against?.structured ? against.data : undefined} side={side} />;
+    body = <Node k="" v={data} other={against?.structured ? against.data : undefined} side={side} />;
+  } else {
+    // an object with one text field read against plain text: the texts are compared
+    const lone = loneText(data);
+    const base = against
+      ? against.structured
+        ? against.data
+        : lone !== undefined
+          ? { [Object.keys(data)[0]!]: against.text }
+          : undefined
+      : undefined;
+    body = <FieldList data={data} other={base} side={side} label={label} />;
   }
-  // an object with one text field read against plain text: the texts are compared
-  const lone = loneText(data);
-  const base = against
-    ? against.structured
-      ? against.data
-      : lone !== undefined
-        ? { [Object.keys(data)[0]!]: against.text }
-        : undefined
-    : undefined;
-  return <FieldList data={data} other={base} side={side} label={label} />;
+  if (!big) return body;
+  return (
+    <TreeCtx.Provider value={{ big: true, depth: 0, all }}>
+      <div className={s.tree}>
+        {fold ? null : (
+          // a value with no block head of its own keeps the two icons above it
+          <div className={s.treeBar} role="group" aria-label={`${label}: groups`}>
+            <FoldActs fold={own} />
+          </div>
+        )}
+        {body}
+      </div>
+    </TreeCtx.Provider>
+  );
 }

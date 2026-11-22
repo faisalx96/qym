@@ -24,12 +24,9 @@ describe('run metadata in the hero', () => {
   const byKey = (key: string) => entries.find((e) => e.key === key)!;
 
   it('flags objects, arrays and JSON strings for the viewer; scalars and invalid JSON stay plain text', () => {
-    expect(entries.filter((e) => e.json).map((e) => e.key)).toEqual([
-      'retrieval',
-      'tags',
-      'pipeline_json',
-      'empty_obj',
-    ]);
+    expect(entries.filter((e) => e.json).map((e) => e.key)).toEqual(['retrieval', 'tags', 'pipeline_json']);
+    // RD2: an empty object has nothing to show and is left out
+    expect(entries.some((e) => e.key === 'empty_obj')).toBe(false);
     expect(byKey('prompt_version').json).toBe(false);
     expect(byKey('prompt_version').value).toBe('v7');
     expect(byKey('not_json').json).toBe(false);

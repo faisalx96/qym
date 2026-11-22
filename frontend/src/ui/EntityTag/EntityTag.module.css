@@ -61,3 +61,11 @@ a.runName:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
+
+/* 17 Nov G2: a reasoning model ends with the pre-React light bulb, not the word: the 12px glyph in the gold tone after
+   the name, never shrunk (the name wraps first). Its name and tooltip are "Reasoning model". */
+.reasoning {
+  display: inline-flex;
+  flex: none;
+  color: var(--tone-text);
+}

@@ -503,6 +503,37 @@ export interface StepLatencyPayload {
     max_ms?: number;
   } | null;
   agents?: Array<StepLatencyGroup & { name?: string }> | string[];
+  /** The average trace (run page summary only; null when the run's trace shapes do not merge into one tree). */
+  tree?: StepLatencyTreeNode | null;
+  /** Each kind's time inside one trace (run page summary only). */
+  kinds?: StepLatencyKind[];
+}
+
+/**
+ * One node of the average trace: the spans of the same name under the same parent path, merged over the traces.
+ * The latency fields are the node's time in one trace (the sum of its calls there), over the traces it runs in.
+ */
+export interface StepLatencyTreeNode extends Omit<StepLatencyGroup, 'phase' | 'name'> {
+  /** null for the whole trace. */
+  name: string | null;
+  kind: string;
+  phase: 'task' | 'eval' | null;
+  /** A step (its spans are step rows), not only a container. */
+  step: boolean;
+  models: string[];
+  in_traces: number;
+  calls: number;
+  time_per_trace_ms: number | null;
+  children: StepLatencyTreeNode[];
+}
+
+/** One kind's time inside one trace, over the traces it runs in. */
+export interface StepLatencyKind extends Omit<StepLatencyGroup, 'phase'> {
+  kind: string;
+  in_traces: number;
+  calls: number;
+  avg_call_ms: number | null;
+  time_per_trace_ms: number | null;
 }
 
 export interface ReviewHistoryEvent {

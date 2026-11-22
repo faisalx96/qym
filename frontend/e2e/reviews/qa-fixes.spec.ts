@@ -57,6 +57,9 @@ test.describe('reviews QA fixes', () => {
       await route.fulfill({ response: res, json: body });
     });
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
-    await expect(row(page, s.corrections[0]!.id)).toContainText('reasoning');
+    // 17 Nov G2: the model tag ends with the light bulb (named "Reasoning model"); the word is gone
+    const r = row(page, s.corrections[0]!.id);
+    await expect(r.getByRole('img', { name: 'Reasoning model' })).toBeVisible();
+    await expect(r.locator('[data-kind="model"]')).not.toContainText('reasoning');
   });
 });

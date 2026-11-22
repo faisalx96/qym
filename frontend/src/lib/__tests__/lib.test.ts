@@ -119,6 +119,11 @@ describe('text', () => {
     expect(html).toContain('&lt;script&gt;');
     expect(html).toContain('href="https://a.b"');
   });
+  it('puts no empty line under a markdown heading', () => {
+    expect(renderMarkdown('# T\nbody\n\n## U\n\nmore')).toBe(
+      '<strong class="qym-text__heading">T</strong>body\n\n<strong class="qym-text__heading">U</strong>\nmore',
+    );
+  });
 });
 
 describe('identicon', () => {

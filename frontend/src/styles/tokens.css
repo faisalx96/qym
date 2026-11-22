@@ -152,21 +152,24 @@
 
   /* Type scale — every element maps to one role:
      xs 10px badge/pill · sm 11px meta/caption/label/table-header ·
-     base 12px body/table-cell/code · md 13px card title/sub-header ·
-     lg 15px section header · xl 18px modal/empty-state title ·
-     title 22px page title · stat 26px stat/hero value.
+     base 12px body/table-cell/code · md 13px sub-header (the frame: nav, top bar) ·
+     lg 14px panel/card heading, drawer title · xl 16px section heading, modal/empty-state title ·
+     title 18px page title · stat 22px stat/hero value.
+     G1 (owner 2026-11-17, "some text feels too big with respect to the whole ui and the side panel"): the steps
+     above md were 15/18/22/26; they now sit in proportion to the 12–13px frame.
      Floor: nothing readable below 11px (10px reserved for badges). */
   --font-xs: 10px;
   --font-sm: 11px;
   --font-base: 12px;
   --font-md: 13px;
-  --font-lg: 15px;
-  --font-xl: 18px;
-  --font-title: 22px;
-  --font-stat: 26px;
-  /* cv4 F10 (owner 2026-11-12): the three title roles of a report page, three clear steps. Section > subsection > card. */
-  --font-section: 22px; /* ReportSection title (Overview, Deep analysis): the page title size, a report section is a page part */
-  --font-subsection: 16px; /* Subsection title (Between metrics), with its accent bar */
+  --font-lg: 14px;
+  --font-xl: 16px;
+  --font-title: 18px;
+  --font-stat: 22px;
+  /* cv4 F10 (owner 2026-11-12): the three title roles of a report page, in order. Section > subsection > card.
+     G1: the section title is the section heading size of every other page (--font-xl), under the page title. */
+  --font-section: 16px; /* ReportSection title (Overview, Deep analysis): one section heading size app-wide */
+  --font-subsection: 15px; /* Subsection title (Between metrics), with its accent bar */
   --font-card-title: 14px; /* CardTitle (Time budget, Metric correlation) */
 
   /* Shared width for the charts view label/control column */
@@ -314,9 +317,9 @@
   --arrive-fade: 200ms;
   /* Data table v2 (DESIGN_LANGUAGE §3 "Data table"): row heights per density,
      header/group-band heights, selected-row tint. */
-  --row-compact: 32px;
-  --row-regular: 40px;
-  --row-comfortable: 52px;
+  --row-compact: 36px;
+  --row-regular: 44px;
+  --row-comfortable: 56px;
   --table-header-height: 34px;
   --search-width: 260px; /* list and report searches (C152) */
   --table-group-height: 24px;

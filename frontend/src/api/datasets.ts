@@ -94,7 +94,10 @@ export interface Dataset {
   created_by_user_id: string | null;
   created_by: DsUser | null;
   created_at: string;
+  /** the newest change of any kind (rename, item edit, version, publish, production move) */
   updated_at: string;
+  /** who made that change; the creator until someone else changes it (optional for older servers) */
+  updated_by?: DsUser | null;
   production_version: DatasetVersion | null;
   latest_version: DatasetVersion | null;
   run_count: number;

@@ -82,5 +82,6 @@ test('QC-U44: twelve datasets give a twelve-row table and a clamped group', asyn
   await section.scrollIntoViewIfNeeded();
   await expect(section.getByTestId('show-items-link')).toHaveCount(12);
   const box = await section.boundingBox();
-  expect(Math.abs(box!.height - 657.9)).toBeLessThanOrEqual(6);
+  // 17 Nov R1: a regular table row is 44px (was 40), so the twelve rows add 48px to the old 657.9
+  expect(Math.abs(box!.height - 706.6)).toBeLessThanOrEqual(6);
 });

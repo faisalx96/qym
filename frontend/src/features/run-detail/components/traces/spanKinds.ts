@@ -3,7 +3,9 @@ import type { SpanKind } from '../../lib/traceTree';
 
 export const KIND_TONE: Record<SpanKind, string> = {
   LLM: 'var(--chart-4)',
-  TOOL: 'var(--warning)',
+  // Indigo, not amber: amber Tool sat too close to amber LLM and orange Evaluator (round 3 L2). One source for
+  // the trace and the Latency tab.
+  TOOL: 'var(--chart-5)',
   AGENT: 'var(--chart-1)',
   CHAIN: 'var(--info)',
   EVALUATOR: 'var(--chart-3)',

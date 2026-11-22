@@ -73,10 +73,10 @@ describe('typography tokens', () => {
       '--font-sm: 11px',
       '--font-base: 12px',
       '--font-md: 13px',
-      '--font-lg: 15px',
-      '--font-xl: 18px',
-      '--font-title: 22px',
-      '--font-stat: 26px',
+      '--font-lg: 14px',
+      '--font-xl: 16px',
+      '--font-title: 18px',
+      '--font-stat: 22px',
       '--accent-tertiary-soft: #c084fc',
       '--control-height: 24px;',
       'color-scheme: dark;',
@@ -374,9 +374,9 @@ describe('primitive module contracts', () => {
   it('DataTable v2 density, header and selection tokens are defined and used', () => {
     const tokens = read(join(SRC, 'styles/tokens.css'));
     for (const t of [
-      '--row-compact: 32px',
-      '--row-regular: 40px',
-      '--row-comfortable: 52px',
+      '--row-compact: 36px',
+      '--row-regular: 44px',
+      '--row-comfortable: 56px',
       '--table-header-height: 34px',
       '--bg-selected:',
     ])

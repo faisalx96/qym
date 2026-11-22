@@ -118,21 +118,41 @@
 }
 
 .cardFoot {
-  display: flex;
+  display: grid;
+  grid-template-columns: max-content max-content minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  margin-top: auto;
-  padding-top: var(--space-xs);
+  gap: var(--space-xs) var(--space-sm);
+  margin: auto 0 0;
+  padding-top: var(--space-sm);
   border-top: 1px solid var(--border-subtle);
 }
 
-.dates {
+/* each row lends its two cells to the footer grid, so the labels share one column */
+.dateRow {
+  display: contents;
+}
+
+.dateLabel {
   font-size: var(--font-sm);
   color: var(--text-muted);
+  line-height: 20px;
+}
+
+/* label | date | "by <person>": the columns line up across the two rows */
+.dateValue {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  line-height: 20px;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+/* the person may wrap at its words, never an ellipsis (a name is never truncated) */
+.datePerson {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .emptyActions {
@@ -177,11 +197,4 @@
 
 .unregisteredRow + .unregisteredRow {
   border-top: 1px solid var(--border-subtle);
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-block-end: var(--space-md);
 }

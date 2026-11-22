@@ -10,6 +10,14 @@
  * when a digest moved, the row is marked not loaded and the card fetches the
  * item again (the bug of October 2026: pass outputs replaced by the compact
  * attempts, "No output was recorded" on a row that still counted as loaded).
+ *
+ * The metric metadata is a body too (I14, November 2026): the index keeps only
+ * short scalars of `metric_meta` / `pass_metric_meta` (run_payloads.py
+ * `_compact_metric_meta`: no explanation, no lists, no long text), so a refetch
+ * took the judge's tables and text away from a loaded row that still counted as
+ * loaded, and opened details closed or emptied. A loaded row now keeps its full
+ * metadata while every value the index kept still agrees with it; when one
+ * moved (a new pass, a score edit) the row reloads.
  */
 import type { PassAttempt, Row, RunPayload } from '../types';
 
@@ -75,6 +83,79 @@ export function hydrateAttempts(compact: Attempts, full: Attempts): Attempts {
   });
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Deep equality of JSON values (key order apart). */
+export function sameJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((x, i) => sameJson(x, b[i]));
+  }
+  if (!isRecord(a) || !isRecord(b)) return false;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every((k) => k in b && sameJson(a[k], b[k]));
+}
+
+/**
+ * The loaded metadata of one metric (or one pass of it) under its compact twin: the full form while every value the
+ * index kept is the same in it, else null (the metadata moved: the row must reload).
+ */
+function fullMeta(compact: unknown, full: unknown): unknown {
+  if (compact === null || compact === undefined) return compact;
+  if (!isRecord(compact) || !isRecord(full)) return sameJson(compact, full) ? full : null;
+  for (const [key, value] of Object.entries(compact)) {
+    if (!(key in full) || !sameJson(value, full[key])) return null;
+  }
+  return { ...full, ...compact };
+}
+
+type MetaKeep = { metric_meta: Row['metric_meta']; pass_metric_meta: Row['pass_metric_meta']; current: boolean };
+
+/** The full metric metadata of a loaded row carried over a compact refetch (see the head of this file). */
+export function inheritMetricMeta(old: Row, next: Row): MetaKeep {
+  let current = true;
+  let metricMeta = next.metric_meta;
+  if (isRecord(next.metric_meta)) {
+    const was = isRecord(old.metric_meta) ? old.metric_meta : {};
+    metricMeta = Object.fromEntries(
+      Object.entries(next.metric_meta).map(([metric, meta]) => {
+        const kept = fullMeta(meta, was[metric]);
+        if (kept === null) {
+          current = false;
+          return [metric, meta];
+        }
+        return [metric, kept];
+      }),
+    ) as Row['metric_meta'];
+  }
+  let passMeta = next.pass_metric_meta;
+  if (isRecord(next.pass_metric_meta)) {
+    const was = isRecord(old.pass_metric_meta) ? old.pass_metric_meta : {};
+    passMeta = Object.fromEntries(
+      Object.entries(next.pass_metric_meta).map(([metric, values]) => {
+        if (!Array.isArray(values)) return [metric, values];
+        const before = Array.isArray(was[metric]) ? was[metric] : [];
+        return [
+          metric,
+          values.map((meta, i) => {
+            const kept = fullMeta(meta, before[i]);
+            if (kept === null) {
+              current = false;
+              return meta;
+            }
+            return kept;
+          }),
+        ];
+      }),
+    ) as Row['pass_metric_meta'];
+  }
+  return { metric_meta: metricMeta, pass_metric_meta: passMeta, current };
+}
+
 /**
  * A fresh row (compact: no bodies, `__details_loaded` false) over the loaded row
  * it replaces. The bodies carry over while their digests agree; otherwise the
@@ -100,9 +181,13 @@ export function inheritLoadedBodies(old: Row, next: Row): Row {
       return { ...attempt, output: was.output };
     });
   }
+  const meta = inheritMetricMeta(old, next);
+  if (!meta.current) current = false;
   if (!current) return { ...next, pass_attempts: attempts, __details_loaded: false };
   return {
     ...next,
+    metric_meta: meta.metric_meta,
+    pass_metric_meta: meta.pass_metric_meta,
     input: next.input ?? old.input,
     input_full: next.input_full ?? old.input_full,
     expected: next.expected ?? old.expected,
@@ -133,7 +218,13 @@ export function reuseRows(previous: RunPayload | undefined, next: RunPayload): R
       reused++;
       return old;
     }
-    return inheritLoadedBodies(old, row);
+    const merged = inheritLoadedBodies(old, row);
+    // a loaded row whose compact twin changed nothing (its full metadata kept) stays the same object
+    if (merged !== row && merged.__details_loaded && rowSignature(merged) === rowSignature(old)) {
+      reused++;
+      return old;
+    }
+    return merged;
   });
   if (
     reused === rows.length &&

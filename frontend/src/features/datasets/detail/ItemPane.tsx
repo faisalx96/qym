@@ -2,6 +2,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { useDatasetItem, type Dataset, type DatasetItem, type DatasetVersion } from '@/api/datasets';
 import { actionErrorMessage } from '@/lib/http';
+import { copyText } from '@/lib/copy';
 import {
   Button,
   ConfirmDialog,
@@ -18,6 +19,7 @@ import { ConflictNotice } from '../components/ConflictNotice';
 import { FieldEditor } from '../components/FieldEditor';
 import { DisabledBanner, EnableButton, useItemStateActions } from '../components/ItemStateUi';
 import { useItemEditor } from '../item/useItemEditor';
+import { formatJson } from '../lib/itemValue';
 import { datasetPath } from '../lib/route';
 import { SaveFooter } from '@/features/shell/settings/SettingsCard';
 import styles from './ItemPane.module.css';
@@ -98,6 +100,20 @@ export function ItemPane({
   };
   onDirtyChange(editor.dirty, saveAll, editor.reset);
 
+  // The whole item as JSON, as saved (feedback 17 Nov D2: the table rows no longer carry this action).
+  const copyItem = (it: DatasetItem) =>
+    void copyText(
+      formatJson({
+        item_id: it.item_id,
+        input: it.input,
+        expected_output: it.expected_output,
+        metadata: it.metadata,
+        labels: it.labels,
+      }),
+    ).then((ok) =>
+      ok ? toast.show('Copied item as JSON', { tone: 'success' }) : toast.show('Copy failed', { tone: 'error' }),
+    );
+
   // cv4 E7: the pane reaches down to the bottom of the viewport, and the field editors grow into the free height.
   const paneRef = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
@@ -149,6 +165,9 @@ export function ItemPane({
           ) : null}
         </div>
         <div className={styles.headActions}>
+          {item ? (
+            <IconButton label="Copy as JSON" icon="copy" onPress={() => copyItem(item)} data-testid="pane-copy-json" />
+          ) : null}
           <IconButton label="Previous item" icon="chevron-up" onPress={() => onNavigate(-1)} />
           <IconButton label="Next item" icon="chevron-down" onPress={() => onNavigate(1)} />
           <LinkButton

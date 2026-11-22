@@ -32,6 +32,12 @@
   white-space: nowrap;
 }
 
+.user[data-wrap] .name {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .email {
   overflow: hidden;
   color: var(--text-muted);

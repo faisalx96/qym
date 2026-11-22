@@ -70,7 +70,7 @@
 
 .title {
   margin: 0;
-  /* C218: every modal title is 18px (small dialogs were 13px) */
+  /* C218: every modal title is --font-xl (small dialogs were 13px); 16px since G1 */
   font-size: var(--font-xl);
   font-weight: 650;
   color: var(--text-primary);

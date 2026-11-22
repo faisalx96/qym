@@ -18,6 +18,8 @@ export interface SplitPaneProps {
   defaultPct?: number;
   /** Neither pane gets narrower than this many px. */
   minPx?: number;
+  /** The start pane never gets wider than this many px (a wide surface gives its extra width to the end pane). */
+  maxStartPx?: number;
   /** localStorage key remembering the split per viewer (a convenience, never required). */
   storageKey?: string;
   /** Accessible name of the separator, e.g. "Resize tree and detail panes". */
@@ -56,6 +58,7 @@ export function SplitPane({
   end,
   defaultPct = 55,
   minPx = 280,
+  maxStartPx,
   storageKey,
   label,
   className,
@@ -79,8 +82,9 @@ export function SplitPane({
   const limits = useCallback((): [number, number] => {
     if (!width || width < 2 * minPx) return [10, 90];
     const lo = (minPx / width) * 100;
-    return [lo, 100 - lo];
-  }, [width, minPx]);
+    const cap = maxStartPx ? Math.max(lo, (maxStartPx / width) * 100) : 100;
+    return [lo, Math.min(100 - lo, cap)];
+  }, [width, minPx, maxStartPx]);
   const [lo, hi] = limits();
   const clamp = (v: number) => Math.min(hi, Math.max(lo, v));
   const shown = clamp(pct);

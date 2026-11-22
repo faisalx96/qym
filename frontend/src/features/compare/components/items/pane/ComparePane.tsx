@@ -25,14 +25,19 @@ import {
   type Column,
 } from '@/ui';
 import { Act, CopyAct } from '@/features/run-detail/components/items/pane/actions';
-import { Block, PaneSection } from '@/features/run-detail/components/items/pane/blocks';
+import {
+  Block,
+  OutputRow,
+  PaneSection,
+  type CapKind,
+} from '@/features/run-detail/components/items/pane/blocks';
 import {
   LinkAct,
   PaneShell,
   PaneSkeleton,
   type PanePeek,
 } from '@/features/run-detail/components/items/pane/Frame';
-import { ScoreHint, useDetailsOpen } from '@/features/run-detail/components/items/pane/metrics';
+import { ScoreHint, markScrolled, useDetailsOpen } from '@/features/run-detail/components/items/pane/metrics';
 import {
   extraMeta,
   passIfText,
@@ -41,11 +46,13 @@ import {
 } from '@/features/run-detail/components/items/pane/model';
 import {
   FieldList,
+  FoldActs,
   JsonToggle,
   Value,
   detailIsCompact,
   isStructuredValue,
   useDiffMarks,
+  useValueFold,
 } from '@/features/run-detail/components/items/pane/values';
 import p from '@/features/run-detail/components/items/pane/pane.module.css';
 import { bodyText, formatCompact } from '@/features/run-detail/lib/itemText';
@@ -129,20 +136,27 @@ const BaselineTag = () => (
 
 /* ---------- the output of one run ---------- */
 
+/** The tone of the output of one run: its result (no result: neutral). */
+function colTone(col: Col): 'success' | 'neutral' | 'danger' {
+  return col.state === 'pass' ? 'success' : col.state === 'none' ? 'neutral' : 'danger';
+}
+
 function RunOutput({ col, against, isBase }: { col: Col; against: unknown; isBase: boolean }) {
   const ui = useItemsUi();
   const [raw, setRaw] = useState(false);
   const { row, run } = col;
   const failed = col.state === 'error' || String(row.status) === 'error' || !!row.error;
   const value = outputOf(row);
+  const fold = useValueFold(value);
   const errorText = String(row.error || row.__execution_error || 'The task failed');
   const retries = Number(row.retry_count ?? 0);
   return (
     <Block
       title={<RunName col={col} />}
-      tone={col.state === 'pass' ? 'success' : col.state === 'none' ? 'neutral' : 'danger'}
+      tone={colTone(col)}
       part="output"
       fill
+      cap="output"
       label={`Output of ${run.label}`}
       after={
         <>
@@ -164,6 +178,7 @@ function RunOutput({ col, against, isBase }: { col: Col; against: unknown; isBas
             disabledReason="No trace was recorded for this item"
             onPress={() => ui.openTrace({ runId: run.base, itemId: row.item_id, pass: run.pass })}
           />
+          {failed ? null : <FoldActs fold={fold} raw={raw} />}
           {value !== undefined && isStructuredValue(value) ? (
             <JsonToggle raw={raw} onChange={setRaw} />
           ) : null}
@@ -185,7 +200,14 @@ function RunOutput({ col, against, isBase }: { col: Col; against: unknown; isBas
           <TextBlock text={errorText} code dir="ltr" className={p.errorText} />
         </div>
       ) : (
-        <Value value={value} label={`Output of ${run.label}`} other={against} side="after" raw={raw} />
+        <Value
+          value={value}
+          label={`Output of ${run.label}`}
+          other={against}
+          side="after"
+          raw={raw}
+          fold={fold}
+        />
       )}
     </Block>
   );
@@ -426,6 +448,26 @@ function useDetailToggles(keys: string[]) {
   };
 }
 
+/** A count of columns as a whole number of at least one. */
+function trackCount(n: number): number {
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+}
+
+/**
+ * The complete `grid-template-columns` of the metrics by metric (a column per run): the run count is in the text, so
+ * the template never depends on a custom property that may be missing (I13).
+ */
+export function byMetricColumns(runs: number): string {
+  // a run column keeps the room for its score line and a readable reason (I16: one line per metric at every width;
+  // a narrower pane scrolls the table sideways instead of stacking the runs under the name)
+  return `24px minmax(132px, 184px) repeat(${trackCount(runs)}, minmax(160px, 1fr))`;
+}
+
+/** The complete `grid-template-columns` of the metrics by run (a column per metric). */
+export function byRunColumns(metrics: number): string {
+  return `24px minmax(200px, 1.6fr) repeat(${trackCount(metrics)}, minmax(84px, 1fr))`;
+}
+
 /** Up to four runs: a row per metric, a column per run. */
 function MetricsByMetric({ lines, cols, baseIdx }: { lines: MetricLine[]; cols: Col[]; baseIdx: number }) {
   const edit = useScoreEdit();
@@ -435,7 +477,8 @@ function MetricsByMetric({ lines, cols, baseIdx }: { lines: MetricLine[]; cols: 
       className={s.matrix}
       role="table"
       aria-label="Metrics of each run"
-      style={{ ['--runs' as string]: cols.length }}
+      style={{ ['--cmp-cols' as string]: byMetricColumns(cols.length) }}
+      onScroll={markScrolled}
     >
       <div className={s.mhead} role="row">
         <span role="columnheader" className={s.lead}>
@@ -471,9 +514,6 @@ function MetricsByMetric({ lines, cols, baseIdx }: { lines: MetricLine[]; cols: 
                 style={{ '--run': runColor(x.col.i) } as CSSProperties}
               >
                 <div className={s.cellTop}>
-                  <span className={s.cellRun}>
-                    <RunTag index={x.col.i} showName={false} bare />
-                  </span>
                   <ScoreLine metric={metric} x={x} />
                   <span className={s.cellAct}>{edit.button(metric, x)}</span>
                 </div>
@@ -517,7 +557,8 @@ function MetricsByRun({ lines, cols, baseIdx }: { lines: MetricLine[]; cols: Col
       className={s.byRun}
       role="table"
       aria-label="Metrics of each run"
-      style={{ ['--metrics' as string]: lines.length }}
+      style={{ ['--cmp-cols' as string]: byRunColumns(lines.length) }}
+      onScroll={markScrolled}
     >
       <div className={s.brHead} role="row">
         <span role="columnheader" className={s.lead}>
@@ -800,30 +841,33 @@ function TextPart({
   part,
   value,
   copyLabel,
-  fill,
+  cap,
 }: {
   title: string;
   tone: 'info' | 'gold';
   part: string;
   value: unknown;
   copyLabel: string;
-  fill?: boolean;
+  /** The body grows up to the cap of its part, then scrolls (as on the run page). */
+  cap: CapKind;
 }) {
   const [raw, setRaw] = useState(false);
+  const fold = useValueFold(value);
   return (
     <Block
       title={title}
       tone={tone}
       part={part}
-      fill={fill}
+      cap={cap}
       actions={
         <>
+          <FoldActs fold={fold} raw={raw} />
           {isStructuredValue(value) ? <JsonToggle raw={raw} onChange={setRaw} /> : null}
           <CopyAct text={bodyText(value)} label={copyLabel} />
         </>
       }
     >
-      <Value value={value} label={title} raw={raw} />
+      <Value value={value} label={title} raw={raw} fold={fold} />
     </Block>
   );
 }
@@ -929,6 +973,7 @@ export function ComparePane({
 
   // ---- the outputs in view (many runs), and which of them differ from the baseline's
   const [hidden, setHidden] = useState<Set<number>>(new Set());
+  const inView = cols.filter((col) => !hidden.has(col.i));
   const differing = useMemo(
     () =>
       visibleWhenOnlyDiffering(
@@ -1012,7 +1057,7 @@ export function ComparePane({
       ) : !loaded ? (
         pending ? (
           <PaneSkeleton
-            blocks={['input', 'pair', 'metrics']}
+            blocks={['input', 'expected', 'outputs', 'metrics']}
             metricRows={model.metrics.length}
             outputs={resolved.filter((r) => r.row).length}
             pairClassName={s.outs}
@@ -1020,95 +1065,109 @@ export function ComparePane({
         ) : null
       ) : (
         <>
-          <TextPart title="Input" tone="info" part="input" value={rawInput} copyLabel="Copy input" />
-          <div className={s.outsWrap}>
-            <div className={s.outsBar}>
-              {cols.length > 3 ? (
-                // many runs: pick the outputs to read
-                // each output is on or off and the reader sees them all: the platform's on/off chips (cv5 H4)
-                <div className={s.runPick}>
-                  <span className={s.outsLabel} id={`outs-${itemId}`}>
-                    Outputs
-                  </span>
-                  <ToggleChips
-                    aria-labelledby={`outs-${itemId}`}
-                    size="sm"
-                    min={1}
-                    options={cols.map((col) => ({
-                      value: String(col.i),
-                      // the chip shows the run's colour and letter; its name is the accessible name
-                      label: (
-                        <span role="img" aria-label={col.run.label}>
-                          <RunTag index={col.i} showName={false} bare />
-                        </span>
-                      ),
-                      title: col.run.label,
-                    }))}
-                    value={cols.filter((col) => !hidden.has(col.i)).map((col) => String(col.i))}
-                    onChange={(on) =>
-                      setHidden(
-                        new Set(cols.filter((col) => !on.includes(String(col.i))).map((col) => col.i)),
-                      )
-                    }
-                  />
-                  <Button size="sm" variant="neutral" onPress={() => setHidden(new Set())}>
-                    All
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="neutral"
-                    onPress={() =>
-                      setHidden(new Set(cols.filter((_, n) => !differing[n]).map((col) => col.i)))
-                    }
-                  >
-                    Only the ones that differ from the baseline
-                  </Button>
-                </div>
-              ) : null}
-              {hasExpected || canBaseline ? (
-                <div className={s.marksPick}>
-                  <span className={s.outsLabel} aria-hidden="true">
-                    Mark the differences from
-                  </span>
-                  <SegmentedControl<Against | 'off'>
-                    label="Mark the differences from"
-                    value={!marks ? 'off' : against}
-                    onChange={(v) => {
-                      setMarks(v !== 'off');
-                      if (v !== 'off') setPick(v);
-                    }}
-                    options={[
-                      ...(hasExpected ? [{ value: 'expected' as const, label: 'Expected' }] : []),
-                      ...(canBaseline ? [{ value: 'baseline' as const, label: 'Baseline' }] : []),
-                      { value: 'off' as const, label: 'Off' },
-                    ]}
-                  />
-                </div>
-              ) : null}
-            </div>
-            <div className={s.outs} data-expected-row={hasExpected && cols.length > 2 ? '' : undefined}>
-              {hasExpected ? (
-                <TextPart
-                  title="Expected"
-                  tone="gold"
-                  part="expected"
-                  value={rawExpected}
-                  copyLabel="Copy expected output"
-                  fill
+          <TextPart
+            title="Input"
+            tone="info"
+            part="input"
+            value={rawInput}
+            copyLabel="Copy input"
+            cap="input"
+          />
+          {/* Input, Expected and the outputs each on a row of their own (feedback round 2, as on the run page) */}
+          {hasExpected ? (
+            <TextPart
+              title="Expected"
+              tone="gold"
+              part="expected"
+              value={rawExpected}
+              copyLabel="Copy expected output"
+              cap="expected"
+            />
+          ) : null}
+          <OutputRow
+            count={inView.length}
+            // one output in view: the title takes its result; several have no single one (the title reads bright)
+            tone={inView.length === 1 ? colTone(inView[0]!) : undefined}
+            gridClassName={s.outs}
+            controls={
+              cols.length > 3 || hasExpected || canBaseline ? (
+                <>
+                  {cols.length > 3 ? (
+                    // many runs: pick the outputs to read
+                    // each output is on or off and the reader sees them all: the platform's on/off chips (cv5 H4),
+                    // without the check box, as the passes of the run page
+                    <div className={s.runPick}>
+                      <ToggleChips
+                        aria-label="Outputs in view"
+                        size="sm"
+                        variant="plain"
+                        min={1}
+                        options={cols.map((col) => ({
+                          value: String(col.i),
+                          // the chip shows the run's colour and letter; its name is the accessible name
+                          label: (
+                            <span role="img" aria-label={col.run.label}>
+                              <RunTag index={col.i} showName={false} bare />
+                            </span>
+                          ),
+                          title: col.run.label,
+                        }))}
+                        value={cols.filter((col) => !hidden.has(col.i)).map((col) => String(col.i))}
+                        onChange={(on) =>
+                          setHidden(
+                            new Set(cols.filter((col) => !on.includes(String(col.i))).map((col) => col.i)),
+                          )
+                        }
+                      />
+                      <Button size="sm" variant="neutral" onPress={() => setHidden(new Set())}>
+                        All
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="neutral"
+                        onPress={() =>
+                          setHidden(new Set(cols.filter((_, n) => !differing[n]).map((col) => col.i)))
+                        }
+                      >
+                        Only the ones that differ from the baseline
+                      </Button>
+                    </div>
+                  ) : null}
+                  {hasExpected || canBaseline ? (
+                    <div className={s.marksPick}>
+                      <span className={s.outsLabel} aria-hidden="true">
+                        Mark the differences from
+                      </span>
+                      <SegmentedControl<Against | 'off'>
+                        label="Mark the differences from"
+                        value={!marks ? 'off' : against}
+                        onChange={(v) => {
+                          setMarks(v !== 'off');
+                          if (v !== 'off') setPick(v);
+                        }}
+                        options={[
+                          ...(hasExpected ? [{ value: 'expected' as const, label: 'Expected' }] : []),
+                          ...(canBaseline ? [{ value: 'baseline' as const, label: 'Baseline' }] : []),
+                          { value: 'off' as const, label: 'Off' },
+                        ]}
+                      />
+                    </div>
+                  ) : null}
+                </>
+              ) : undefined
+            }
+          >
+            {cols
+              .filter((col) => !hidden.has(col.i))
+              .map((col) => (
+                <RunOutput
+                  key={col.run.ref}
+                  col={col}
+                  against={otherFor(col)}
+                  isBase={col.i === baseIdx && cols.length > 1}
                 />
-              ) : null}
-              {cols
-                .filter((col) => !hidden.has(col.i))
-                .map((col) => (
-                  <RunOutput
-                    key={col.run.ref}
-                    col={col}
-                    against={otherFor(col)}
-                    isBase={col.i === baseIdx && cols.length > 1}
-                  />
-                ))}
-            </div>
-          </div>
+              ))}
+          </OutputRow>
           <Metrics key={itemId} cols={cols} baseIdx={baseIdx} />
           <Execution cols={cols} baseIdx={baseIdx} />
           {Object.keys(metadata).length ? (

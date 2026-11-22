@@ -185,7 +185,7 @@ test.describe('item pane', () => {
   }) => {
     const detail = await open(page);
     // above three runs: one on/off chip for each output
-    const chips = detail.getByRole('group', { name: 'Outputs' }).getByRole('button');
+    const chips = detail.getByRole('group', { name: 'Outputs in view' }).getByRole('button');
     await expect(chips).toHaveCount(4);
     for (let i = 0; i < 4; i++) await expect(chips.nth(i)).toHaveAttribute('aria-pressed', 'true');
     await chips.nth(1).click();
@@ -209,7 +209,7 @@ test.describe('item pane', () => {
   }) => {
     const { base, a } = seed.runs;
     const detail = await open(page, [base, a]);
-    await expect(detail.getByRole('group', { name: 'Outputs' })).toHaveCount(0);
+    await expect(detail.getByRole('group', { name: 'Outputs in view' })).toHaveCount(0);
     // Expected is gold; an output is green only when it passed and red when it failed
     await expect(detail.locator('section[data-part="expected"]')).toHaveAttribute('data-tone', 'gold');
     for (const out of await paneOutputs(detail).all())

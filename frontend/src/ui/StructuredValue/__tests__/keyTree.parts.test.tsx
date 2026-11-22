@@ -50,8 +50,14 @@ describe('KeyTree rows (variant="keys")', () => {
     await user.click(screen.getByRole('button', { name: /plan/ }));
     expect(part('actions').length).toBe(1);
     const actions = container.querySelector('[data-part="actions"]')!;
-    expect(actions).toHaveTextContent('Expand all');
-    expect(actions).toHaveTextContent('Collapse all');
+    // G4: Expand all / Collapse all are quiet icon actions named by aria-label (no visible words)
+    expect(
+      actions.querySelector('button[aria-label="Expand all in plan"] svg[data-icon="unfold"]'),
+    ).toBeTruthy();
+    expect(
+      actions.querySelector('button[aria-label="Collapse all in plan"] svg[data-icon="fold"]'),
+    ).toBeTruthy();
+    expect(actions).not.toHaveTextContent('Expand all');
     expect(actions.querySelector('button[aria-label="Copy plan"]')).toBeTruthy();
   });
 });

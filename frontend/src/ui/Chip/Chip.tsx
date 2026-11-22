@@ -43,6 +43,7 @@ export function Chip({
         <IconButton
           label={removeLabel ?? 'Remove filter'}
           icon="close"
+          closes={false}
           className={styles.remove}
           onPress={onRemove}
         />
