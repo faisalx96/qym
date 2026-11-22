@@ -33,7 +33,7 @@ const AnalyzerPage = lazyPage(() => import('@/features/analyzer/AnalyzerPage'), 
 const DatasetsRoutes = lazyPage(() => import('@/features/datasets/DatasetsRoutes'), 'DatasetsRoutes');
 const ReviewsPage = lazyPage(() => import('@/features/reviews/ReviewsPage'), 'ReviewsPage');
 const TrashPage = lazyPage(() => import('@/features/trash/TrashPage'), 'TrashPage');
-const BookmarksPage = lazyPage(() => import('@/features/bookmarks/BookmarksPage'), 'BookmarksPage');
+const BookmarkRoutes = lazyPage(() => import('@/features/bookmarks/BookmarkRoutes'), 'BookmarkRoutes');
 const FactoryRoutes = lazyPage(() => import('@/features/factory/FactoryRoutes'), 'FactoryRoutes');
 const AdminPage = lazyPage(() => import('@/features/admin/AdminPage'), 'AdminPage');
 const DocsPage = lazyPage(() => import('@/features/docs/DocsPage'), 'DocsPage');
@@ -76,7 +76,8 @@ const projectChildren: RouteObject[] = [
   { path: C.datasetsSplat, element: <DatasetsRoutes /> },
   { path: C.analysis, element: <AnalyzerPage /> },
   { path: C.reviews, element: <ReviewsPage /> },
-  { path: C.bookmarks, element: <BookmarksPage /> },
+  { path: C.bookmarks, element: <BookmarkRoutes /> },
+  { path: C.bookmarksSplat, element: <BookmarkRoutes /> },
   { path: C.factory, element: <FactoryRoutes /> },
   { path: C.factorySplat, element: <FactoryRoutes /> },
   { path: C.compare, element: <ComparePage /> },

@@ -43,6 +43,7 @@ from qym_platform.db.models import (
     ApiKey,
     Approval,
     AuditLog,
+    BookmarkGroup,
     DataFactory,
     Dataset,
     DatasetVersion,
@@ -168,6 +169,7 @@ def session_factory(monkeypatch):
                 FactoryRuleCategory(id="fc1", factory_id="f1", key="general", name="General"),
                 FactoryRuleCategory(id="fc2", factory_id="f1", key="format", name="Format"),
                 FactoryJob(id="fj1", factory_id="f1", kind="analysis", status="queued", params={}, progress={}),
+                BookmarkGroup(id="bg1", project_id="pa", owner_user_id="member", name="General"),
             ]
         )
         db.flush()
@@ -287,6 +289,9 @@ REFUSED = [
     ("POST", "/api/factories/{factory_id}/jobs/{job_id}:cancel", "/api/factories/f1/jobs/fj1:cancel", None, MEMBER),
     ("PUT", "/api/runs/{run_id}/bookmark", "/api/runs/r1/bookmark", {"json": {"visibility": "public", "note": "keep"}}, MEMBER),
     ("DELETE", "/api/runs/{run_id}/bookmark", "/api/runs/r1/bookmark", None, MEMBER),
+    ("POST", "/api/projects/{project_slug}/bookmark-groups", "/api/projects/pa/bookmark-groups", {"json": {"name": "Baselines"}}, MEMBER),
+    ("PATCH", "/api/bookmark-groups/{group_id}", "/api/bookmark-groups/bg1", {"json": {"pinned": True}}, MEMBER),
+    ("DELETE", "/api/bookmark-groups/{group_id}", "/api/bookmark-groups/bg1", None, MEMBER),
     ("DELETE", "/api/runs/{run_id}/passes/{pass_number}", "/api/runs/r1/passes/1", None, MGR),
     ("DELETE", "/api/runs/{run_id}/passes", "/api/runs/r1/passes", {"json": {"pass_numbers": [1]}}, MGR),
     # Analysis and diagnosis writes addressed by run id.
