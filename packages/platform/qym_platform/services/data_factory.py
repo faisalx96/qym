@@ -1091,7 +1091,7 @@ def _rules_from_answer(
         raw_bridge = raw.get("bridge_to")
         for k in raw_bridge if isinstance(raw_bridge, list) else []:
             k = str(k)
-            if k in by_key and k not in keys and k not in bridge_keys:
+            if k in by_key and k not in bridge_keys:
                 bridge_keys.append(k)
         if kind == "bridge" and not bridge_keys:
             kind = "rule"

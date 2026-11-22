@@ -497,7 +497,9 @@ def _links_or_422(
     kind: str,
     bridge_ids: List[str],
 ) -> Tuple[List[str], List[str]]:
-    """The further category ids and the bridge target ids of a rule, checked against the factory."""
+    """The further category ids and the bridge target ids of a rule, checked against the factory.
+
+    ``category_ids`` may repeat the primary; a bridge's targets may overlap its categories."""
     known = _factory_categories(db, factory.id)
     extra: List[str] = []
     for cid in category_ids:
@@ -507,17 +509,18 @@ def _links_or_422(
             extra.append(cid)
     if kind != "bridge":
         return extra, []
-    own = {primary.id, *extra}
+    # A target may be one of the rule's own categories: a "join orders" bridge filed in
+    # Joins opens Joins for the item. Only the targets outside its categories widen the
+    # generation pool; the rest keep the rule readable as a bridge.
     bridges: List[str] = []
     for cid in bridge_ids:
         if cid not in known:
             raise HTTPException(status_code=422, detail="Unknown rule category")
-        if cid not in own and cid not in bridges:
+        if cid not in bridges:
             bridges.append(cid)
     if not bridges:
         raise HTTPException(
-            status_code=422,
-            detail="A bridge rule names at least one category it is not in",
+            status_code=422, detail="A bridge rule names at least one category it opens"
         )
     return extra, bridges
 

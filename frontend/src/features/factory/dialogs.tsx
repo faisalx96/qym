@@ -348,9 +348,9 @@ function RuleEditor({ onOpenChange, factory, groups, existing, onSave }: RuleDia
   const needsBody = Boolean(category?.json_schema);
   const primary = categoryId ? String(categoryId) : null;
   const others = factory.categories.filter((c) => c.id !== primary);
-  const own = new Set([primary, ...extraIds]);
-  const targets = factory.categories.filter((c) => !own.has(c.id));
-  const chosenBridges = bridgeIds.filter((id) => targets.some((c) => c.id === id));
+  // A bridge may open one of its own categories (a "join orders" bridge filed in Joins opens Joins), so every
+  // category is a possible target: adding a category to the rule never takes a target away.
+  const chosenBridges = bridgeIds.filter((id) => factory.categories.some((c) => c.id === id));
   const blocker = !categoryId
     ? 'Choose a category'
     : !title.trim()
@@ -465,22 +465,16 @@ function RuleEditor({ onOpenChange, factory, groups, existing, onSave }: RuleDia
             <Text as="span" variant="sm" tone="muted" id="rule-bridge-targets">
               Bridges into
             </Text>
-            {targets.length ? (
-              <ToggleChips
-                aria-labelledby="rule-bridge-targets"
-                options={targets.map((c) => ({ value: c.id, label: c.name }))}
-                value={chosenBridges}
-                onChange={setBridgeIds}
-                size="sm"
-              />
-            ) : (
-              <Text as="span" variant="sm" tone="muted">
-                Every category is already the rule’s own. Add a category first.
-              </Text>
-            )}
+            <ToggleChips
+              aria-labelledby="rule-bridge-targets"
+              options={factory.categories.map((c) => ({ value: c.id, label: c.name }))}
+              value={chosenBridges}
+              onChange={setBridgeIds}
+              size="sm"
+            />
             <Text as="p" variant="sm" tone="muted" className={styles.help}>
               In generation, an item that carries this rule can take rules of these categories next: a join in
-              a query, a second product in a conversation.
+              a query, a second product in a conversation. A bridge may open one of its own categories.
             </Text>
           </div>
         ) : null}

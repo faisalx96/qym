@@ -805,7 +805,7 @@ def test_rule_categories_and_bridge_targets_are_checked(client):
     assert added.status_code == 201, added.text
     joins = added.json()["id"]
     base = {"category_id": "fc1", "title": "Join customers", "description": "x"}
-    # A bridge needs a target outside its own categories; unknown categories are refused.
+    # A bridge needs at least one target; unknown categories are refused.
     assert (
         client.post(
             "/api/factories/f1/rules", json={**base, "kind": "bridge"}, headers=MEMBER
@@ -815,11 +815,28 @@ def test_rule_categories_and_bridge_targets_are_checked(client):
     assert (
         client.post(
             "/api/factories/f1/rules",
-            json={**base, "kind": "bridge", "bridge_to_category_ids": ["fc1"]},
+            json={**base, "kind": "bridge", "bridge_to_category_ids": ["zzz"]},
             headers=MEMBER,
         ).status_code
         == 422
     )
+    # A bridge may open one of its own categories (a two-category factory could not file a
+    # bridge in its target before: the categories of a bridge were stuck).
+    own = client.post(
+        "/api/factories/f1/rules",
+        json={**base, "kind": "bridge", "bridge_to_category_ids": ["fc1"]},
+        headers=MEMBER,
+    )
+    assert own.status_code == 201, own.text
+    assert [c["id"] for c in own.json()["bridge_to"]] == ["fc1"]
+    moved = client.patch(
+        f"/api/factories/f1/rules/{own.json()['id']}",
+        json={"category_ids": ["fc2"], "bridge_to_category_ids": ["fc1", "fc2"]},
+        headers=MEMBER,
+    )
+    assert moved.status_code == 200, moved.text
+    assert [c["id"] for c in moved.json()["categories"]] == ["fc1", "fc2"]
+    assert sorted(c["id"] for c in moved.json()["bridge_to"]) == ["fc1", "fc2"]
     assert (
         client.post(
             "/api/factories/f1/rules",
@@ -834,7 +851,7 @@ def test_rule_categories_and_bridge_targets_are_checked(client):
             **base,
             "category_ids": ["fc1", "fc2", "fc2"],
             "kind": "bridge",
-            "bridge_to_category_ids": [joins, "fc2", joins],
+            "bridge_to_category_ids": [joins, joins],
         },
         headers=MEMBER,
     )
