@@ -197,7 +197,7 @@ function ConnectEditor({
           value={groupKey}
           onChange={setGroupKey}
           placeholder="topic"
-          help="The item metadata key whose value groups the rules, such as topic or intent. Optional; the Settings tab lists the keys once connected."
+          help="The item metadata key whose value groups the rules, such as topic or intent; a list value (the tables a query reads) files the item in every group it lists. Optional; the Settings tab lists the keys once connected."
           width="100%"
         />
         <Select
