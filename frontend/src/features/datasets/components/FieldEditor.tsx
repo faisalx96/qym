@@ -4,7 +4,8 @@
  * (brief 07 §3): strings are never coerced; switching to JSON mode is the
  * only way a value changes type, and the tag shows `string → number`.
  */
-import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { codeKind, formatSql, sqlWords } from '@/lib/code';
 import { textDirAttrs } from '@/lib/text';
 import { CopyButton, Dialog, IconButton, SegmentedControl, Tag, Text } from '@/ui';
 import {
@@ -246,7 +247,9 @@ function CodeArea({
   onText: (text: string) => void;
 }) {
   const under = useRef<HTMLPreElement>(null);
-  const coloured = json && text.length <= HIGHLIGHT_MAX;
+  // A string that holds SQL is code while it is edited too: mono, keywords coloured (feedback 17 Nov D4).
+  const sql = !json && text.length <= HIGHLIGHT_MAX && codeKind(text) === 'sql';
+  const coloured = (json || sql) && text.length <= HIGHLIGHT_MAX;
   const sync = (el: HTMLTextAreaElement) => {
     if (!under.current) return;
     under.current.scrollTop = el.scrollTop;
@@ -259,15 +262,26 @@ function CodeArea({
       data-big={big ? '' : undefined}
     >
       {coloured ? (
-        <pre ref={under} className={styles.under} aria-hidden="true" data-testid="json-colour" {...dir}>
+        <pre
+          ref={under}
+          className={styles.under}
+          aria-hidden="true"
+          data-testid="json-colour"
+          data-lang={sql ? 'sql' : undefined}
+          {...dir}
+        >
           {/* a final newline needs a character after it, or the copy is one line shorter than the textarea */}
-          <JsonHighlight text={text.endsWith('\n') ? `${text} ` : text} />
+          {sql ? (
+            <SqlHighlight text={text.endsWith('\n') ? `${text} ` : text} />
+          ) : (
+            <JsonHighlight text={text.endsWith('\n') ? `${text} ` : text} />
+          )}
         </pre>
       ) : null}
       <textarea
         id={id}
         className={styles.textarea}
-        data-mode={json ? 'json' : 'text'}
+        data-mode={json ? 'json' : sql ? 'sql' : 'text'}
         aria-labelledby={labelledBy}
         aria-label={ariaLabel}
         aria-describedby={describedBy}
@@ -293,6 +307,22 @@ export function ReadOnlyValue({
   dir?: ReturnType<typeof textDirAttrs>;
   compact?: boolean;
 }) {
+  const kind = typeof value === 'string' ? codeKind(value) : null;
+  // A string that holds SQL or JSON reads as a code block, as in the run item pane; prose stays prose (D4).
+  if (typeof value === 'string' && kind === 'sql') {
+    return (
+      <pre className={styles.pre} data-kind="code" data-lang="sql" data-compact={compact ? '' : undefined} dir="ltr">
+        <SqlHighlight text={formatSql(value)} />
+      </pre>
+    );
+  }
+  if (typeof value === 'string' && kind === 'json') {
+    return (
+      <pre className={styles.pre} data-kind="code" data-lang="json" data-compact={compact ? '' : undefined} dir="ltr">
+        <JsonHighlight text={formatJson(JSON.parse(value) as unknown)} />
+      </pre>
+    );
+  }
   if (typeof value === 'string') {
     return (
       <pre
@@ -313,6 +343,24 @@ export function ReadOnlyValue({
     <pre className={styles.pre} data-compact={compact ? '' : undefined} dir="ltr">
       <JsonHighlight text={formatJson(value)} />
     </pre>
+  );
+}
+
+/** SQL with its keywords in the key colour, the run item pane's code block (cv5 H3; feedback 17 Nov D4). */
+export function SqlHighlight({ text }: { text: string }) {
+  const words = useMemo(() => sqlWords(text, { inString: false }), [text]);
+  return (
+    <>
+      {words.map((w, i) =>
+        w.keyword ? (
+          <span key={i} className={styles.tokKey}>
+            {w.text}
+          </span>
+        ) : (
+          <Fragment key={i}>{w.text}</Fragment>
+        ),
+      )}
+    </>
   );
 }
 

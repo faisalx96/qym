@@ -1,4 +1,5 @@
-/* Step timings (round 10, legacy latency_traces.css .lt-steps): a tree of steps with one shared time axis. */
+/* Step timings: the average trace (or each kind's time in one trace) as a tree of rows with one shared time axis.
+   The rows indent, fold and draw kind glyphs as the trace drawer does. */
 .box {
   min-width: 0;
   scroll-margin-top: calc(var(--report-nav-h, 0px) + var(--space-md));
@@ -37,7 +38,7 @@
 }
 
 .table {
-  --cols: minmax(220px, 280px) minmax(0, 1fr) 96px 112px 116px 76px;
+  --cols: minmax(300px, 380px) minmax(0, 1fr) 96px 112px 116px 76px;
 
   display: flex;
   flex-direction: column;
@@ -62,10 +63,6 @@
 
 .row:not(.axisRow):hover {
   background: color-mix(in srgb, var(--bg-hover) 60%, transparent);
-}
-
-.row[data-phase] {
-  min-height: 40px;
 }
 
 .row[data-flash] {
@@ -178,7 +175,7 @@
   align-items: center;
   gap: var(--space-sm);
   min-width: 0;
-  padding: 6px 0 6px calc(var(--depth, 0) * 20px);
+  padding: 6px 0 6px calc(var(--depth, 0) * var(--space-md));
   border: 0;
   background: none;
   color: inherit;
@@ -194,6 +191,21 @@ button.label:focus-visible {
   border-radius: 3px;
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
+}
+
+/* The name (and its models) over a quiet fact line. */
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* "in 62 of 103 traces", "×2.4 per trace", a kind's calls and average call. */
+.fact {
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
 }
 
 .labelText {
@@ -234,7 +246,7 @@ button.label:focus-visible {
 }
 
 .chev {
-  flex: 0 0 14px;
+  flex: 0 0 12px;
   color: var(--text-muted);
   transition:
     rotate var(--transition-fast),
@@ -247,17 +259,13 @@ button.label[aria-expanded='true'] .chev {
 }
 
 .chevSpace {
-  flex: 0 0 14px;
-  width: 14px;
+  flex: 0 0 12px;
+  width: 12px;
 }
 
 .track {
   position: relative;
   height: 36px;
-}
-
-.row[data-phase] .track {
-  height: 40px;
 }
 
 .gridLines {

@@ -7,13 +7,14 @@
  */
 import { useMemo, useState } from 'react';
 import { useGroupMetricsQuery, usePassesQuery } from '@/api/runs';
-import { formatPercent } from '@/lib/metrics';
+import { formatPercent, type MetricDirection, type MetricType } from '@/lib/metrics';
 import {
   DataTable,
   EmptyState,
   ErrorState,
   SegmentedControl,
   Skeleton,
+  ScoreValue,
   Subsection,
   type Column,
 } from '@/ui';
@@ -99,7 +100,10 @@ export function RepeatTab() {
   const hasCurve = curveValues.length > 0;
   // C1-7: the y axis fits the shown series and their band (a score stays inside 0 to 100%)
   const axis = numericAverage
-    ? curveAxis(curveValues, { range: null, minSpan: Math.max(1, Math.abs(Math.max(...curveValues, 0)) * 0.1) })
+    ? curveAxis(curveValues, {
+        range: null,
+        minSpan: Math.max(1, Math.abs(Math.max(...curveValues, 0)) * 0.1),
+      })
     : curveAxis(curveValues);
   const stats = g?.group;
   const allPasses = passes.data?.passes ?? [];
@@ -211,6 +215,8 @@ export function RepeatTab() {
                     selectedLabel={selected.label}
                     passesAxis={selected.key === 'cumulative_avg'}
                     numeric={numericAverage}
+                    valueType={selected.key === 'cumulative_avg' ? model.metricTypes[metric] : 'percentage'}
+                    valueDirection={selected.key === 'cumulative_avg' ? direction : 'maximize'}
                   />
                 )}
               </ChartCard>
@@ -253,16 +259,25 @@ export function RepeatTab() {
 }
 
 /** The curve as a table (the Chart | Table switch of the Across attempts card). */
-function CurveTable({
+/**
+ * RD7: the curve as a report table on the shared `DataTable` recipe: k (or passes) is a centred number column, each
+ * series a centred score column whose value is a `ScoreValue` (plain, band colour from the value and its direction:
+ * pass@k and pass^k are rates where higher is better; the running average follows the page metric).
+ */
+export function CurveTable({
   series,
   selectedLabel,
   passesAxis,
   numeric,
+  valueType,
+  valueDirection,
 }: {
   series: Array<{ name: string; points: CurvePoint[] }>;
   selectedLabel: string;
   passesAxis: boolean;
   numeric: boolean;
+  valueType: MetricType | undefined;
+  valueDirection: MetricDirection;
 }) {
   const rows = (series[0]?.points ?? []).map((p, i) => ({ k: p.k, i }));
   const columns: Column<{ k: number; i: number }>[] = [
@@ -270,19 +285,29 @@ function CurveTable({
       id: 'k',
       header: passesAxis ? 'Passes' : 'k',
       label: passesAxis ? 'Passes' : 'k',
-      mono: true,
-      cell: (r) => r.k,
+      type: 'number',
+      accessor: (r) => r.k,
     },
-    ...series.map((sr) => ({
+    ...series.map((sr): Column<{ k: number; i: number }> => ({
       id: sr.name,
       header: sr.name,
       label: sr.name,
-      align: 'center' as const,
-      mono: true,
-      cell: (r: { k: number; i: number }) =>
-        numeric
-          ? String(Math.round((sr.points[r.i]?.value ?? 0) * 100) / 100)
-          : formatPercent(sr.points[r.i]?.value ?? null, 1),
+      type: 'score',
+      align: 'center',
+      cell: (r) => {
+        const v = sr.points[r.i]?.value;
+        if (v == null || !Number.isFinite(v)) return '—';
+        return (
+          <ScoreValue
+            value={v}
+            type={valueType}
+            direction={valueDirection}
+            digits={1}
+            variant="plain"
+            text={numeric ? String(Math.round(v * 100) / 100) : formatPercent(v, 1)}
+          />
+        );
+      },
     })),
   ];
   return (

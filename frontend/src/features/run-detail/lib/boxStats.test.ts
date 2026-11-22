@@ -13,6 +13,7 @@ describe('boxStats', () => {
     expect(s.p75).toBeCloseTo(75.25);
     expect(s.p5).toBeCloseTo(5.95);
     expect(s.p95).toBeCloseTo(95.05);
+    expect(s.p90).toBeCloseTo(90.1);
     expect(s.mean).toBeCloseTo(50.5);
     expect(s.sum).toBe(5050);
     expect(s.min).toBe(1);

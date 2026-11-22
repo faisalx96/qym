@@ -25,7 +25,6 @@ import {
 import { ApiError } from '@/lib/http';
 import { tableLoading, useDelayedPending } from '@/lib/pending';
 import { textDirAttrs } from '@/lib/text';
-import { copyText } from '@/lib/copy';
 import {
   ActionTile,
   Button,
@@ -367,7 +366,6 @@ export function ItemsTab({
       type: 'number',
       sort: 'index',
       width: 64,
-      pin: 'start',
       hideable: false,
       priority: 1,
       // Plain text: the whole row opens the pane, and the row's arrow opens the item page (C142).
@@ -490,31 +488,10 @@ export function ItemsTab({
     },
   ];
 
-  const rowActions = (): RowAction<DatasetItem>[] => [
-    {
-      id: 'copy',
-      label: 'Copy as JSON',
-      icon: 'copy',
-      primary: true,
-      onPress: (it) =>
-        void copyText(
-          formatJson({
-            item_id: it.item_id,
-            input: it.input,
-            expected_output: it.expected_output,
-            metadata: it.metadata,
-            labels: it.labels,
-          }),
-        ).then((ok) =>
-          ok
-            ? toast.show('Copied item as JSON', {
-                tone: 'success',
-                merge: { key: 'copy-json', text: (n) => `Copied ${n} items as JSON` },
-              })
-            : toast.show('Copy failed', { tone: 'error' }),
-        ),
-    },
-    ...(canEdit
+  // Copy as JSON lives in the item pane (feedback 17 Nov D2): a row shows an action only where there is a real one,
+  // Delete on a draft. A published version has no row actions, so the table has no actions column.
+  const rowActions = (): RowAction<DatasetItem>[] =>
+    canEdit
       ? [
           {
             id: 'delete',
@@ -523,8 +500,7 @@ export function ItemsTab({
             onPress: (it: DatasetItem) => setDeleting(it),
           },
         ]
-      : []),
-  ];
+      : [];
 
   const total = query.data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / route.pageSize));

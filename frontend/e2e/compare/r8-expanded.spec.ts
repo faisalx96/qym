@@ -32,9 +32,10 @@ test('C-exp-1: Input, then Expected, then the outputs; each block has a 3 px rai
   const expected = detail.locator('section[data-part="expected"]');
   const output = paneOutputs(detail).first();
   const [bi, be, bo, bd] = [await box(input), await box(expected), await box(output), await box(detail)];
-  // the order of the pane: Input over the full width, then Expected, then the outputs
+  // the order of the pane: Input, Expected and the outputs each on a row of their own (feedback round 2)
   expect(be.y).toBeGreaterThanOrEqual(bi.bottom);
-  expect(bo.y).toBeGreaterThanOrEqual(be.y);
+  expect(bo.y).toBeGreaterThanOrEqual(be.bottom);
+  expect(be.w).toBeGreaterThan(bd.w - 60);
   expect(bi.w).toBeGreaterThan(bd.w - 60);
   await expect(input).toHaveAttribute('data-tone', 'info');
   await expect(expected).toHaveAttribute('data-tone', 'gold');
@@ -71,7 +72,7 @@ test('C-exp-2: above three runs, one chip per output with aria-pressed; at least
   page,
 }) => {
   const detail = await open(page, s.four, 1440);
-  const chips = detail.getByRole('group', { name: 'Outputs' }).getByRole('button');
+  const chips = detail.getByRole('group', { name: 'Outputs in view' }).getByRole('button');
   await expect(chips).toHaveCount(4);
   for (let i = 0; i < 4; i++) {
     within((await box(chips.nth(i))).h, 20, 2, 'chip');

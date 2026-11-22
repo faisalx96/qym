@@ -45,6 +45,8 @@ async function measure(page: Page, width: number, item: string): Promise<Regions
   const pane = await openItemPane(page, width, item);
   // the details of a metric are closed until the reader opens them
   await openMetric(pane, 'schema_judge');
+  // the Metadata section starts closed (17 Nov I4)
+  await pane.getByRole('button', { name: 'Metadata', exact: true }).click();
   await page.waitForTimeout(400);
   const sel = `[data-testid=item-pane][data-item-id="${item}"]`;
   const m = async (root: string) => (await page.evaluate(keyProbe, `${sel} ${root}`)) ?? [];
@@ -116,6 +118,9 @@ for (const width of [1440, 1024, 390] as const) {
     page,
   }) => {
     const pane = await openItemPane(page, width, 'j-03');
+    // the Metadata section starts closed (17 Nov I4)
+    await pane.getByRole('button', { name: 'Metadata', exact: true }).click();
+    await expect(pane.locator('[data-part="metadata"] dt[data-part=key]').first()).toBeVisible();
     const tags = await pane.locator('[data-part="metadata"]').evaluate((el) => {
       const paneBox = el.closest('[data-testid=item-pane]')!.getBoundingClientRect();
       return Array.from(el.querySelectorAll<HTMLElement>('dt[data-part=key]')).map((k) => {

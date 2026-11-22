@@ -74,6 +74,18 @@ function looksJson(value: unknown): boolean {
   }
 }
 
+/**
+ * A value with nothing to show (RD2): null, an empty or blank string, an empty array or an empty object. 0 and false
+ * are values, so they stay. Versioning, config and metadata leave these out, and a group with none left is not shown.
+ */
+export function isEmptyValue(value: unknown): boolean {
+  if (value == null) return true;
+  if (typeof value === 'string') return value.trim() === '';
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === 'object') return Object.keys(value as object).length === 0;
+  return false;
+}
+
 export function executionContextEntries(run: Run): ContextEntry[] {
   const config = run.config ?? {};
   const metadata = run.metadata ?? {};
@@ -85,7 +97,7 @@ export function executionContextEntries(run: Run): ContextEntry[] {
   const entries: ContextEntry[] = [];
   const seen = new Set<string>();
   Object.entries(config).forEach(([key, value]) => {
-    if (HIDDEN_CONFIG_KEYS.has(key) || value == null || value === '') return;
+    if (HIDDEN_CONFIG_KEYS.has(key) || isEmptyValue(value)) return;
     seen.add(key.toLowerCase());
     entries.push({
       key,
@@ -97,7 +109,7 @@ export function executionContextEntries(run: Run): ContextEntry[] {
     });
   });
   Object.entries(metadata).forEach(([key, value]) => {
-    if (hiddenMeta.has(key) || value == null || value === '') return;
+    if (hiddenMeta.has(key) || isEmptyValue(value)) return;
     if (seen.has(key.toLowerCase())) return;
     entries.push({
       key,
@@ -323,7 +335,7 @@ export function headerChip(key: string, value: unknown): HeaderChip {
  */
 export function headerChips(run: Run): HeaderChipGroup[] {
   const versioning: HeaderChip[] = Object.entries(run.versioning_details ?? {})
-    .filter(([, v]) => v != null && v !== '')
+    .filter(([, v]) => !isEmptyValue(v))
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([k, v]) => headerChip(k, v));
   const git = [run.git_branch, run.git_commit].filter(Boolean).join(' • ');

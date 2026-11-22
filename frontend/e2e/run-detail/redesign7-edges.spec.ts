@@ -36,7 +36,10 @@ for (const width of [1440, 1024] as const) {
     }) => {
       await openRun(page, s.slug, runId);
       await showItems(page);
-      await expect(page.locator(`${TABLE} td[data-pin-edge]`).first()).toBeVisible();
+      await expect(page.locator(`${TABLE} tbody tr`).first()).toBeVisible();
+      // feedback 17 Nov D3: no column of the items table pins (# and Trace scroll with the row), so no cell has a
+      // pinned edge; the overlay, covered-text and detail-row checks still hold
+      await expect(page.locator(`${TABLE} td[data-pin-edge]`)).toHaveCount(0);
 
       const check = async (state: string): Promise<void> => {
         const rep = await edgeReport(page, TABLE);

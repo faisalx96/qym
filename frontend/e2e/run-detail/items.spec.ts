@@ -75,7 +75,11 @@ test.describe('open an item (scenario 6, J6)', () => {
     const row = tableRow(page, 'item-0002');
     await expect(row).toHaveAttribute('aria-current', 'true');
     await expect(row).not.toHaveAttribute('aria-expanded');
-    await c.getByRole('button', { name: 'Close item', exact: true }).click();
+    // G3: the close X is red (--error) under the pointer, never the accent green
+    const close = c.getByRole('button', { name: 'Close item', exact: true });
+    await close.hover();
+    await expect.poll(() => close.evaluate((el) => getComputedStyle(el).color)).toBe('rgb(239, 68, 68)');
+    await close.click();
     await expect(c).toHaveCount(0);
     await expect(row).not.toHaveAttribute('aria-current');
     await expect.poll(() => params(page).get('item')).toBeNull();
@@ -412,7 +416,7 @@ test.describe('root-cause issues (scenario 9)', () => {
     await expect(dlg).toHaveCount(0);
     const issue = rc.getByTestId('issue');
     await expect(issue).toHaveCount(1);
-    await expect(issue).toContainText('pending');
+    await expect(issue).toContainText('Awaiting review'); // the pending status reads "Awaiting review"
     await expect(issue).toContainText('The answer cites the wrong clause.');
     await expect(issue).toContainText('Improve retrieval ranking');
     await issue.getByRole('button', { name: /Approve issue/ }).click();
@@ -473,27 +477,37 @@ test.describe('root-cause issues (scenario 9)', () => {
     await expect(dlg).toHaveCount(0);
   });
 
-  test('repeat run: a Pass N link keeps the filters, keeps the item open and its row in view (C127)', async ({
+  test('repeat run: the pass toggles keep the filters, keep the item open and its row in view (C127)', async ({
     page,
   }) => {
+    // 17 Nov I8: the pane has no Pass N links away to the pass views; the pass toggles change the passes in view
+    // in place
     await openRun(page, s.slug, repeat, 'q=sql-001');
     await itemButton(page, 1).click(); // sql-001
-    await card(page, 'sql-001').getByRole('link', { name: 'Pass 2' }).click();
-    await expect.poll(() => params(page).get('pass')).toBe('2');
+    const toggles = card(page, 'sql-001').getByRole('group', { name: 'Passes in view' });
+    const pass2 = toggles.getByRole('button', { name: /^Pass 2\b/ });
+    await expect(pass2).toHaveAttribute('aria-pressed', 'true');
+    await pass2.click();
+    await expect(pass2).toHaveAttribute('aria-pressed', 'false');
+    expect(params(page).get('pass')).toBeNull();
     expect(params(page).get('q')).toBe('sql-001');
     expect(params(page).get('item')).toBe('sql-001');
     await expect(card(page, 'sql-001')).toBeVisible();
     await expect(tableRow(page, 'sql-001')).toBeInViewport();
   });
 
-  test('repeat run: all-passes view links to ?pass=N, issues are added per pass', async ({ page }) => {
-    await openRun(page, s.slug, repeat);
-    await itemButton(page, 1).click(); // sql-001
-    const c = card(page, 'sql-001');
-    await expect(c.getByTestId('root-cause-pass-hint')).toBeVisible();
-    await c.getByRole('link', { name: 'Pass 2' }).click();
-    await expect.poll(() => params(page).get('pass')).toBe('2');
-    expect(params(page).get('item')).toBe('sql-001');
+  test('repeat run: the all-passes pane reviews root causes per pass in view, issues are added per pass', async ({
+    page,
+  }) => {
+    // sql-005 fails every pass on its score: one Root cause disclosure for each pass in view (feedback 17 Nov I8),
+    // with no links away to the pass views
+    await openRun(page, s.slug, repeat, 'item=sql-005');
+    const c = card(page, 'sql-005');
+    for (const n of [1, 2, 3]) {
+      await expect(c.getByRole('button', { name: new RegExp(`^Root cause, pass ${n}`) })).toBeVisible();
+    }
+    await expect(c.getByTestId('root-cause-pass-hint')).toHaveCount(0);
+    await openRun(page, s.slug, repeat, 'pass=2&item=sql-001');
     const c2 = card(page, 'sql-001');
     await expect(c2).toBeVisible();
     // sql-001 failed in pass 2 with a task error: the judges said nothing, so no root-cause cards
@@ -514,7 +528,7 @@ test.describe('root-cause issues (scenario 9)', () => {
     await dlg.getByRole('textbox', { name: 'New category' }).fill('SQL schema');
     await dlg.getByRole('textbox', { name: 'Finding' }).fill('Relation does not exist.');
     await dlg.getByTestId('issue-save').click();
-    await expect(rc.getByTestId('issue')).toContainText('pending');
+    await expect(rc.getByTestId('issue')).toContainText('Awaiting review'); // the pending status reads "Awaiting review"
     await rc
       .getByTestId('issue')
       .getByRole('button', { name: /Approve issue/ })

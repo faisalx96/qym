@@ -136,7 +136,7 @@ export function StatusCell({ row }: { row: RunRow }) {
   const items = signalItems(row);
   const { slug, listContext } = useRunsCtx();
   return (
-    <span className={styles.statusRow}>
+    <span className={styles.statusRow} data-status-fit="">
       <StatusBadge row={row} />
       {items.length ? (
         <SignalMarkers items={items} href={`${runHref(runPath(slug, row.run_id), listContext)}#errors`} />
@@ -145,33 +145,95 @@ export function StatusCell({ row }: { row: RunRow }) {
   );
 }
 
+export interface RunProgressView {
+  done: number;
+  total: number | null;
+  /** 0..1, the bar's fill */
+  fraction: number;
+  /** the word before done/total: "pass" on a repeat run (it counts passes), none on a single-pass run (items) */
+  unit: 'pass' | null;
+  /** the hover text after the status: what the numbers count */
+  title: string;
+}
+
+/**
+ * A live run's progress: a bar, then done/total (the single-pass look). A repeat run counts PASSES (17 Nov R3, round
+ * 2): "pass 2/3" is the pass now running (the first one not completed, as its pass row says Running) out of the run's
+ * passes; the bar fills with the item passes done out of items x passes, so it sits inside that pass's third. Each
+ * running pass row counts its items ("items 10/24").
+ */
+export function runProgress(row: RunRow): RunProgressView {
+  if (row.samples <= 1) {
+    const done = row.progress_completed ?? 0;
+    const total = row.progress_total ?? null;
+    const fraction = total ? done / total : (row.progress_pct ?? 0);
+    return { done, total, fraction, unit: null, title: '' };
+  }
+  const completed = Math.min(row.last_completed_pass ?? 0, row.samples);
+  const pass = Math.min(completed + 1, row.samples);
+  const items = row.pass_items_completed != null && row.pass_items_total ? row.pass_items_total : null;
+  const fraction = items ? (row.pass_items_completed ?? 0) / items : completed / row.samples;
+  const title = [
+    `pass ${pass} of ${row.samples} running`,
+    `${completed} of ${row.samples} passes done`,
+    items ? `${row.pass_items_completed} of ${items} items done across all passes` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return { done: pass, total: row.samples, fraction, unit: 'pass', title };
+}
+
+/**
+ * The bar and done/total of a live run or pass (one look for both rows). `unit` names what the numbers count, before
+ * them in sans ("pass 2/3", "items 10/24"); `fraction` overrides the fill (a repeat run fills by item passes).
+ */
+export function LiveProgress({
+  done,
+  total,
+  unit,
+  fraction,
+  label,
+}: {
+  done: number;
+  total: number | null;
+  unit?: string | null;
+  fraction?: number;
+  label?: string;
+}) {
+  const share = fraction ?? (total ? done / total : 0);
+  const pct = Math.round(Math.max(0, Math.min(1, share)) * 100);
+  return (
+    <span className={styles.progress} aria-label={`${label ? `${label}, progress` : 'Progress'} ${pct} percent`}>
+      <span className={styles.progressTrack} aria-hidden="true">
+        <span className={styles.progressFill} style={{ width: `${pct}%` }} />
+      </span>
+      {/* one text run, so "pass 2/3" reads (and copies) as one phrase */}
+      <span className={styles.progressText}>
+        {unit ? `${unit} ` : null}
+        <span className={styles.mono}>
+          {done}/{total ?? '?'}
+        </span>
+      </span>
+    </span>
+  );
+}
+
 function StatusBadge({ row }: { row: RunRow }) {
   const stopping = isStoppingRun(row);
   const status = stopping ? 'STOPPING' : row.status;
   const live = isActiveRun(row);
-  const pct = Math.round((row.progress_pct ?? 0) * 100);
-  const pass = row.samples > 1 && live ? Math.min((row.last_completed_pass ?? 0) + 1, row.samples) : null;
+  const progress = live ? runProgress(row) : null;
   return (
-    <span className={styles.status} title={statusTitle(row, stopping)}>
+    <span className={styles.status} title={[statusTitle(row, stopping), progress?.title].filter(Boolean).join(' · ')}>
       <RunStatusBadge status={status} label={STATUS_LABEL[status] ?? status} />
-      {live ? (
-        <span className={styles.progress} aria-label={`Progress ${pct} percent`}>
-          {pass ? (
-            <span className={styles.mono}>
-              pass {pass}/{row.samples}
-            </span>
-          ) : null}
-          {row.samples <= 1 ? (
-            <span className={styles.progressTrack} aria-hidden="true">
-              <span className={styles.progressFill} style={{ width: `${pct}%` }} />
-            </span>
-          ) : null}
-          {row.samples <= 1 ? (
-            <span className={styles.mono}>
-              {row.progress_completed}/{row.progress_total ?? '?'}
-            </span>
-          ) : null}
-        </span>
+      {progress ? (
+        <LiveProgress
+          done={progress.done}
+          total={progress.total}
+          unit={progress.unit}
+          fraction={progress.fraction}
+          label={progress.unit ? `pass ${progress.done} of ${progress.total}` : undefined}
+        />
       ) : null}
     </span>
   );
@@ -340,7 +402,10 @@ export function MetricCell({
   const leftOut = errorsLeftOut(dir);
   const metricErr = row.metric_error_counts?.[metric] ?? 0;
   const taskErr = row.task_error_count ?? 0;
-  const error = metricErr ? 'metric' : taskErr && dir === 'minimize' ? 'task' : null;
+  // A mean with some scorer errors is still the mean of the scored items: the value shows with the ⚠ marker, and
+  // "Error" only when no value exists (17 Nov R5, single-pass and repeat runs). Task errors on a lower-is-better
+  // metric still read "Error": leaving them out flatters the mean.
+  const error = metricErr && v == null ? 'metric' : taskErr && dir === 'minimize' ? 'task' : null;
   const scope = row.samples > 1 ? ' across all passes' : '';
   const marked = leftOut ? metricErr + taskErr > 0 : metricErr > 0;
   const label = marked ? metricErrorLabel(row, metric, leftOut, scope) : '';
@@ -462,7 +527,11 @@ export function RunNameCell({
         {...intent}
         {...textDirAttrs(name)}
       />
-      {repeat ? <Tag kind="count">×{row.samples}</Tag> : null}
+      {repeat ? (
+        <Tag kind="count" className={styles.passCount}>
+          ×{row.samples}
+        </Tag>
+      ) : null}
       {row.origin === 'official' ? (
         <Flag tone="info" icon="shield" title="Run launched by an official experiment">
           Official
@@ -574,6 +643,22 @@ export function RowActions({
       onAction={(id) => onAction(id, row)}
     />
   );
+}
+
+/** A trace column's value; Tool success is a rate, banded like a score (17 Nov R4). */
+export function TraceStatCell({ stat, value }: { stat: string; value: unknown }) {
+  if (typeof value !== 'number') return <span className={styles.empty}>—</span>;
+  if (stat === 'tool_success_rate')
+    return (
+      <ScoreValue
+        variant="plain"
+        value={value}
+        type="score"
+        direction="maximize"
+        text={formatPercent(value, 1)}
+      />
+    );
+  return <Mono>{formatNumericValue(value, 1)}</Mono>;
 }
 
 export function LatencyCell({ ms }: { ms: number | null | undefined }) {

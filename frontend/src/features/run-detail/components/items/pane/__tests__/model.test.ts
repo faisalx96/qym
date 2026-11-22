@@ -3,10 +3,13 @@ import { describe, expect, it } from 'vitest';
 import type { Row } from '../../../../types';
 import {
   analysisWarnings,
+  defaultOpenPasses,
   editTooltip,
   extraMeta,
   firstBadPass,
   passIfText,
+  passReplacedBy,
+  pickPass,
   promptLine,
   reasonOf,
   type ItemPass,
@@ -100,5 +103,39 @@ describe('analysisWarnings', () => {
       item_metadata: { analysis_warning: 'x', metric_analyses: { a: { error: 'boom', warning: 'y' } } },
     } as Partial<Row>);
     expect(analysisWarnings(r)).toEqual([]);
+  });
+});
+
+describe('defaultOpenPasses', () => {
+  const passes = (kinds: string[]) => kinds.map((kind, i) => ({ pass: i + 1, kind }) as unknown as ItemPass);
+  it('opens every pass up to three', () => {
+    expect(defaultOpenPasses(passes(['pass']))).toEqual([1]);
+    expect(defaultOpenPasses(passes(['pass', 'fail', 'pass']))).toEqual([1, 2, 3]);
+  });
+  it('opens three passes in a row from the first pass that did not pass', () => {
+    expect(defaultOpenPasses(passes(['pass', 'fail', 'error', 'pass', 'pass']))).toEqual([2, 3, 4]);
+    expect(defaultOpenPasses(passes(['pass', 'pass', 'pass', 'pass']))).toEqual([1, 2, 3]);
+  });
+  it('moves the window back so that it stays three passes wide', () => {
+    expect(defaultOpenPasses(passes(['pass', 'pass', 'pass', 'pass', 'fail']))).toEqual([3, 4, 5]);
+  });
+});
+
+describe('pickPass (at most three passes in view)', () => {
+  it('adds a pass at the end and drops the pass picked earliest past three', () => {
+    expect(pickPass([2], 4, true)).toEqual([2, 4]);
+    expect(pickPass([2, 3, 4], 1, true)).toEqual([3, 4, 1]);
+    expect(pickPass([3, 4, 1], 2, true)).toEqual([4, 1, 2]);
+  });
+
+  it('removes a pass but never the last one in view', () => {
+    expect(pickPass([3, 4, 1], 4, false)).toEqual([3, 1]);
+    expect(pickPass([1], 1, false)).toEqual([1]);
+  });
+
+  it('names the pass that a new pick replaces, only when three are in view', () => {
+    expect(passReplacedBy([2, 3, 4], 1)).toBe(2);
+    expect(passReplacedBy([2, 3, 4], 3)).toBeUndefined();
+    expect(passReplacedBy([2, 3], 1)).toBeUndefined();
   });
 });

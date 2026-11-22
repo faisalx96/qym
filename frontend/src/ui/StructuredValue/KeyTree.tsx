@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import { Button } from '../Button';
 import { Collapse } from '../Collapse';
 import { CopyButton } from '../CopyButton';
+import { FoldButton } from '../IconButton';
 import { Icon } from '../Icon';
 import { TextBlock } from '../TextBlock';
 import { textDirAttrs } from '@/lib/text';
@@ -157,22 +158,16 @@ function KeyRow({
           <span className={styles.actions} data-part="actions">
             {nested ? (
               <>
-                <Button
-                  size="sm"
-                  variant="neutral"
-                  aria-label={`Expand all in ${name}`}
+                <FoldButton
+                  action="open"
+                  label={`Expand all in ${name}`}
                   onPress={() => onOpenChange(expandKey(open, value, path))}
-                >
-                  Expand all
-                </Button>
-                <Button
-                  size="sm"
-                  variant="neutral"
-                  aria-label={`Collapse all in ${name}`}
+                />
+                <FoldButton
+                  action="close"
+                  label={`Collapse all in ${name}`}
                   onPress={() => onOpenChange(collapseBelow(open, value, path))}
-                >
-                  Collapse all
-                </Button>
+                />
               </>
             ) : null}
             <CopyButton text={() => copyValue(value)} label={`Copy ${name}`} />

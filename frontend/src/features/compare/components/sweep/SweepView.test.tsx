@@ -192,6 +192,20 @@ describe('Sweep item pane', () => {
     expect(within(table).getAllByRole('rowheader')).toHaveLength(6);
   });
 
+  it('shows the number of rows that the reader chose for one page', () => {
+    localStorage.setItem('qym:compare-sweep-page-size', '50');
+    try {
+      render(<Harness {...two} />);
+      expect(rowIds()).toHaveLength(ITEMS);
+      // the pager stays, so the reader can go back to 25
+      expect(screen.getByRole('navigation', { name: 'items pagination' }).textContent).toContain(
+        `1–${ITEMS} of ${ITEMS} items`,
+      );
+    } finally {
+      localStorage.removeItem('qym:compare-sweep-page-size');
+    }
+  });
+
   it('steps with J and K in the order of the Sweep table and turns its page', () => {
     render(<Harness {...two} />);
     const order = rowIds();

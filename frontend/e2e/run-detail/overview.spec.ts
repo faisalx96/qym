@@ -110,7 +110,8 @@ test.describe('open a run (J1, scenario 1)', () => {
     await expect(q.locator('button[data-bucket]').first()).toBeVisible();
     await expect(q).toContainText('8 scorer errors');
     await expect(metricCard(page, 'hallucination')).toContainText('not counted in the mean');
-    await expect(metricCard(page, 'tokens_used')).toContainText('Total');
+    // the count caption is the item count only: "N items", no total (17 Nov RD3, round 2)
+    await expect(metricCard(page, 'tokens_used').getByTestId('number-card-caption')).toHaveText(/^[\d,]+ items?$/);
   });
 
   test('legacy /run/<id> redirects to the project-scoped page', async ({ page }) => {

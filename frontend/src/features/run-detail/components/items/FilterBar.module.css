@@ -49,6 +49,43 @@
   display: contents;
 }
 
+/* RD11: an active filter chip: the field in the muted text colour, then the value clamped to one line with an
+   ellipsis (the full filter is the chip's hover text and accessible name), then the chip's own × to remove it.
+   The value wraps rather than "nowrap" so the chip can shrink to its row; the clamp shows its first line only. */
+.chipList .activeChip {
+  flex: 0 1 auto;
+  min-inline-size: 14ch;
+}
+
+.chipText {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+  max-inline-size: 40ch;
+}
+
+.chipField {
+  flex: none;
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.chipField::after {
+  content: ':';
+}
+
+.chipValue {
+  display: -webkit-box;
+  min-inline-size: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
 /* The bar's end slot (the CSV export): the right end of the count row, so of the whole bar when it is one row. */
 .end {
   display: inline-flex;

@@ -7,6 +7,14 @@
   flex-wrap: wrap;
 }
 
+/* a hero meta entry: "Created <date> by <person>"; wraps between its words */
+.metaEntry {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
 .heroActions {
   display: flex;
   flex-wrap: wrap;

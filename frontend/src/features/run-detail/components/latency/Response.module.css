@@ -396,6 +396,12 @@
   pointer-events: none;
 }
 
+/* RD8: the box plot strip under the histogram's axis, same width and x scale; it sits close to the axis it shares. */
+.strip {
+  min-width: 0;
+  margin-block-start: calc(var(--space-xs) - var(--space-lg));
+}
+
 .axis {
   position: absolute;
   right: 0;

@@ -115,6 +115,36 @@
   color: var(--text-muted);
 }
 
+/* variant="plain": no check box and no edge (feedback round 3: "remove border"). On = a soft wash at --tint-soft and
+   the strong label: the accent wash with the primary label, or, for an option with a tone (a passed or a failed pass),
+   the wash and the text of that tone (the Tag recipe of tones.css). Off = the well and the muted label. For a label
+   that carries its own glyph. */
+.group[data-variant='plain'] .chip,
+.group[data-variant='plain'] .chip:hover {
+  padding-inline: var(--space-sm);
+  border-color: transparent;
+}
+
+.group[data-variant='plain'] .chip[aria-pressed='true'],
+.group[data-variant='plain'] .chip[aria-pressed='true'][aria-disabled='true'] {
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent);
+  color: var(--text-primary);
+}
+
+.group[data-variant='plain'] .chip[aria-pressed='true']:not([aria-disabled='true']):hover {
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent);
+}
+
+.group[data-variant='plain'] .chip[data-tone][aria-pressed='true'],
+.group[data-variant='plain'] .chip[data-tone][aria-pressed='true'][aria-disabled='true'] {
+  background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
+  color: var(--tone-text);
+}
+
+.group[data-variant='plain'] .chip[data-tone][aria-pressed='true']:not([aria-disabled='true']):hover {
+  background: color-mix(in srgb, var(--tone) var(--tint-strong), transparent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .chip,
   .check {

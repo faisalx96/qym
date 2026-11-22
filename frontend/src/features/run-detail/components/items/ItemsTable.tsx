@@ -98,7 +98,7 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
       hint: 'Item number (click to restore the original order)',
       type: 'number',
       width: 64,
-      pin: 'start',
+      // feedback 17 Nov D3: the # column scrolls with the row; only an identity column may pin
       hideable: false,
       sort: { key: 'index', first: 'asc' },
       priority: 1,
@@ -223,8 +223,7 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
             header: 'Trace',
             hideLabel: true,
             width: 48,
-            // cv4 Y17: pinned at the end, so the trace tile stays whole when the metric columns overflow
-            pin: 'end',
+            // feedback 17 Nov D3 (replaces cv4 Y17): an actions column never pins; it scrolls with the row
             align: 'center',
             resizable: false,
             hideable: false,

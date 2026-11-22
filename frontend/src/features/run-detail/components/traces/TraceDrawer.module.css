@@ -15,15 +15,10 @@
   gap: var(--space-xs);
 }
 
-/* the platform's stat strip: the facts of the trace, and of the span in view */
+/* the platform's stat strip: the facts of the trace */
 .stats {
   flex: none;
   min-width: 0;
-}
-
-/* the facts of one span: a cell keeps a reading width, so one fact is not a line-wide box */
-.stats[data-fit] {
-  max-inline-size: calc(var(--n) * 168px);
 }
 
 .split {
@@ -157,17 +152,18 @@
   color: var(--tone);
 }
 
-/* the name gives way last: the model and the tokens of a row go first, and the full name stands in the details */
-.rowMain > .sub {
-  flex-shrink: 1000;
-}
-
 .rowMain > .name,
 .rowMain > .sub {
   flex-shrink: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* the name gives way last: the model and the tokens of a row go first, and the full name stands in the details
+   (this rule comes after the one above, so it wins) */
+.rowMain > .sub {
+  flex-shrink: 1000;
 }
 
 .name {
@@ -204,114 +200,6 @@
   top: 0;
   height: 100%;
   border-radius: 3px;
-}
-
-.detail {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.detailHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.spanName {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
-  font-size: var(--font-md);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.pane {
-  padding-top: var(--space-sm);
-}
-
-.stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.expanded {
-  min-width: 0;
-}
-
-.kindTile {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--control-radius);
-  background: color-mix(in srgb, var(--tone) var(--tint-tile), transparent);
-  color: var(--tone);
-}
-
-.headText {
-  flex: 1;
-  min-width: 0;
-}
-
-.metaLine {
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-
-.toolHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.toolName {
-  overflow-wrap: anywhere;
-  font-family: var(--font-mono);
-  font-size: var(--font-base);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.toolNote,
-.fact {
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-
-.fact {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-.errorLead {
-  margin: 0 0 var(--space-xs);
-  font-size: var(--font-md);
-  font-weight: 600;
-  color: var(--error-text);
-}
-
-.note {
-  margin: 0;
-  font-size: var(--font-base);
-  color: var(--text-muted);
-}
-
-.toolCall {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
-
-.reasoning {
-  font-size: var(--font-base);
-  color: var(--text-muted);
 }
 
 .empty {

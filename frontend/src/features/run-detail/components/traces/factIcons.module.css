@@ -1,0 +1,15 @@
+/* The glyph of the trace view (a span row of the trace tree): the icon of the kind of work on a tint of its colour.
+   In a stat strip it fills the strip's own icon tile. --tone is a colour token given by the caller. */
+.glyph {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  block-size: 100%;
+  min-inline-size: 20px;
+  min-block-size: 20px;
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--tone) var(--tint-tile), transparent);
+  color: var(--tone);
+}

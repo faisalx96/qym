@@ -311,11 +311,14 @@ describe('consistency v3: family A (buttons, links, menus)', () => {
     );
   });
 
-  it('A-10: the dataset catalog header holds no search and New dataset has no end icon', () => {
+  it('A-10: the dataset catalog search sits before New dataset, Deleted datasets after it; no end icon', () => {
+    // feedback 17 Nov D6 reverses the no-search rule: the catalog header is laid out like Projects
     const page = src('features/datasets/catalog/CatalogPage.tsx');
     const at = page.indexOf('<PageHeader');
     const actions = propValue(page, 'actions', at) ?? '';
-    expect(actions).not.toContain('SearchField');
+    expect(actions.indexOf('<SearchField')).toBeGreaterThan(-1);
+    expect(actions.indexOf('<SearchField')).toBeLessThan(actions.indexOf('New dataset'));
+    expect(actions.indexOf('New dataset')).toBeLessThan(actions.indexOf('Deleted datasets'));
     const nd = buttons(page).filter((b) => b.text === 'New dataset');
     expect(nd.length).toBeGreaterThan(0);
     for (const b of nd) expect(b.attrs).not.toContain('iconEnd');
@@ -484,6 +487,29 @@ describe('consistency v3: family A (buttons, links, menus)', () => {
         if (/className=\{styles\.linkBtn\}/.test(e.attrs) && /^(Sweep values|Reset|Remove)$/.test(e.text))
           problems.push(`${rel(f)}:${e.line}: ${e.text}`);
     none(problems);
+  });
+
+  it('G3: the X that closes a surface turns red on hover, never the accent', () => {
+    // IconButton marks the close glyph itself, and its stylesheet paints the marked glyph --error on hover and press.
+    expect(src('ui/IconButton/IconButton.tsx')).toMatch(/icon === 'close'/);
+    const red = allRules(src('ui/IconButton/IconButton.module.css')).filter(
+      ([s, b]) => /\[data-close\]/.test(s) && /data-hovered/.test(s) && /color:\s*var\(--error\)/.test(b),
+    );
+    expect(red.length).toBeGreaterThan(0);
+    // No stylesheet gives a close control an accent hover.
+    const accent: string[] = [];
+    for (const f of shippedCss)
+      for (const [s, b] of allRules(read(f)))
+        if (/data-close|\.close\b/i.test(s) && /data-hovered|:hover/.test(s) && /--accent/.test(b))
+          accent.push(`${rel(f)}: ${s}`);
+    none(accent);
+    // A control that closes a surface never opts out of the red hover.
+    const optOut: string[] = [];
+    for (const f of shippedTsx)
+      for (const e of elements(read(f), ['IconButton', 'Act']))
+        if (/closes=\{false\}/.test(e.attrs) && /label=\{?["`']?(Close|Hide|Dismiss)/.test(e.attrs))
+          optOut.push(`${rel(f)}:${e.line}`);
+    none(optOut);
   });
 });
 
@@ -849,15 +875,16 @@ describe('consistency v3: family B (status, tags, counts, tones)', () => {
     ).not.toContain('--accent-primary');
   });
 
-  it('B-38: latency kinds use the chart series (tool is warning)', () => {
+  it('B-38: latency kinds use the trace colours (one source: spanKinds; tool is chart-5)', () => {
+    // Round 3 L2: the Latency tab has no colour table of its own; it reads the trace drawer's KIND_TONE.
     const css = src('features/run-detail/components/panels/Latency.module.css');
-    const decls = [...css.matchAll(/(--k-[\w-]+):\s*([^;]+);/g)].map((m) => [m[1]!, m[2]!.trim()]);
-    expect(decls.length).toBeGreaterThan(0);
-    for (const [k, v] of decls)
-      if (k === '--k-tool') expect(v).toBe('var(--warning)');
-      else expect(v, k).toMatch(/^var\(--chart-\d\)$/);
-    expect(css).toContain('--k-agent: var(--chart-6)');
-    expect(css).toContain('--k-eval: var(--chart-2)');
+    expect([...css.matchAll(/(--k-[\w-]+):\s*([^;]+);/g)]).toHaveLength(0);
+    const kinds = src('features/run-detail/components/traces/spanKinds.ts');
+    expect(kinds).toContain("TOOL: 'var(--chart-5)'");
+    expect(kinds).not.toContain("TOOL: 'var(--warning)'");
+    const model = src('features/run-detail/lib/latencyModel.ts');
+    expect(model).toMatch(/FAMILY_TONE[^=]*=\s*byFamily\(\(k\) => KIND_TONE\[k\]\)/);
+    expect(model).toContain('PHASE_TONE = { task: KIND_TONE.AGENT, eval: KIND_TONE.EVALUATOR }');
   });
 
   it('B-39: feedback priority: medium warns, high is danger', () => {
@@ -1255,10 +1282,10 @@ describe('consistency v3: family C (dates, numbers, words, notices)', () => {
     const notice = src('ui/InlineNotice/InlineNotice.tsx');
     expect(notice).toMatch(/'info'/);
     expect(notice).toMatch(/'neutral'/);
-    // D-22
+    // D-22, superseded by RD11 (17 Nov): each active filter chip of the Items bar has its own labelled ×
     expect(
-      elements(src('features/run-detail/components/items/FilterBar.tsx'), ['Chip']).filter((e) =>
-        /onRemove=/.test(e.attrs),
+      elements(src('features/run-detail/components/items/FilterBar.tsx'), ['Chip']).filter(
+        (e) => !(/onRemove=/.test(e.attrs) && /removeLabel=/.test(e.attrs)),
       ),
     ).toEqual([]);
     // shim: ScopeBar keeps a deprecated Clear all prop until the cv3-shim removal
@@ -1428,11 +1455,7 @@ describe('consistency v3: family D (tables, bars, tabs, stats)', () => {
 
   it('D-15: a page header holds no search', () => {
     // cv4 A1 reverses this for the Projects card grid: its search sits in the header row, before New project.
-    for (const p of ['features/datasets/catalog/CatalogPage.tsx']) {
-      const t = src(p);
-      for (const e of elements(t, ['PageHeader']))
-        expect(propValue(e.attrs, 'actions') ?? '', p).not.toContain('<SearchField');
-    }
+    // Feedback 17 Nov D6 does the same for the datasets catalog (asserted in A-10).
     const projects = elements(src('features/shell/projects/ProjectsPage.tsx'), ['PageHeader']);
     const actions = propValue(projects[0]!.attrs, 'actions') ?? '';
     expect(actions.indexOf('<SearchField')).toBeGreaterThan(-1);
@@ -2019,6 +2042,21 @@ describe('cv4 family F (owner review 2026-11-12): shared recipes', () => {
     );
   });
 
+  it('G1: headings stay in proportion to the 12-13px frame, and a drawer part sits under the drawer title', () => {
+    const px = (t: string) => Number(tokens().match(new RegExp(`${t}:\\s*(\\d+)px`))?.[1]);
+    // one section heading size app-wide (SectionHeader --font-xl, ReportSection --font-section)
+    expect(px('--font-section')).toBe(px('--font-xl'));
+    expect(px('--font-title')).toBeGreaterThan(px('--font-section'));
+    expect(px('--font-title')).toBeLessThanOrEqual(18);
+    expect(px('--font-stat')).toBeLessThanOrEqual(22);
+    // Subsection size="compact" (item pane parts) is --font-md, under the --font-lg pane / drawer title
+    expect(ui('Subsection')).toMatch(/\.sub\[data-size='compact'\] \.head \.title \{[^}]*var\(--font-md\)/);
+    expect(src('features/run-detail/components/items/pane/blocks.tsx')).toMatch(
+      /<Subsection\s+size="compact"/,
+    );
+    expect(px('--font-lg')).toBeGreaterThan(px('--font-md'));
+  });
+
   it('F11: one row ladder, and first-cell rails survive a collapsed select column', () => {
     const css = ui('DataTable');
     expect(tokens()).toContain('--row-hover:');
@@ -2143,6 +2181,22 @@ describe('cv5 family H (owner review 2026-11-13): shared controls and elements',
     for (const sel of [".chip[aria-pressed='true']", ".chip[aria-disabled='true']"])
       expect(rules(css, sel).join('\n'), sel).not.toMatch(/background:[^;]*accent/);
     expect(rule(css, ".chip[aria-pressed='true'] .check")).toMatch(/background:\s*var\(--accent-primary\)/);
+    // feedback round 2 and 3: variant="plain" has no check box and no edge; an on chip takes a soft wash, in the tone
+    // of its option when it has one (a passed pass green, a failed pass red)
+    const plainOn = rules(css, ".group[data-variant='plain'] .chip[aria-pressed='true']").join('\n');
+    expect(plainOn).not.toMatch(/border-color/);
+    expect(plainOn).toMatch(/var\(--tint-soft\)/);
+    expect(rules(css, ".group[data-variant='plain'] .chip").join('\n')).toMatch(
+      /border-color:\s*transparent/,
+    );
+    const tonedOn = rules(css, ".group[data-variant='plain'] .chip[data-tone][aria-pressed='true']").join(
+      '\n',
+    );
+    expect(tonedOn).toMatch(
+      /background:\s*color-mix\(in srgb, var\(--tone\) var\(--tint-soft\), transparent\)/,
+    );
+    expect(tonedOn).toMatch(/color:\s*var\(--tone-text\)/);
+    expect(src('ui/ToggleChips/ToggleChips.tsx')).toContain("variant === 'check' ? (");
     // cv5 Y9: the chip hint is the shared Tooltip, not a native title
     const tsx = src('ui/ToggleChips/ToggleChips.tsx');
     expect(tsx).toContain('<Tooltip key={o.value} content={hint} isDisabled={!hint}>');
@@ -2566,6 +2620,29 @@ describe('item pane (DESIGN_LANGUAGE §3.6 "Item pane")', () => {
     // the score edit is the platform editor, not a copy
     expect(src(`${PANE}metrics.tsx`)).toContain('<ScoreEditor');
     expect(src(`${PANE}metrics.tsx`)).not.toContain('useUpdateMetric');
+  });
+
+  it('P-04b: the Input, Expected and Output titles are never muted (feedback round 3)', () => {
+    // the Eyebrow default is --text-muted; the pane overrides it at any depth under the title, so the folding button
+    // that wraps a collapsible title keeps the colour
+    expect(rule(css, '.blockHead > .blockTitle .eyebrow')).toMatch(/color:\s*var\(--text-primary\)/);
+    expect(rule(css, '.outRowHead > .blockTitle .eyebrow')).toMatch(/color:\s*var\(--text-primary\)/);
+    expect(rule(css, ".block:not([data-tone='neutral']) > .blockHead > .blockTitle .eyebrow")).toMatch(
+      /color:\s*var\(--tone-text\)/,
+    );
+    expect(
+      rule(css, ".outRow[data-tone]:not([data-tone='neutral']) > .outRowHead > .blockTitle .eyebrow"),
+    ).toMatch(/color:\s*var\(--tone-text\)/);
+    // no rule of the pane mutes a title of a part
+    for (const [sel, body] of allRules(css))
+      if (/\.eyebrow/.test(sel)) expect(body, sel).not.toMatch(/--text-(muted|dim)/);
+    // the Output row takes the tone of the one output in view, in both drawers
+    expect(src(`${PANE}blocks.tsx`)).toMatch(
+      /tone=\{passes\.length === 1 \? outputTone\(passes\[0\]!\) : undefined\}/,
+    );
+    expect(src(`${CPANE}ComparePane.tsx`)).toMatch(
+      /tone=\{inView\.length === 1 \? colTone\(inView\[0\]!\) : undefined\}/,
+    );
   });
 
   it('P-05: a row opens the item and is the current row; nothing expands in place', () => {

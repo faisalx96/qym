@@ -61,15 +61,16 @@ for (const width of [1440, 390]) {
       const c = card(page, 'tokens_used');
       await expect(c.getByRole('img', { name: /^tokens_used/ })).toBeVisible();
       await expect(c.locator('dl[aria-label="Distribution values"]')).toHaveCount(0);
-      await expect(c.getByTestId('box-total')).toContainText('Total');
-      await expect(card(page, 'quality').getByTestId('box-total')).toHaveCount(0);
+      // 17 Nov RD3: the count is a quiet caption on the number row (round 2: the count only, no total)
+      await expect(c.getByTestId('number-card-caption')).toHaveText(/^[\d,]+ items?$/);
+      await expect(card(page, 'quality').getByTestId('number-card-caption')).toHaveCount(0);
       await expect(page.locator('[data-cells], [class*=_cells_]')).toHaveCount(0);
       // no Min / Avg / Max / Total cell group any more
       await expect(c.getByText('Avg', { exact: true })).toHaveCount(0);
       await page.locator('#run-section-latency').scrollIntoViewIfNeeded();
       const rt = page.getByRole('region', { name: 'Response time' });
       await expect(rt).toBeVisible();
-      await expect(rt.getByTestId('box-total')).toHaveCount(0);
+      await expect(rt.getByTestId('number-card-caption')).toHaveCount(0);
     });
 
     test('P7-6, P7-7, P7-20 (round 5 R2: no cells; the plot labels do not overlap; card gap <= 16px): nothing clipped or overlapping; the plot fits its card; no dead space under it', async ({

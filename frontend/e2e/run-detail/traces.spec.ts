@@ -108,7 +108,11 @@ test.describe('trace drawer (scenario 8, J6.4)', () => {
     await expect(detail.getByRole('tab', { name: 'Messages' })).toBeVisible();
     await detail.getByRole('tab', { name: 'Raw' }).click();
     await expect(detail.getByRole('tabpanel')).toBeVisible();
-    await drawer(page).getByRole('button', { name: 'Close' }).click();
+    // G3: the drawer's close X is red (--error) under the pointer, never the accent green
+    const close = drawer(page).getByRole('button', { name: 'Close' });
+    await close.hover();
+    await expect.poll(() => close.evaluate((el) => getComputedStyle(el).color)).toBe('rgb(239, 68, 68)');
+    await close.click();
     await expect(drawer(page)).toHaveCount(0);
     await expect.poll(() => params(page).get('trace')).toBeNull();
   });
@@ -183,7 +187,7 @@ test.describe('latency and traces panel (J5)', () => {
     await expect(panel.getByRole('group', { name: 'Latency percentiles' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Quality versus latency' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Time budget' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Steps' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Step timings' })).toBeVisible();
   });
 
   test('a histogram bar sets a latency filter chip; clearing the chip restores the table', async ({
@@ -212,9 +216,9 @@ test.describe('latency and traces panel (J5)', () => {
     expect((await itemsCount(page))[0]).toBeGreaterThan(5);
   });
 
-  test('the Steps plot toggles By kind / Log', async ({ page }) => {
+  test('Step timings toggles By kind / Log', async ({ page }) => {
     await openRun(page, s.slug, classic, 'panel=latency');
-    const steps = page.getByRole('region', { name: 'Steps' });
+    const steps = page.getByRole('region', { name: 'Step timings' });
     await steps.getByRole('radio', { name: 'By kind' }).click({ force: true });
     await expect(steps.getByRole('radio', { name: 'By kind' })).toBeChecked();
     await steps.getByRole('radio', { name: 'Log' }).click({ force: true });

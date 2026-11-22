@@ -35,9 +35,9 @@ const specs = {
 };
 const names = Object.keys(specs);
 
-function makeContext(row: Row, readOnly = false) {
+function makeContext(row: Row, readOnly = false, samples = 1) {
   const payload = {
-    run: { run_id: 'r', status: 'COMPLETED', samples: 1, metric_names: names, metric_specs: specs },
+    run: { run_id: 'r', status: 'COMPLETED', samples, metric_names: names, metric_specs: specs },
     snapshot: { rows: [row], metric_names: names, metric_specs: specs },
   } as unknown as RunPayload;
   const model = buildRunModel(payload, null);
@@ -50,14 +50,14 @@ function makeContext(row: Row, readOnly = false) {
   return { runId: 'r', slug: 'p', model, api: { ctx }, readOnly, basePath: '/projects/p/runs/r' };
 }
 
-function show(row: Row, readOnly = false) {
-  current = makeContext(row, readOnly);
+function show(row: Row, readOnly = false, { samples = 1, pass }: { samples?: number; pass?: number } = {}) {
+  current = makeContext(row, readOnly, samples);
   const client = new QueryClient();
   return render(
     <QueryClientProvider client={client}>
       <ToastProvider>
         <MemoryRouter>
-          <MetricAnalysisCards row={row} />
+          <MetricAnalysisCards row={row} pass={pass} />
         </MemoryRouter>
       </ToastProvider>
     </QueryClientProvider>,
@@ -259,5 +259,19 @@ describe('deciding an issue on the run page (C125, C128, C174)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete issue' }));
     expect(mutate).not.toHaveBeenCalled();
     expect(screen.getByRole('alertdialog', { name: 'Delete this issue?' })).toBeInTheDocument();
+  });
+});
+
+describe('the cards of one pass of a repeat item (the item pane shows the passes side by side)', () => {
+  it('reviews the pass it is given, with the pass in its title', () => {
+    show(base(), false, { samples: 3, pass: 2 });
+    expect(screen.getByRole('button', { name: /Root cause, pass 2/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Root cause, pass 2/ }));
+    expect(cards()).toEqual(expect.arrayContaining(['failing_boolean', 'failing_score']));
+  });
+
+  it('keeps the plain title on a run with one pass', () => {
+    show(base());
+    expect(screen.getByRole('button', { name: /^Root cause/ }).textContent).not.toMatch(/pass/);
   });
 });

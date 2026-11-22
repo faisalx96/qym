@@ -1,7 +1,17 @@
 /** The value view of the item pane: table detection, the fields of a JSON value in the JSON viewer's kinds, raw JSON, the fold. */
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { FOLD_LINES, Value, detailIsCompact, isLongText, tableOf } from '../values';
+import { TABLE_PAGE } from '../../../../lib/metricTables';
+import {
+  BIG_VALUE,
+  FOLD_LINES,
+  PaneFold,
+  Value,
+  countParts,
+  detailIsCompact,
+  isLongText,
+  tableOf,
+} from '../values';
 
 describe('tableOf', () => {
   it('reads a list of like objects as a table, with the union of their keys', () => {
@@ -97,6 +107,20 @@ describe('Value', () => {
     ]);
   });
 
+  it('cuts a long table to its first rows, also inside a box that scrolls, and opens and closes it', () => {
+    const rows = Array.from({ length: 30 }, (_, i) => ({ sku: `S-${i}`, qty: i }));
+    render(
+      <PaneFold.Provider value={false}>
+        <Value value={{ rows }} label="Output" />
+      </PaneFold.Provider>,
+    );
+    const count = () => document.querySelectorAll('[data-shape="table"] tbody tr').length;
+    expect(count()).toBe(TABLE_PAGE);
+    fireEvent.click(screen.getByRole('button', { name: `Show ${30 - TABLE_PAGE} more` }));
+    expect(count()).toBe(30);
+    fireEvent.click(screen.getByRole('button', { name: 'Show fewer' }));
+    expect(count()).toBe(TABLE_PAGE);
+  });
   it('shows the raw JSON with a token class for each kind (the --json-* colours)', () => {
     render(<Value value={{ a: 'x', n: 1, ok: false, none: null }} label="Input" raw />);
     const pre = screen.getByLabelText('Input, raw JSON');
@@ -145,5 +169,52 @@ describe('the fold of a very long value', () => {
     fireEvent.click(more);
     expect(screen.getByRole('button', { name: 'Show less' }).getAttribute('aria-expanded')).toBe('true');
     expect(document.querySelector('[data-folded]')).toBeNull();
+  });
+});
+
+describe('a large JSON value', () => {
+  // two groups of groups, well over BIG_VALUE values
+  const big = {
+    totals: { revenue: 100, orders: 12 },
+    regions: Object.fromEntries(
+      Array.from({ length: 12 }, (_, i) => [`r${i}`, { revenue: i * 10, growth: i / 10, top: `c${i}` }]),
+    ),
+    debug: { steps: { parse: 1, plan: 2 }, cache: { hit: true } },
+  };
+
+  it('counts its values up to a cap', () => {
+    expect(countParts({ a: 1, b: [1, 2] })).toBe(5);
+    expect(countParts(big)).toBe(BIG_VALUE + 2);
+  });
+
+  it('opens its first level and keeps the groups below it closed, each with its count', () => {
+    render(<Value value={JSON.stringify(big)} label="Output" />);
+    const regions = screen.getByRole('button', { name: /^regions/ });
+    expect(regions.getAttribute('aria-expanded')).toBe('true');
+    expect(regions.textContent).toContain('12 fields');
+    const r0 = screen.getByRole('button', { name: /^r0/ });
+    expect(r0.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(r0);
+    expect(r0.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(regions);
+    expect(regions.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('opens and closes every group with Expand all and Collapse all', () => {
+    render(<Value value={JSON.stringify(big)} label="Output" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Expand all' }));
+    const toggles = () =>
+      Array.from(document.querySelectorAll('button[aria-expanded]')).map((b) =>
+        b.getAttribute('aria-expanded'),
+      );
+    expect(toggles().every((x) => x === 'true')).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse all' }));
+    expect(toggles().every((x) => x === 'false')).toBe(true);
+  });
+
+  it('leaves a small value open, with no fold toolbar', () => {
+    render(<Value value={JSON.stringify({ a: { b: 1 }, c: 2 })} label="Output" />);
+    expect(screen.queryByRole('button', { name: 'Expand all' })).toBeNull();
+    expect(document.querySelector('button[aria-expanded]')).toBeNull();
   });
 });

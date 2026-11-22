@@ -267,7 +267,9 @@ test.describe('URL contract for the view params', () => {
     await openRun(page, s.slug, classic);
     await itemRow(page, 2).click();
     const pane = itemPane(page, 'item-0002');
-    // the item metadata is a field list in the Metadata section: the key is a <dt>
+    // the item metadata is a field list in the Metadata section: the key is a <dt> (the section starts closed since
+    // 17 Nov I4; the choice lasts for the session)
+    await pane.getByRole('button', { name: 'Metadata', exact: true }).click();
     const source = pane.locator('[data-part="metadata"] dt').filter({ hasText: /^source$/ });
     await expect(source).toBeVisible();
     await openRun(page, s.slug, classic, 'hide_field=source');

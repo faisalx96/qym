@@ -2,7 +2,7 @@
  * The three entities every run is about, written the same way everywhere (runs list, overview, charts, compare):
  *   task    mono tag in the meta tone
  *   dataset database glyph, name, version suffix (and alias tags)
- *   model   tag tinted with the model's series colour and its dot
+ *   model   tag tinted with the model's series colour and its dot; a reasoning model ends with a gold light bulb
  * and the run's own name (RunName): sans, a link when it has a target, mono only when the label is a bare id.
  * Long names wrap inside their column (C218); the full name is also the tooltip.
  */
@@ -59,6 +59,9 @@ export function DatasetTag({
   );
 }
 
+/** The accessible name and tooltip of the reasoning-model bulb (17 Nov G2: the pre-React mark, no "reasoning" word). */
+const REASONING_LABEL = 'Reasoning model';
+
 export function ModelTag({
   name,
   series,
@@ -87,7 +90,18 @@ export function ModelTag({
       <span className={styles.text} dir="auto">
         {name}
       </span>
-      {reasoning ? <span className={styles.version}>reasoning</span> : null}
+      {reasoning ? (
+        <span
+          className={styles.reasoning}
+          data-tone="gold"
+          role="img"
+          aria-label={REASONING_LABEL}
+          title={REASONING_LABEL}
+          data-reasoning=""
+        >
+          <Icon name="lightbulb" size={12} />
+        </span>
+      ) : null}
     </Tag>
   );
 }

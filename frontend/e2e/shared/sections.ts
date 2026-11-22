@@ -110,10 +110,10 @@ export function assertOnePrimitive(sections: SectionInfo[], expectedIds: string[
   }
 }
 
-/** C-sec-2 / C-sec-A3: title 18/650, one muted description (one line at >= 1024, never an ellipsis), head inside, no rule. */
+/** C-sec-2 / C-sec-A3: title 16/650 (--font-section, G1), one muted description (one line at >= 1024, never an ellipsis), head inside, no rule. */
 export function assertHeads(sections: SectionInfo[], width: number): void {
   for (const s of sections) {
-    expect(s.titleSize, `${s.id} title size`).toBe(18);
+    expect(s.titleSize, `${s.id} title size`).toBe(16);
     expect(Number(s.titleWeight), `${s.id} title weight`).toBe(650);
     expect(s.descTag, `${s.id} description`).toBe('P');
     expect(s.descEllipsis, `${s.id} description ellipsis`).toBe(false);

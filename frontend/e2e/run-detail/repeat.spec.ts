@@ -23,12 +23,21 @@ test.beforeAll(async () => {
   repeat = await seedRepeat(s);
 });
 
-/** The pass switch of the Output block (a multi-pass item shows the output of one pass at a time). */
-const passSwitch = (pane: Locator) => pane.getByRole('radiogroup', { name: 'Pass in view' });
+/** The pass toggles of a multi-pass item: any number of passes in view, one output column each (17 Nov I1). */
+const passSwitch = (pane: Locator) => pane.getByRole('group', { name: 'Passes in view' });
+const passChip = (pane: Locator, n: number) =>
+  passSwitch(pane).getByRole('button', { name: new RegExp(`^Pass ${n}\\b`) });
 
-/** Put pass n in view with the pass switch and wait until the Output block is the one of that pass. */
+/** Put pass n alone in view with the pass toggles and wait until the one Output block is the one of that pass. */
 async function showPass(pane: Locator, n: number): Promise<void> {
-  await passSwitch(pane).getByText(`Pass ${n}`, { exact: true }).click();
+  if ((await passChip(pane, n).getAttribute('aria-pressed')) !== 'true') await passChip(pane, n).click();
+  const chips = passSwitch(pane).getByRole('button', { name: /^Pass \d+/ });
+  for (const chip of await chips.all()) {
+    const name = (await chip.textContent()) ?? '';
+    if (!name.startsWith(`Pass ${n}`) && (await chip.getAttribute('aria-pressed')) === 'true')
+      await chip.click();
+  }
+  await expect(paneBlock(pane, 'output')).toHaveCount(1);
   await expect(paneBlock(pane, 'output')).toHaveAttribute('aria-label', `Output of pass ${n}`);
 }
 
@@ -137,26 +146,29 @@ test.describe('?pass=N (scenario 10)', () => {
 });
 
 test.describe('all-passes item pane', () => {
-  test('shows the output of one pass at a time with a pass switch, a score column for each pass, and the trace of the pass in view', async ({
+  test('shows an output column and a score column for each pass in view, and the trace of the first pass in view', async ({
     page,
   }) => {
     await openRun(page, s.slug, repeat);
     await itemButton(page, 2).click();
     const card = itemPane(page, 'sql-002');
     await expect(card).toBeVisible();
-    // sql-002 passes in each pass: the pane opens on pass 1
-    await expect(passSwitch(card).getByRole('radio')).toHaveCount(3);
-    await expect(passSwitch(card).getByRole('radio', { name: /^Pass 1/ })).toBeChecked();
-    await expect(paneBlock(card, 'output')).toHaveCount(1);
-    await expect(paneBlock(card, 'output')).toHaveAttribute('aria-label', 'Output of pass 1');
+    // a run of 3 passes: the pane opens with every pass in view, one Output column each
+    await expect(passSwitch(card).getByRole('button')).toHaveCount(3);
+    for (const n of [1, 2, 3]) await expect(passChip(card, n)).toHaveAttribute('aria-pressed', 'true');
+    await expect(paneBlock(card, 'output')).toHaveCount(3);
+    await expect(paneBlock(card, 'output').first()).toHaveAttribute('aria-label', 'Output of pass 1');
     await expect(card.getByRole('button', { name: 'Copy the output of pass 1', exact: true })).toBeVisible();
-    // the Metrics table: a column for each pass (its header button puts the pass in view), then the mean
+    // the Metrics table: a column for each pass in view, then the mean
     const table = metricTable(card);
-    await expect(table.getByRole('columnheader').getByRole('button', { name: /^Pass \d$/ })).toHaveCount(3);
+    await expect(table.getByRole('columnheader', { name: /^Pass \d/ })).toHaveCount(3);
     await expect(table.getByRole('columnheader', { name: 'Mean', exact: true })).toBeVisible();
-    await table.getByRole('columnheader').getByRole('button', { name: 'Pass 3', exact: true }).click();
-    await expect(paneBlock(card, 'output')).toHaveAttribute('aria-label', 'Output of pass 3');
-    await expect(table.getByRole('columnheader', { name: 'Reason, pass 3', exact: true })).toBeVisible();
+    // one pass in view: its reasons show in a column of their own
+    await showPass(card, 3);
+    await expect(table.getByRole('columnheader', { name: /^Pass \d/ })).toHaveCount(1);
+    await expect(table.getByRole('columnheader', { name: /^Pass 3/ })).toBeVisible();
+    // the seed gives sql-002 no judge reasons, so the table has no Reason column
+    await expect(table.getByRole('columnheader', { name: /^Reason/ })).toHaveCount(0);
     await showPass(card, 2);
     // the Open trace tile opens the trace of the pass in view (the seed gives a trace to each third item only)
     await card.getByRole('button', { name: 'Close item', exact: true }).click();

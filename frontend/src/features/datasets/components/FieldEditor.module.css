@@ -253,9 +253,17 @@
   color: var(--json-null);
 }
 
-/* Item text in the sans face (design-language rule 4): Text mode and a string value; JSON stays mono (C153). */
-.textarea[data-mode='json'] {
+/* Item text in the sans face (design-language rule 4): Text mode and a string value; JSON stays mono (C153). A string
+   that holds SQL is code: mono, with its keywords in the key colour (feedback 17 Nov D4). */
+.textarea[data-mode='json'],
+.textarea[data-mode='sql'] {
   font-family: var(--font-mono);
+}
+
+/* SQL: the words in the primary text colour, only the keywords take a token colour (as the run item pane) */
+.pre[data-lang='sql'],
+.under[data-lang='sql'] {
+  color: var(--text-primary);
 }
 
 .pre[data-kind='text'] {

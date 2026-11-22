@@ -210,7 +210,6 @@ export function QueuePage() {
       hint: 'Position in the queue (waiting jobs only)',
       type: 'number',
       width: 90,
-      pin: 'start',
       hideable: false,
       priority: 2,
       cell: (j) => (j.queue_position ? String(j.queue_position) : '—'),

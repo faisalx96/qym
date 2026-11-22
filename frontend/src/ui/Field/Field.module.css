@@ -5,6 +5,9 @@
   gap: var(--space-xs);
   min-width: 0;
   max-width: 100%; /* a fixed control width never pushes a phone layout past its card */
+  /* The hidden label is absolute. It stays in its field, so it never adds height to the document
+     from inside a scroll area. */
+  position: relative;
 }
 
 .field[data-inline] {

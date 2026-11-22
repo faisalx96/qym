@@ -1,20 +1,14 @@
 /**
- * The item view of the run page: a wide pane at the side of the items table. Input, then Expected beside Output with
- * their differences marked, then the metrics table, the execution facts, the item metadata and the root causes.
+ * The item view of the run page: a wide pane at the side of the items table. Input, Expected and the output each on a
+ * row of their own (the output marks its differences from Expected), then the metrics table, the execution facts, the
+ * item metadata and the root causes. A multi-pass item shows the passes the reader turns on (up to three) side by
+ * side in the Output row: one output, one score column and one root-cause review per pass in view.
  */
+import { SectionBoundary } from '@/ui';
 import type { Row } from '../../../types';
-import {
-  ExecutionBlock,
-  ExpectedBlock,
-  InputBlock,
-  MetadataBlock,
-  OutputBlock,
-  RestrictedNote,
-  RootCause,
-} from './blocks';
+import { ExecutionBlock, InputBlock, MetadataBlock, ItemTexts, RestrictedNote, RootCause } from './blocks';
 import { Pane } from './Frame';
 import { MetricTable } from './metrics';
-import s from './pane.module.css';
 
 export function ItemPane({ openId, rows }: { openId: string; rows: Row[] }) {
   return (
@@ -25,25 +19,21 @@ export function ItemPane({ openId, rows }: { openId: string; rows: Row[] }) {
       width={960}
       multiWidth={1040}
       minWidth={560}
-      skeleton={['input', 'pair', 'metrics']}
+      skeleton={['input', 'expected', 'outputs', 'metrics']}
     >
-      {({ row, item, focus, setFocus }) => {
-        const pass = item.passes.find((p) => p.pass === focus)!;
-        return (
-          <>
-            <RestrictedNote item={item} />
-            <InputBlock item={item} />
-            <div className={s.pair}>
-              <ExpectedBlock row={row} item={item} pass={pass} fill />
-              <OutputBlock row={row} item={item} pass={pass} onFocus={setFocus} fill />
-            </div>
-            <MetricTable key={row.item_id} row={row} item={item} focus={focus} onFocus={setFocus} />
-            <ExecutionBlock item={item} />
-            <MetadataBlock item={item} />
-            <RootCause row={row} />
-          </>
-        );
-      }}
+      {({ row, item, open, order, setOpen, trace }) => (
+        <>
+          <RestrictedNote item={item} />
+          <InputBlock item={item} />
+          <ItemTexts row={row} item={item} open={open} order={order} onPick={setOpen} onTrace={trace} />
+          <SectionBoundary name="the metrics">
+            <MetricTable key={row.item_id} row={row} item={item} open={open} />
+          </SectionBoundary>
+          <ExecutionBlock item={item} />
+          <MetadataBlock item={item} />
+          <RootCause row={row} item={item} open={open} />
+        </>
+      )}
     </Pane>
   );
 }

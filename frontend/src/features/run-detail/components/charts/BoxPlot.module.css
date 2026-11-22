@@ -51,15 +51,28 @@
   stroke-width: 1.5;
 }
 
+.meanMark {
+  fill: var(--card-bg);
+  stroke: var(--tone, var(--chart-1));
+  stroke-width: 1.5;
+}
+
+/* Round 2 RD3: the median is a line across the box again (as before RD5); the 90th percentile a filled triangle above it. */
 .median {
   stroke: var(--tone, var(--chart-1));
   stroke-width: 2.5;
 }
 
-.meanMark {
-  fill: var(--card-bg);
-  stroke: var(--tone, var(--chart-1));
-  stroke-width: 1.5;
+.p90Mark {
+  fill: var(--tone, var(--chart-1));
+}
+
+/* One symbol alone (BoxGlyph): the key beside a KPI. */
+.glyph {
+  display: inline-block;
+  flex: none;
+  overflow: visible;
+  vertical-align: -1px;
 }
 
 .outlier {

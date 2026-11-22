@@ -1,0 +1,98 @@
+/* The JSON of a tool call or result (JsonCode.tsx): the pre-React viewer's code block in tokens. The darkest surface,
+   a hairline edge, line numbers in a gutter, a fold arrow per group, the one set of JSON colours (--json-*). */
+.code {
+  --gutter: calc(var(--digits, 2) * 1ch + var(--space-xs));
+  min-width: 0;
+  padding: var(--space-xs) 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-void);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.line {
+  display: grid;
+  grid-template-columns: var(--gutter) 14px minmax(0, 1fr);
+  column-gap: var(--space-xs);
+  padding-inline: var(--space-xs) var(--space-sm);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.foldCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fold {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.fold:hover {
+  color: var(--text-primary);
+}
+
+.fold:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 0;
+}
+
+/* a line that wraps continues one step in from its own start (a hanging indent) */
+.text {
+  padding-inline-start: calc(var(--depth) * 2ch + 2ch);
+  text-indent: -2ch;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* the folded count: a quiet phrase after the line, in the sans face */
+.note {
+  margin-inline-start: var(--space-sm);
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.code [data-t='key'] {
+  color: var(--json-key);
+}
+
+.code [data-t='string'] {
+  color: var(--json-string);
+}
+
+.code [data-t='number'] {
+  color: var(--json-number);
+}
+
+.code [data-t='boolean'] {
+  color: var(--json-boolean);
+}
+
+.code [data-t='null'] {
+  color: var(--json-null);
+}
+
+.code [data-t='punct'] {
+  color: var(--json-punct);
+}

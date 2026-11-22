@@ -34,11 +34,12 @@ test('the split is draggable by keyboard, remembered after a reload, and a doubl
   await openRun(page, s.slug, classic);
   await openTrace(page);
   const handle = page.getByTestId('split-handle');
-  expect(await pct(page)).toBe(55);
+  // round 3 T1: the tree takes 45% by default, so the details get the room
+  expect(await pct(page)).toBe(45);
   await handle.focus();
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowLeft');
-  await expect.poll(() => pct(page)).toBe(51);
+  await expect.poll(() => pct(page)).toBe(41);
   await page.keyboard.press('Home');
   const min = await pct(page);
   expect(min).toBeLessThan(40);
@@ -57,7 +58,7 @@ test('the split is draggable by keyboard, remembered after a reload, and a doubl
   await expect(page.getByTestId('trace-drawer')).toBeVisible();
   await expect.poll(() => pct(page)).toBe(dragged);
   await page.getByTestId('split-handle').dblclick();
-  await expect.poll(() => pct(page)).toBe(55);
+  await expect.poll(() => pct(page)).toBe(45);
 });
 
 test('the drawer carries the trace statistics in a stat strip and a copyable id in its header; rows have kind icons', async ({
@@ -111,6 +112,60 @@ test('at 390px the drawer is full width with a Tree / Detail switch', async ({ p
   await expect(page.getByRole('region', { name: 'Span details' })).toBeVisible();
   await view.getByRole('radio', { name: 'Tree' }).click({ force: true });
   await expect(page.getByRole('tree', { name: 'Span tree' })).toBeVisible();
+  const bad = (await axeSeriousViolations(page, '[data-testid=trace-drawer]')).filter(
+    (v) => v.impact === 'serious' || v.impact === 'critical',
+  );
+  expect(bad, describeViolations(bad)).toEqual([]);
+});
+
+test('round 3 T1: the drawer takes the full width and gives it back, and its edge resizes it', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openRun(page, s.slug, classic);
+  await openTrace(page);
+  const dlg = page.getByRole('dialog', { name: 'Trace' });
+  const width = async () => (await dlg.boundingBox())!.width;
+  const normal = await width();
+  const wide = dlg.getByRole('button', { name: 'Use the full page width' });
+  await expect(wide).toHaveAttribute('aria-pressed', 'false');
+  await wide.click();
+  await expect.poll(width).toBeGreaterThan(1430);
+  // the tree keeps its cap: the details get the extra width
+  const tree = (await dlg.getByRole('region', { name: 'Spans' }).boundingBox())!.width;
+  expect(tree).toBeLessThanOrEqual(730);
+  const back = dlg.getByRole('button', { name: 'Give the page its room back' });
+  await expect(back).toHaveAttribute('aria-pressed', 'true');
+  await back.click();
+  await expect.poll(width).toBeCloseTo(normal, 0);
+  const edge = page.getByRole('separator', { name: 'Resize the trace drawer' });
+  await edge.focus();
+  await page.keyboard.press('End');
+  await expect.poll(width).toBeLessThan(730);
+  await page.reload();
+  await expect(page.getByTestId('trace-drawer')).toBeVisible();
+  await expect.poll(width).toBeLessThan(730);
+  await page.getByRole('separator', { name: 'Resize the trace drawer' }).dblclick();
+  await expect.poll(width).toBeCloseTo(normal, 0);
+});
+
+test('round 3 T2: a model call reads as one thread, Input then Output, a message per role', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openRun(page, s.slug, classic);
+  await openTrace(page);
+  const detail = page.getByRole('region', { name: 'Span details' });
+  await page
+    .getByRole('tree', { name: 'Span tree' })
+    .getByRole('treeitem', { name: /ChatOpenAI/ })
+    .first()
+    .click();
+  await expect(detail.getByRole('tab', { name: /^Messages/ })).toHaveAttribute('aria-selected', 'true');
+  const thread = detail.getByTestId('span-thread');
+  await expect(thread.getByRole('region', { name: 'Input messages' })).toBeVisible();
+  await expect(thread.getByRole('article').first()).toBeVisible();
+  await expect(detail.getByRole('tab', { name: /^Response/ })).toBeVisible();
   const bad = (await axeSeriousViolations(page, '[data-testid=trace-drawer]')).filter(
     (v) => v.impact === 'serious' || v.impact === 'critical',
   );

@@ -9,6 +9,8 @@ export interface SubsectionProps {
   /** Controls at the end of the head (a toggle, a count). */
   aside?: ReactNode;
   id?: string;
+  /** `compact` (G1): a part of a drawer or pane, a step under the drawer title (`--font-md`). */
+  size?: 'default' | 'compact';
   className?: string;
   children?: ReactNode;
 }
@@ -18,9 +20,13 @@ export interface SubsectionProps {
  * muted line on the same line, then the body. Two subsections in a row are 20px apart. Use it for the named parts
  * of a section (Repeat performance, Response time, Inside the traces), never as a card title.
  */
-export function Subsection({ title, description, aside, id, className, children }: SubsectionProps) {
+export function Subsection({ title, description, aside, id, size = 'default', className, children }: SubsectionProps) {
   return (
-    <section className={[styles.sub, className].filter(Boolean).join(' ')} aria-labelledby={id}>
+    <section
+      className={[styles.sub, className].filter(Boolean).join(' ')}
+      aria-labelledby={id}
+      data-size={size === 'compact' ? 'compact' : undefined}
+    >
       <div className={styles.head} data-part="subsection-head">
         <Text variant="md" as="h3" id={id} weight={650} className={styles.title}>
           {title}

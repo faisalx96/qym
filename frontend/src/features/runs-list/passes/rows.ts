@@ -15,6 +15,13 @@ export type TableRow =
 
 export type ChildOf = Exclude<TableRow, { kind: 'run' }>;
 
+/**
+ * The DataTable row state: a red rail on a failed run. No live rail on a running run or pass: the Status cell already
+ * shows Running with its progress (17 Nov R6, as Experiments, cv5 M4).
+ */
+export const runRowState = (r: TableRow): 'error' | undefined =>
+  r.kind === 'run' && r.row.status === 'FAILED' ? 'error' : undefined;
+
 /** The run a row belongs to. */
 export const runOf = (r: TableRow): RunRow => (r.kind === 'run' ? r.row : r.run);
 

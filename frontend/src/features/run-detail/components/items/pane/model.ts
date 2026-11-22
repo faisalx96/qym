@@ -302,4 +302,34 @@ export function firstBadPass(passes: ItemPass[]): number {
   return (passes.find((p) => p.kind !== 'pass') ?? passes[0]!).pass;
 }
 
+/** How many passes a multi-pass item shows side by side: at first, and at most (feedback round 2: "3 at a time at maximum"). */
+export const OPEN_PASSES = 3;
+
+/**
+ * The passes in view after the reader turns one on or off. `order` is the passes in view in the order they were
+ * picked (the oldest first). On: the pass joins at the end, and when that makes more than `OPEN_PASSES` the pass picked
+ * earliest leaves. Off: the pass leaves, unless it is the last one in view. The result keeps the pick order.
+ */
+export function pickPass(order: number[], pass: number, on: boolean): number[] {
+  const rest = order.filter((n) => n !== pass);
+  if (on) return [...rest, pass].slice(-OPEN_PASSES);
+  return rest.length ? rest : order;
+}
+
+/** The pass that leaves the view when `pass` is turned on (none while there is room). */
+export function passReplacedBy(order: number[], pass: number): number | undefined {
+  return order.length >= OPEN_PASSES && !order.includes(pass) ? order[0] : undefined;
+}
+
+/**
+ * The passes a multi-pass item opens with: all of them up to three; with more, three passes in a row that start at
+ * the first pass that did not pass (moved back so the window stays three wide).
+ */
+export function defaultOpenPasses(passes: ItemPass[]): number[] {
+  if (passes.length <= OPEN_PASSES) return passes.map((p) => p.pass);
+  const first = passes.findIndex((p) => p.kind !== 'pass');
+  const start = Math.min(Math.max(0, first), passes.length - OPEN_PASSES);
+  return passes.slice(start, start + OPEN_PASSES).map((p) => p.pass);
+}
+
 export { bodyText, latencyLabel };

@@ -50,18 +50,21 @@ test.describe('repeat analysis', () => {
 });
 
 test.describe('steps and deep analysis', () => {
-  test('Steps start collapsed, Expand all and Collapse all work', async ({ page }) => {
+  test('Step timings is the average trace; a parent row folds and opens', async ({ page }) => {
     await openRun(page, s.slug, classic, 'panel=latency');
-    const steps = page.getByRole('region', { name: 'Steps' });
+    const steps = page.getByRole('region', { name: 'Step timings' });
     await expect(steps).toBeVisible();
-    const table = steps.getByRole('table', { name: 'Step latency by call site' });
-    const phases = await table.getByRole('row').count();
-    // header + the phase rows only
-    expect(phases).toBeLessThanOrEqual(3);
-    await steps.getByRole('button', { name: 'Expand all steps' }).click();
-    await expect.poll(() => table.getByRole('row').count()).toBeGreaterThan(phases);
-    await steps.getByRole('button', { name: 'Collapse all steps' }).click();
-    await expect.poll(() => table.getByRole('row').count()).toBe(phases);
+    // By step: the trace tree in trace order (fallback: one row per call site when the spans have no tree)
+    const table = steps.getByRole('table', {
+      name: /The average trace, step by step|Step latency by call site/,
+    });
+    const rows = await table.getByRole('row').count();
+    const parent = table.getByRole('button', { expanded: true }).first();
+    await parent.click();
+    await expect(parent).toHaveAttribute('aria-expanded', 'false');
+    await expect.poll(() => table.getByRole('row').count()).toBeLessThan(rows);
+    await parent.click();
+    await expect.poll(() => table.getByRole('row').count()).toBe(rows);
   });
 
   test('Deep analysis stacks the matrix above the scatter', async ({ page }) => {

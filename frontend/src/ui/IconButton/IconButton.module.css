@@ -26,6 +26,12 @@
   color: var(--accent-primary);
 }
 
+/* G3 (owner: "close button X glows green on hover? should be red"): the X that closes a surface (`closes`, on by
+   itself for the close glyph) stays muted at rest and turns the error red on hover and press, never the accent. */
+.iconAction[data-close]:is([data-hovered], [data-pressed]) {
+  color: var(--error);
+}
+
 .iconAction[data-focus-visible] {
   background: transparent;
   box-shadow: none;

@@ -171,6 +171,11 @@
   background: var(--card-bg);
 }
 
+/* The pager is not part of the table card: a gap keeps its controls off the card edge. */
+.pager {
+  margin-top: var(--space-sm);
+}
+
 .table {
   inline-size: 100%;
   border-collapse: collapse;

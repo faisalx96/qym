@@ -6,8 +6,10 @@
   align-items: start;
 }
 
+/* The pane takes half of the workspace (460px to 960px) so SQL and JSON values read without wrapping at every
+   clause; the table keeps the other half (feedback 17 Nov D1, was 360px to 460px). */
 .layout[data-has-pane] {
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
+  grid-template-columns: minmax(0, 1fr) clamp(460px, 50%, 960px);
 }
 
 @media (max-width: 1000px) {

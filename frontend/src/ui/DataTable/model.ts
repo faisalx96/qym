@@ -290,8 +290,16 @@ export interface PersistedState {
   /** Column ids in display order; null = declared order. */
   order: string[] | null;
   density: Density | null;
+  /** The row-height scale the density was chosen on (DENSITY_SCALE); an older choice is dropped. */
+  densityScale?: number;
   collapsed: string[];
 }
+
+/**
+ * The row-height scale (feedback 17 Nov R1: 32/40/52 became 36/44/56). A density chosen on an older scale is dropped
+ * once, so every table opens at its default (regular for the runs list) on the new heights.
+ */
+export const DENSITY_SCALE = 2;
 
 export const EMPTY_STATE: PersistedState = {
   widths: {},
@@ -312,7 +320,8 @@ export function readPersisted(storageKey: string | undefined, scope?: string): P
   }
   // v1 stored only {id: px} widths; keep honouring them.
   const widths = v2?.widths ?? readJson<Record<string, number>>(KEYS.dataTableWidths(storageKey), {});
-  return { ...EMPTY_STATE, ...v2, widths };
+  const density = v2?.densityScale === DENSITY_SCALE ? (v2.density ?? null) : null;
+  return { ...EMPTY_STATE, ...v2, widths, density };
 }
 
 export function clampWidth<R>(col: Column<R>, w: number): number {

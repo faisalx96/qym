@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import { describe, expect, it } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -22,9 +22,27 @@ describe('entity tags', () => {
     expect(screen.getByText('@golden')).toBeInTheDocument();
     const model = screen.getByTitle('gpt-4o');
     expect(model).toHaveAttribute('data-series', '2');
-    expect(model).toHaveTextContent('reasoning');
+    // 17 Nov G2: a reasoning model shows the light bulb (named "Reasoning model"), never the word
+    expect(model).not.toHaveTextContent(/reasoning/i);
+    expect(within(model).getByRole('img', { name: 'Reasoning model' })).toHaveAttribute('title', 'Reasoning model');
     expect(screen.getByText('—')).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('marks a reasoning model with the light bulb glyph after the name, and a plain model with none (17 Nov G2)', () => {
+    render(
+      <div>
+        <ModelTag name="o3-mini" series={4} reasoning />
+        <ModelTag name="gpt-4o" series={1} />
+      </div>,
+    );
+    const bulb = screen.getByRole('img', { name: 'Reasoning model' });
+    expect(bulb.querySelector('svg[data-icon="lightbulb"]')).toHaveAttribute('width', '12');
+    expect(bulb).toHaveAttribute('data-tone', 'gold');
+    const tag = screen.getByTitle('o3-mini');
+    expect(tag.lastElementChild).toBe(bulb);
+    expect(tag).toHaveTextContent(/^o3-mini$/);
+    expect(within(screen.getByTitle('gpt-4o')).queryByRole('img')).toBeNull();
   });
 
   it('does not double the v of a version that already has one', () => {

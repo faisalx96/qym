@@ -80,6 +80,8 @@ describe('active chips', () => {
     const chips = activeChips(v, defs, 'q');
     expect(chips.map((c) => c.key)).toEqual(['show', 'error:task', 'latency', 'cat:domain']);
     expect(chips[0]!.label).toBe('Failing · q');
+    // RD11: the error chip names its field apart from its value
+    expect(chips[1]).toMatchObject({ label: 'Task error: boom', field: 'Task error', value: 'boom' });
     const cleared = chips.reduce<RunView>((acc, c) => c.clear(acc), v);
     expect(cleared.show).toBe('all');
     expect(cleared.filters.latency).toBeNull();

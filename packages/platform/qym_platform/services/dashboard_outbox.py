@@ -321,6 +321,64 @@ def snapshot(obj, deleted=False):
     return data, ([] if deleted else causes)
 
 
+def _identity(data):
+    """The projection identity of a snapshot (dashboard_record_state's unique key)."""
+    return (
+        data.get("record_key"),
+        data.get("metric_key", ""),
+        data.get("record_kind"),
+        data.get("pass_number", 0),
+    )
+
+
+def _with_left_identities(before, after):
+    """An update's new snapshots, preceded by a DELETE of each identity it left.
+
+    A pass number is part of a record's identity: renumbering passes (a pass
+    deletion) moves rows to other identities. Without the DELETE the old
+    identity stayed present, so the summaries kept the deleted pass's numbers
+    under a pass that no longer has data (fake pass rows in the runs list).
+    """
+    current = {_identity(data) for data, _ in after}
+    left = [(data, causes) for data, causes in before if _identity(data) not in current]
+    return left + after
+
+
+def _left_identity(obj):
+    """The DELETE snapshot of the identity a modified source row moves away from."""
+    from sqlalchemy import inspect
+
+    from qym_platform.db.models import RunEvent, RunItemAttempt, RunItemPassScore
+
+    attrs = inspect(obj).attrs
+    if isinstance(obj, RunEvent):
+        old = attrs.payload.history.deleted
+        if not old or not projects_execution_event(obj.type, old[0]):
+            return None
+        before, _ = snapshot(
+            RunEvent(
+                id=obj.id,
+                run_id=obj.run_id,
+                event_id=obj.event_id,
+                sequence=obj.sequence,
+                type=obj.type,
+                payload=old[0],
+            ),
+            deleted=True,
+        )
+    elif isinstance(obj, (RunItemAttempt, RunItemPassScore)):
+        old = attrs.pass_number.history.deleted
+        if not old or old[0] is None:
+            return None
+        before, _ = snapshot(obj, deleted=True)
+        before["pass_number"] = int(old[0])
+    else:
+        return None
+    if _identity(before) == _identity(snapshot(obj)[0]):
+        return None
+    return before, []
+
+
 def _upsert_partition(connection, run_id, project_id, version, now, *, fresh=False):
     from qym_platform.db.dashboard_models import DashboardPartitionState
     from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -503,8 +561,15 @@ def _before_flush(session, flush_context, instances):
     from sqlalchemy import inspect
 
     status_changes = set()
+    left = []
     for obj in changed:
-        if isinstance(obj, RunEvent) and obj in new:
+        if isinstance(obj, source) and obj not in new and obj not in deleted:
+            moved = _left_identity(obj)
+            if moved is not None:
+                left.append(moved)
+        if isinstance(obj, RunEvent):
+            # Events project only as attempt evidence (as at ingest): a
+            # rewritten run_started or a clean item event has no record.
             if not projects_execution_event(obj.type, obj.payload):
                 continue
         if isinstance(obj, source) and (
@@ -521,6 +586,7 @@ def _before_flush(session, flush_context, instances):
                 ):
                     status_changes.add(obj.id)
     session.info["dashboard_source_changes"] = pending
+    session.info["dashboard_left_identities"] = left
     session.info["dashboard_run_status_changes"] = status_changes
 
     users, versions, jobs = set(), set(), set()
@@ -604,6 +670,7 @@ def _after_flush(session, flush_context):
     from qym_platform.db.models import Approval, Run, RunDataset
 
     pending = session.info.pop("dashboard_source_changes", [])
+    left = session.info.pop("dashboard_left_identities", [])
     users, versions, jobs = session.info.pop(
         "dashboard_dimension_changes", (set(), set(), set())
     )
@@ -628,10 +695,13 @@ def _after_flush(session, flush_context):
             )
         )
         dimensions = _run_descriptor_snapshots(session.connection().execute(query))
-    if pending or dimensions:
+    if pending or dimensions or left:
         enqueue_snapshots(
             session.connection(),
-            [snapshot(obj, deleted) for obj, deleted, _ in pending] + dimensions,
+            _with_left_identities(
+                left, [snapshot(obj, deleted) for obj, deleted, _ in pending]
+            )
+            + dimensions,
             fresh_runs={
                 obj.id for obj, _, fresh in pending if fresh and isinstance(obj, Run)
             },
@@ -727,7 +797,7 @@ def _bulk_source_mutation(state):
     mapper = state.bind_mapper
     if mapper is None or mapper.class_ not in _source_types():
         return
-    from qym_platform.db.models import Run
+    from qym_platform.db.models import Run, RunEvent
 
     model = mapper.class_
     session = state.session
@@ -747,17 +817,21 @@ def _bulk_source_mutation(state):
         found = []
         for start in range(0, len(ids), BULK_SNAPSHOT_CHUNK):
             chunk = ids[start : start + BULK_SNAPSHOT_CHUNK]
-            found.extend(
-                snapshot(source_snapshot_object(model, row), deleted)
-                for row in session.execute(fields.where(model.id.in_(chunk)))
-            )
+            for row in session.execute(fields.where(model.id.in_(chunk))):
+                obj = source_snapshot_object(model, row)
+                # Events project only as attempt evidence (as at ingest).
+                if model is RunEvent and not projects_execution_event(
+                    obj.type, obj.payload
+                ):
+                    continue
+                found.append(snapshot(obj, deleted))
         return found
 
     changes = snapshots(True)
     result = state.invoke_statement()
     if state.is_update:
         session.expire_all()
-        changes = snapshots(False)
+        changes = _with_left_identities(changes, snapshots(False))
     connection = session.connection()
     for start in range(0, len(changes), BULK_SNAPSHOT_CHUNK):
         enqueue_snapshots(connection, changes[start : start + BULK_SNAPSHOT_CHUNK])

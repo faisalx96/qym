@@ -143,7 +143,13 @@ function DatasetBox({
       </div>
       {/* After the versions in the DOM (Tab order: Versions, Remove), in the first row of the grid. */}
       <span className={styles.dsRemove}>
-        <IconButton label={`Remove ${entry.name}`} icon="close" isDisabled={readOnly} onPress={onRemove} />
+        <IconButton
+          label={`Remove ${entry.name}`}
+          icon="close"
+          closes={false}
+          isDisabled={readOnly}
+          onPress={onRemove}
+        />
       </span>
     </li>
   );

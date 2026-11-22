@@ -72,8 +72,9 @@
   color: var(--text-muted);
 }
 
-/* The value, centred under the head. cv4 C1-6: the best and the worst pass of a metric are a subtle highlight behind
-   the value (green, red), no word. Every value has the same padding, so a highlighted value does not move. */
+/* The value, centred under the head, in its score-band colour. The best and the worst pass of a metric are a subtle
+   highlight behind the value (green, red), no word and no glyph. Every value has the same padding, so a highlighted
+   value does not move. */
 .metricCell {
   display: inline-block;
   min-inline-size: 7ch;

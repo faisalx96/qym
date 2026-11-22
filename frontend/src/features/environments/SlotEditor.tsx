@@ -380,6 +380,7 @@ export function SlotCard({ slot: input, editor, errors = [] }: SlotCardProps) {
                   <IconButton
                     label={`Unmap ${name}; it stays a plain input`}
                     icon="close"
+                    closes={false}
                     onPress={() => editor.dispatch({ type: 'detach', slotKey: slot.slot_key, name })}
                   />
                 ) : null}

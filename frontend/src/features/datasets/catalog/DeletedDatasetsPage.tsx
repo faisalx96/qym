@@ -5,7 +5,7 @@ import { useDatasetCatalog, useRestoreDataset, type Dataset } from '@/api/datase
 import { actionErrorMessage } from '@/lib/http';
 import { tableLoading, useDelayedPending } from '@/lib/pending';
 import { readOnlyReason, useDocumentTitle, useProjectContext } from '@/features/shell';
-import { fullWidth } from '@/features/shell/layout';
+import { constrained } from '@/features/shell/layout';
 import {
   DataTable,
   EmptyState,
@@ -48,7 +48,7 @@ export function DeletedDatasetsPage() {
 
   const rows = query.data?.datasets ?? [];
   return (
-    <div className={fullWidth} data-deleted-datasets>
+    <div className={constrained} data-deleted-datasets>
       <PageHeader
         title="Deleted datasets"
         description="Deleted datasets keep their versions, items and history until a project manager restores them."

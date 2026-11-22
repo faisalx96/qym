@@ -18,6 +18,8 @@ export interface DrawerProps {
   actions?: ReactNode;
   footer?: ReactNode;
   dismissOnBackdrop?: boolean;
+  /** Laid on the start edge of the drawer, inside the dialog (a resize handle): absolutely placed by its own styles. */
+  edge?: ReactNode;
   children?: ReactNode;
   className?: string;
 }
@@ -38,6 +40,7 @@ export function Drawer({
   actions,
   footer,
   dismissOnBackdrop = true,
+  edge,
   children,
   className,
 }: DrawerProps) {
@@ -53,6 +56,7 @@ export function Drawer({
         <AriaDialog className={styles.dialog} ref={(el) => el?.setAttribute('aria-modal', 'true')}>
           {({ close }) => (
             <>
+              {edge}
               <header className={styles.header}>
                 <div className={styles.titles}>
                   {eyebrow ? <div className={styles.eyebrow}>{eyebrow}</div> : null}

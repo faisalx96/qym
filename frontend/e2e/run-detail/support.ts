@@ -186,11 +186,16 @@ export function metricTable(pane: Locator): Locator {
   return pane.getByRole('table', { name: 'Metrics' });
 }
 
+/** The name cell of a metric: its name, then the "edited" tag once a reviewer changed the score. */
+function metricCellName(metric: string): RegExp {
+  return new RegExp(`^${metric.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}( edited)?$`);
+}
+
 /** The row of a metric in the pane's Metrics table (the row carries data-failing and data-editing). */
 export function metricRow(pane: Locator, metric: string): Locator {
   return metricTable(pane)
     .getByRole('row')
-    .filter({ has: pane.page().getByRole('cell', { name: metric, exact: true }) });
+    .filter({ has: pane.page().getByRole('cell', { name: metricCellName(metric) }) });
 }
 
 /**

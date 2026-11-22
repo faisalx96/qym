@@ -38,10 +38,10 @@ test.describe('runs list: live status (J3)', () => {
     // single-pass run: done/total + a progress label
     await expect(live.getByLabel(/^Progress \d+ percent$/)).toBeVisible();
     await expect(live.locator('td[data-col="status"]')).toContainText(/\d+\/10/);
-    // repeat run: pass j/k
-    await expect(rowOf(page, 'rag-qa-repeat-live').locator('td[data-col="status"]')).toContainText(
-      'pass 1/3',
-    );
+    // repeat run: the same bar, counting passes ("pass j/k", 17 Nov R3 round 2)
+    const repeatStatus = rowOf(page, 'rag-qa-repeat-live').locator('td[data-col="status"]');
+    await expect(repeatStatus).toContainText('pass 1/3');
+    await expect(repeatStatus.getByLabel(/^pass 1 of 3, progress \d+ percent$/)).toBeVisible();
 
     await completeRun(request, s.token, s.runs.find((r) => r.name === LIVE_NAME)!.id);
     await broadcastRunStatus(page, [s.runs.find((r) => r.name === LIVE_NAME)!.id], 'COMPLETED');

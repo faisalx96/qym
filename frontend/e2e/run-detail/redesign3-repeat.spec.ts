@@ -156,7 +156,9 @@ for (const width of [1440, 390]) {
       expect(Math.abs((await card.boundingBox())!.width - col.width)).toBeLessThanOrEqual(1);
       const grid = card.getByRole('grid', { name: 'Passes' }).or(card.getByRole('table', { name: 'Passes' }));
       expect(await grid.getByRole('columnheader').count()).toBeLessThanOrEqual(7);
+      // header + 10 passes; the table ends after the last pass (round 3 RD6: no summary rows)
       await expect(grid.getByRole('row')).toHaveCount(11);
+      await expect(grid.locator('tfoot')).toHaveCount(0);
       const bars = panel.getByRole('group', { name: 'Items by number of passes that passed' });
       await expect(bars.locator('[data-part=count]')).toHaveCount(11);
       // Errors stays inside the card on the phone column (the table does not scroll away from it)

@@ -203,17 +203,19 @@ test('C078 Add issue targets the metric the page is on, with a metric picker', a
   await expect(dialog.getByRole('button', { name: /Metric/ })).toBeVisible();
 });
 
-test('C069 a long expected output folds; C073 a 0 ms item shows its latency', async ({ page }) => {
+test('C069 a long expected output scrolls in its block; C073 a 0 ms item shows its latency', async ({
+  page,
+}) => {
   await page.goto(compareUrl([fix.a, fix.c]));
   await waitLoaded(page);
   const first = await openItem(page, 'fix-001', 2);
-  // 60 lines: the Expected block shows the first lines (the fold is 40 lines), then "Show more"
+  // 60 lines: the Expected block is capped and scrolls inside (feedback round 2: scrollable containers, no
+  // "Show more" and no "Show full height"); the scrolling body is a named region the keyboard can focus
   const expected = first.locator('section[data-part="expected"]');
-  const more = expected.getByRole('button', { name: 'Show more' });
-  await expect(more).toHaveAttribute('aria-expanded', 'false');
-  await expect(expected.locator('[data-folded]')).toHaveCount(1);
-  await more.click();
-  await expect(expected.getByRole('button', { name: 'Show less' })).toHaveAttribute('aria-expanded', 'true');
+  await expect(expected.getByRole('button', { name: 'Show more' })).toHaveCount(0);
+  const body = expected.getByRole('region', { name: 'Expected, scrolls' });
+  await expect(body).toHaveAttribute('tabindex', '0');
+  expect(await body.evaluate((e) => e.scrollHeight > e.clientHeight)).toBe(true);
   await expect(expected.locator('[data-folded]')).toHaveCount(0);
   // one item at a time: the second row replaces the first item in the pane
   const second = await openItem(page, 'fix-002', 2);

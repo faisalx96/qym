@@ -53,7 +53,7 @@ function fieldKey(block: Locator, key: string): Locator {
 }
 
 for (const width of [1280, 1440]) {
-  test(`the pane of an Arabic multi-pass item stays inside the viewport at ${width}px, one pass in view`, async ({
+  test(`the pane of an Arabic multi-pass item stays inside the viewport at ${width}px, every pass in view`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -62,15 +62,17 @@ for (const width of [1280, 1440]) {
     const box = (await pane.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(width);
-    // one output at a time: the pass switch of the Output block picks the pass (3 passes in this run)
+    // one output column per pass in view: a run of 3 passes opens with all 3 in view (feedback 17 Nov I1)
     const outputs = pane.getByRole('region', { name: /^Output of pass \d+$/ });
-    await expect(outputs).toHaveCount(1);
-    const out = (await outputs.boundingBox())!;
-    expect(out.x + out.width).toBeLessThanOrEqual(width);
-    const passes = pane.getByRole('radiogroup', { name: 'Pass in view' });
-    await expect(passes.getByRole('radio')).toHaveCount(3);
-    // each pass has its own score column in the Metrics table, and the table is inside the pane
-    await expect(metricTable(pane).getByRole('button', { name: /^Pass \d/ })).toHaveCount(3);
+    await expect(outputs).toHaveCount(3);
+    for (const out of await outputs.all()) {
+      const b = (await out.boundingBox())!;
+      expect(b.x + b.width).toBeLessThanOrEqual(width);
+    }
+    const passes = pane.getByRole('group', { name: 'Passes in view' });
+    await expect(passes.getByRole('button')).toHaveCount(3);
+    // each pass in view has its own score column in the Metrics table, and the table is inside the pane
+    await expect(metricTable(pane).getByRole('columnheader', { name: /^Pass \d/ })).toHaveCount(3);
     const table = (await metricTable(pane).boundingBox())!;
     expect(table.x + table.width).toBeLessThanOrEqual(box.x + box.width + 1);
   });
@@ -151,8 +153,11 @@ test('the details of a metric are closed at first and open under the metric over
   // a second metric opens beside the first one: each metric has its own switch
   await openMetric(pane, 'hallucination');
   await expect(pane.locator('[data-part="metric-details"]')).toHaveCount(2);
-  // the header switch closes them all
-  await table.getByRole('button', { name: 'Hide the details of every metric', exact: true }).click();
+  // the labelled button of the Metrics section closes them all
+  await pane
+    .locator('[data-part="metrics-section"]')
+    .getByRole('button', { name: 'Collapse all', exact: true })
+    .click();
   await expect(pane.locator('[data-part="metric-details"]')).toHaveCount(0);
 });
 
