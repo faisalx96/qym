@@ -77,7 +77,9 @@ const detail: FactoryDetail = {
     status: 'published',
     published_at: null,
   },
-  metadata_keys: [{ key: 'topic', values: ['billing', 'shipping'], value_count: 2, truncated: false }],
+  metadata_keys: [
+    { key: 'topic', kind: 'scalar', values: ['billing', 'shipping'], value_count: 2, truncated: false },
+  ],
   llm_connections: [{ id: 'llm1', name: 'default', model: 'gpt-x', is_default: true, has_api_key: true }],
   active_job: null,
   generation_limits: {

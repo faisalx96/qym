@@ -82,6 +82,8 @@ export interface FactoryCategory {
 
 export interface MetadataKeyChoice {
   key: string;
+  /** scalar: one group per item; list: an item belongs to every value it lists; mixed: both occur. */
+  kind: 'scalar' | 'list' | 'mixed';
   values: string[];
   value_count: number;
   truncated: boolean;

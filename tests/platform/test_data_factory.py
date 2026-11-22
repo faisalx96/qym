@@ -60,7 +60,11 @@ def _seed_items(session_factory, rows):
                     index=index,
                     input={"question": question},
                     expected_output=answer,
-                    item_metadata={"topic": topic} if topic else {},
+                    item_metadata=(
+                        topic
+                        if isinstance(topic, dict)
+                        else {"topic": topic} if topic else {}
+                    ),
                     labels=[],
                     fingerprint=f"fp-{item_id}",
                 )
@@ -220,6 +224,7 @@ def test_the_detail_lists_metadata_keys_of_the_source_version(client, session_fa
     keys = {k["key"]: k for k in body["metadata_keys"]}
     assert set(keys) == {"topic"}
     assert sorted(keys["topic"]["values"]) == ["billing", "shipping"]
+    assert keys["topic"]["kind"] == "scalar"
     assert body["llm_connections"][0]["id"] == "llm1"
     assert body["active_job"]["id"] == "fj1"
 
@@ -1335,6 +1340,161 @@ def test_an_expired_lease_is_taken_over(session_factory):
         assert svc.claim_job(db, "me:3") is None  # the fresh lease holds
 
 
+def test_list_valued_group_key_files_items_in_every_group_and_prompts_carry_examples(
+    client, session_factory, fake_llm
+):
+    """A key holding a list (the tables a query reads) puts an item in each group it lists: the
+    analysis reads it in every one of them and generation offers the rules of all of them. A
+    generation prompt shows the source items a rule's evidence names, the item itself left out."""
+    _seed_items(
+        session_factory,
+        [
+            ("i1", {"tables": ["orders", "customers"]}, "Orders per customer?", "JOIN"),
+            ("i2", {"tables": ["orders"]}, "Orders today?", "WHERE day"),
+            ("i3", {}, "Hi", "Hello"),
+        ],
+    )
+    client.patch(
+        "/api/factories/f1", json={"group_metadata_key": "tables"}, headers=MEMBER
+    )
+    keys = {k["key"]: k for k in _detail(client)["metadata_keys"]}
+    assert keys["tables"]["kind"] == "list" and sorted(keys["tables"]["values"]) == [
+        "customers",
+        "orders",
+    ]
+    with session_factory() as db:
+        db.get(FactoryJob, "fj1").status = "cancelled"
+        db.commit()
+
+    def analysis(system, user):
+        if system.startswith("You deduplicate"):
+            return {"duplicates": []}
+        for group in ("orders", "customers"):
+            if f"'tables' is '{group}' (or lists it)" in user:
+                return {
+                    "rules": [
+                        {
+                            "title": f"Rule of {group}",
+                            "description": f"About {group}.",
+                            "categories": ["general"],
+                            "evidence": ["i1", "i2"],
+                        }
+                    ]
+                }
+        return {"rules": []}
+
+    calls = fake_llm(analysis)
+    started = client.post(
+        "/api/factories/f1/jobs", json={"kind": "analysis"}, headers=MEMBER
+    )
+    assert started.status_code == 202, started.text
+    assert _run_jobs(session_factory) == ["succeeded"]
+    extractions = [c for c in calls if not c["system"].startswith("You deduplicate")]
+    by_group = {}
+    for call in extractions:
+        group = call["user"].split("Group: ")[1].split("\n")[0]
+        by_group[group] = call["user"]
+    # Three groups: customers (i1), orders (i1 and i2), ungrouped (i3); i1 is read in two of them.
+    assert len(by_group) == 3
+    customers = next(v for k, v in by_group.items() if "'customers'" in k)
+    orders = next(v for k, v in by_group.items() if "'orders'" in k)
+    ungrouped = next(v for k, v in by_group.items() if "ungrouped" in k)
+    assert '"item_id": "i1"' in customers and '"item_id": "i2"' not in customers
+    assert '"item_id": "i1"' in orders and '"item_id": "i2"' in orders
+    assert '"item_id": "i3"' in ungrouped and '"item_id": "i1"' not in ungrouped
+    rules = {r["title"]: r for r in _rules(client)["rules"]}
+    assert rules["Rule of orders"]["group_value"] == "orders"
+    assert rules["Rule of customers"]["group_value"] == "customers"
+    # Only i1 lists customers, so the customers rule keeps i1 alone as evidence of its group's items.
+    assert rules["Rule of customers"]["evidence"] == ["i1"]
+    assert rules["Rule of orders"]["evidence"] == ["i1", "i2"]
+    # Approve both and add a global rule with no evidence; then generate one layer.
+    for title in ("Rule of orders", "Rule of customers"):
+        assert (
+            client.post(
+                f"/api/factories/f1/rules/{rules[title]['id']}:approve", headers=MGR
+            ).status_code
+            == 200
+        )
+    created = client.post(
+        "/api/factories/f1/rules",
+        json={"category_id": "fc1", "title": "Global", "description": "Everywhere."},
+        headers=MEMBER,
+    )
+    assert created.status_code == 201
+    assert (
+        client.post(
+            f"/api/factories/f1/rules/{created.json()['id']}:approve", headers=MGR
+        ).status_code
+        == 200
+    )
+
+    def generation(system, user):
+        assert "apply the rule the way they do" in system
+        return {"input": {"question": "q"}, "expected_output": "a", "note": "n"}
+
+    # The fake keeps every prompt of the test: the generation calls are the ones after the analysis.
+    calls = fake_llm(generation)
+    before = len(calls)
+    started = client.post(
+        "/api/factories/f1/jobs",
+        json={
+            "kind": "generation",
+            "params": {"max_layers": 1, "branching": 5, "max_items": 50},
+        },
+        headers=MEMBER,
+    )
+    assert started.status_code == 202, started.text
+    assert _run_jobs(session_factory) == ["succeeded"]
+    job = client.get(
+        f"/api/factories/f1/jobs/{started.json()['id']}", headers=MEMBER
+    ).json()
+    calls = calls[before:]
+    # i1 takes the orders, customers and global rules (3); i2 orders and global (2); i3 global (1).
+    assert job["progress"]["generated"] == 6 and len(calls) == 6
+
+    def prompt(base: str, title: str) -> str:
+        return next(
+            c["user"]
+            for c in calls
+            if f'"question": "{base}"' in c["user"].split("Base item expected")[0]
+            and f'"title": "{title}"' in c["user"].split("New rule to apply")[1]
+        )
+
+    examples = "Items of the dataset that already follow the new rule"
+    # i2 + orders: the example is i1 (i2 itself is left out). i1 + orders: the example is i2.
+    tail = prompt("Orders today?", "Rule of orders").split(examples)[1]
+    assert "Orders per customer?" in tail and "Orders today?" not in tail
+    tail = prompt("Orders per customer?", "Rule of orders").split(examples)[1]
+    assert "Orders today?" in tail and "Orders per customer?" not in tail
+    # i2 + customers never happens (i2 is not in that group); i1 + customers has no other evidence.
+    assert examples not in prompt("Orders per customer?", "Rule of customers")
+    assert not any(
+        '"title": "Rule of customers"' in c["user"].split("New rule to apply")[1]
+        and '"question": "Orders today?"' in c["user"].split("Base item expected")[0]
+        for c in calls
+    )
+    # The global rule has no evidence: no examples section.
+    assert examples not in prompt("Hi", "Global")
+    # group_values restricts the base items to the ones listing a wanted group.
+    calls = fake_llm(generation)
+    before = len(calls)
+    started = client.post(
+        "/api/factories/f1/jobs",
+        json={
+            "kind": "generation",
+            "params": {"max_layers": 1, "branching": 5, "group_values": ["customers"]},
+        },
+        headers=MEMBER,
+    )
+    assert started.status_code == 202, started.text
+    assert _run_jobs(session_factory) == ["succeeded"]
+    calls = calls[before:]
+    assert len(calls) == 3 and all(
+        '"question": "Orders per customer?"' in c["user"] for c in calls
+    )
+
+
 def test_params_and_group_helpers():
     assert svc.validate_params("generation", None) == {
         "max_layers": 1,
@@ -1352,10 +1512,20 @@ def test_params_and_group_helpers():
         svc.validate_params("nope", {})
     assert svc.group_value_of({"a": {"b": 3}}, "a.b") == "3"
     assert svc.group_value_of({"a": True}, "a") == "true"
-    assert svc.group_value_of({"a": [1]}, "a") == ""
+    assert svc.group_value_of({"a": [1]}, "a") == "1"
     assert svc.group_value_of({"a": " x "}, "a") == "x"
     assert svc.group_value_of({"a": 1}, None) == ""
     assert svc.group_value_of("not a dict", "a") == ""
+    # A list at the key: one group per distinct scalar, in order; nothing usable is ungrouped.
+    assert svc.group_values_of({"t": ["orders", " customers ", "orders", 7]}, "t") == [
+        "orders",
+        "customers",
+        "7",
+    ]
+    assert svc.group_values_of({"t": []}, "t") == [""]
+    assert svc.group_values_of({"t": [None, {"a": 1}, [2]]}, "t") == [""]
+    assert svc.group_values_of({"t": {"a": 1}}, "t") == [""]
+    assert svc.group_values_of({"t": "x"}, None) == [""]
     assert svc.slugify_key("  Field Constraints! ") == "field-constraints"
     assert svc.check_json_schema({"type": "object"}) is None
     assert svc.check_json_schema({"type": 3}) is not None

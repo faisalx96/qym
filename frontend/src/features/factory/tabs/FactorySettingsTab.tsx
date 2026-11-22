@@ -1,5 +1,6 @@
 /**
- * Factory → Settings: the grouping key (one of the source version's scalar metadata keys), the model connection,
+ * Factory → Settings: the grouping key (one of the source version's metadata keys; a list key files an item in
+ * every group it lists), the model connection,
  * the extra instructions for the two agents, and the Disconnect action. One card per concern with a save footer
  * (the project settings pattern); the body remounts on every saved detail so the draft starts from the server.
  */
@@ -74,7 +75,7 @@ function SettingsBody({
     ...keys.map((k) => ({
       key: k.key,
       label: k.key,
-      description: `${k.value_count}${k.truncated ? '+' : ''} value${k.value_count === 1 ? '' : 's'}: ${k.values.slice(0, 6).join(', ')}${k.value_count > 6 ? '…' : ''}`,
+      description: `${k.kind === 'scalar' ? '' : 'list · '}${k.value_count}${k.truncated ? '+' : ''} value${k.value_count === 1 ? '' : 's'}: ${k.values.slice(0, 6).join(', ')}${k.value_count > 6 ? '…' : ''}`,
     })),
   ];
   const connectionItems = [
@@ -109,7 +110,7 @@ function SettingsBody({
           <CardHead
             id="factory-grouping"
             title="Grouping"
-            description="The item metadata key whose value groups the rules. A rule applies to the items of its group; rules without a group apply to every item."
+            description="The item metadata key whose value groups the rules. A rule applies to the items of its group; rules without a group apply to every item. A key holding a list (the tables a query reads) files the item in every group it lists."
           />
         }
       >
@@ -124,7 +125,7 @@ function SettingsBody({
             width="100%"
             help={
               factory.source_version
-                ? `Scalar keys of ${factory.source_version.version}`
+                ? `Metadata keys of ${factory.source_version.version}; a list key puts an item in every group it lists`
                 : 'The dataset has no published version: no keys to list'
             }
           />

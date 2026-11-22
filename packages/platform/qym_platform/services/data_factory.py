@@ -95,6 +95,9 @@ GENERATION_DEFAULTS = {
 }
 # Text of one field sent to the model, at most.
 FIELD_TEXT_MAX = 2000
+# Evidence items shown with the new rule in a generation prompt, and the text of each of their fields, at most.
+GENERATION_EXAMPLES = 3
+EXAMPLE_TEXT_MAX = 1500
 UNGROUPED = ""
 DEFAULT_CATEGORY_KEY = "general"
 DEFAULT_CATEGORY_NAME = "General"
@@ -233,28 +236,40 @@ def _scalar_group_text(value: Any) -> str:
     return text[:500]
 
 
-def group_value_of(metadata: Any, key: Optional[str]) -> str:
-    """The group of an item: the scalar at the dotted ``key`` of its metadata, else ungrouped."""
+def group_values_of(metadata: Any, key: Optional[str]) -> List[str]:
+    """The groups of an item: the scalar at the dotted ``key`` of its metadata, or every
+    scalar of the list there (an item of several groups, such as the tables a query
+    reads), else ``[UNGROUPED]``. Distinct, in the list's order."""
     if not key or not isinstance(metadata, dict):
-        return UNGROUPED
+        return [UNGROUPED]
     node: Any = metadata
     for part in key.split("."):
         if not isinstance(node, dict) or part not in node:
-            return UNGROUPED
+            return [UNGROUPED]
         node = node[part]
-    return _scalar_group_text(node)
+    out: List[str] = []
+    for value in node if isinstance(node, list) else [node]:
+        text = _scalar_group_text(value)
+        if text != UNGROUPED and text not in out:
+            out.append(text)
+    return out or [UNGROUPED]
+
+
+def group_value_of(metadata: Any, key: Optional[str]) -> str:
+    """The first group of an item (``group_values_of``), else ungrouped."""
+    return group_values_of(metadata, key)[0]
 
 
 def metadata_key_choices(db: Session, version_id: str) -> List[Dict[str, Any]]:
-    """Scalar metadata paths of the version with their distinct values (the group key picker)."""
+    """Metadata paths of the version with their distinct values and kind, ``scalar``, ``list``
+    or ``mixed`` (the group key picker; a list key files an item in every group it lists)."""
     facets = metadata_facets(db, version_id)
     out = []
     for path in facets.get("paths", []):
-        if path.get("kind") != "scalar":
-            continue
         out.append(
             {
                 "key": path["path"],
+                "kind": path.get("kind") or "scalar",
                 "values": [row["value"] for row in path.get("values", [])][:12],
                 "value_count": len(path.get("values", [])),
                 "truncated": bool(path.get("truncated")),
@@ -436,9 +451,10 @@ You are given the base item (its input and expected output), the rules already a
 Write a new input that is a natural variation of the base input in which the new rule matters, and the expected
 output that is correct for the new input under all the applied rules. When the new rule is a bridge, the new input
 extends the base item into the categories the bridge opens (it joins the other table, brings in the other product,
-reaches the other process) and the expected output covers that extension. Keep the language, the domain, the tone
-and the exact data shape of the base item: when the input or the expected output is a JSON object, answer with the
-same keys.
+reaches the other process) and the expected output covers that extension. When items that already follow the new
+rule are given, apply the rule the way they do, in the same form and to the same degree; the new item still derives
+from the base item, never from those examples. Keep the language, the domain, the tone and the exact data shape of
+the base item: when the input or the expected output is a JSON object, answer with the same keys.
 Answer with JSON only: {"input": <same shape as the base input>, "expected_output": <same shape as the base expected
 output>, "note": "<one sentence on what changed>"}."""
 
@@ -461,7 +477,7 @@ def _group_label(key: Optional[str], value: str) -> str:
         return "the whole dataset (no grouping key)"
     if value == UNGROUPED:
         return f"items without a value for metadata key '{key}' (ungrouped)"
-    return f"items whose metadata '{key}' is '{value}'"
+    return f"items whose metadata '{key}' is '{value}' (or lists it)"
 
 
 def _category_brief(category: FactoryRuleCategory) -> Dict[str, Any]:
@@ -544,7 +560,10 @@ def generation_prompt(
     category_names: List[str],
     bridge_names: List[str],
     instructions: str,
+    examples: Optional[List[DatasetItem]] = None,
 ) -> str:
+    """The user message of one generation call; ``examples`` are source items that follow ``rule``."""
+
     def rule_json(r: FactoryRule) -> Dict[str, Any]:
         return {"title": r.title, "description": r.description, "body": r.body}
 
@@ -566,6 +585,21 @@ def generation_prompt(
         heading,
         json.dumps(rule_json(rule), ensure_ascii=False),
     ]
+    if examples:
+        lines.append(
+            "Items of the dataset that already follow the new rule (apply it the way they do; "
+            "the new item still comes from the base item, not from these):"
+        )
+        for item in examples:
+            lines.append(
+                json.dumps(
+                    {
+                        "input": _text(item.input, EXAMPLE_TEXT_MAX),
+                        "expected_output": _text(item.expected_output, EXAMPLE_TEXT_MAX),
+                    },
+                    ensure_ascii=False,
+                )
+            )
     if instructions.strip():
         lines.append(f"Extra instructions: {instructions.strip()}")
     return "\n".join(lines)
@@ -955,7 +989,9 @@ def _group_items(
 ) -> Dict[str, List[DatasetItem]]:
     groups: Dict[str, List[DatasetItem]] = {}
     for item in items:
-        groups.setdefault(group_value_of(item.item_metadata, key), []).append(item)
+        # An item whose key holds a list is read in every group it lists.
+        for group in group_values_of(item.item_metadata, key):
+            groups.setdefault(group, []).append(item)
     return dict(
         sorted(groups.items(), key=lambda entry: (entry[0] == UNGROUPED, entry[0]))
     )
@@ -1430,9 +1466,11 @@ def create_output_dataset(
 class _Node:
     """One item of the generation tree: a base item or a generated one.
 
-    ``open`` is the set of category ids the next rule may come from: empty on
-    a base item (any rule), then the categories of the applied rules plus the
-    targets of the applied bridges.
+    ``groups`` are the item's groups (one, or every value of a list-valued key;
+    ``UNGROUPED`` alone when it has none), inherited by its children. ``open`` is
+    the set of category ids the next rule may come from: empty on a base item
+    (any rule), then the categories of the applied rules plus the targets of the
+    applied bridges.
     """
 
     __slots__ = (
@@ -1441,7 +1479,7 @@ class _Node:
         "input",
         "expected",
         "metadata",
-        "group",
+        "groups",
         "applied",
         "open",
     )
@@ -1453,7 +1491,7 @@ class _Node:
         input_value: Any,
         expected: Any,
         metadata: Dict[str, Any],
-        group: str,
+        groups: Tuple[str, ...],
         applied: List[FactoryRule],
         open_categories: Optional[set[str]] = None,
     ):
@@ -1462,7 +1500,7 @@ class _Node:
         self.input = input_value
         self.expected = expected
         self.metadata = metadata
-        self.group = group
+        self.groups = groups
         self.applied = applied
         self.open = set(open_categories or ())
 
@@ -1554,27 +1592,40 @@ async def _run_generation(ctx: JobContext) -> None:
             f"Version {version.version} of the dataset has no active items"
         )
     wanted_groups = params.get("group_values")
-    rules_by_group: Dict[str, List[FactoryRule]] = {}
-    for rule in rules:
-        rules_by_group.setdefault(rule.group_value, []).append(rule)
+    items_by_id = {item.item_id: item for item in items}
+    item_groups = {
+        item.item_id: tuple(group_values_of(item.item_metadata, key)) for item in items
+    }
+    # The source items a rule's evidence names, in the evidence order, for its prompts.
+    rule_evidence = {
+        r.id: [items_by_id[e] for e in (r.evidence or []) if e in items_by_id]
+        for r in rules
+    }
 
     def applicable(node: _Node) -> List[FactoryRule]:
-        """The rules of the item's group (and the global ones) not yet applied, within its open categories."""
+        """The rules of the item's groups (and the global ones) not yet applied, within its open categories."""
         done_ids = {r.id for r in node.applied}
-        pool = list(rules_by_group.get(node.group, []))
-        if key and node.group != UNGROUPED:
-            pool += rules_by_group.get(UNGROUPED, [])
+        wanted = {*node.groups, UNGROUPED} if key else {UNGROUPED}
         return [
             r
-            for r in pool
-            if r.id not in done_ids
+            for r in rules
+            if r.group_value in wanted
+            and r.id not in done_ids
             and (not node.open or rule_categories[r.id] & node.open)
         ]
 
+    def examples_for(node: _Node, rule: FactoryRule) -> List[DatasetItem]:
+        """Up to GENERATION_EXAMPLES evidence items of the rule: the item itself left out,
+        the ones sharing a group with the item first."""
+        pool = [e for e in rule_evidence[rule.id] if e.item_id != node.base_item_id]
+        own = set(node.groups)
+        pool.sort(key=lambda e: not (set(item_groups[e.item_id]) & own))
+        return pool[:GENERATION_EXAMPLES]
+
     frontier: List[_Node] = []
     for item in items:
-        group = group_value_of(item.item_metadata, key)
-        if wanted_groups and group not in set(wanted_groups):
+        groups = item_groups[item.item_id]
+        if wanted_groups and not set(groups) & set(wanted_groups):
             continue
         frontier.append(
             _Node(
@@ -1583,7 +1634,7 @@ async def _run_generation(ctx: JobContext) -> None:
                 item.input,
                 item.expected_output,
                 dict(item.item_metadata or {}),
-                group,
+                groups,
                 [],
             )
         )
@@ -1668,6 +1719,7 @@ async def _run_generation(ctx: JobContext) -> None:
                 category_names=category_names(rule_categories[rule.id]),
                 bridge_names=category_names(rule_bridges[rule.id]),
                 instructions=instructions,
+                examples=examples_for(parent, rule),
             )
             try:
                 async with semaphore:
@@ -1714,7 +1766,7 @@ async def _run_generation(ctx: JobContext) -> None:
                     answer.get("input"),
                     answer.get("expected_output"),
                     metadata,
-                    parent.group,
+                    parent.groups,
                     applied,
                     open_categories,
                 ),
@@ -1818,6 +1870,7 @@ __all__ = [
     "factory_access_levels",
     "factory_level_at_least",
     "group_value_of",
+    "group_values_of",
     "llm_connection_for",
     "metadata_key_choices",
     "normalize_title",
