@@ -743,6 +743,9 @@ def test_progress_optional_counters_require_nonnegative_integers(
         {"limit_reached": 1},
         {"limit_reached": "true"},
         {"limit_reached": None},
+        {"listing_stopped_early": 1},
+        {"listing_stopped_early": "true"},
+        {"listing_stopped_early": None},
         {"waiting": 1},
         {"waiting": None},
         {"effective_until": 1},
@@ -772,3 +775,88 @@ def test_progress_deferred_accepts_zero_and_positive(client, value):
     response = _progress(client, progress={"deferred": value})
     assert response.status_code == 200, response.text
     assert response.json()["progress"] == {"deferred": value}
+
+
+def test_progress_listing_stopped_early_is_kept(client, session_factory):
+    # A job that stops listing early no longer knows how many turns remain.
+    progress = {"evaluated": 20, "limit_reached": True, "listing_stopped_early": True}
+    response = _progress(client, progress=progress)
+    assert response.status_code == 200, response.text
+    assert response.json()["progress"] == progress
+    with session_factory() as db:
+        assert db.get(LiveJob, "new").progress == progress
+    cleared = _progress(client, progress={**progress, "listing_stopped_early": False})
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["progress"]["listing_stopped_early"] is False
+
+
+def test_reevaluate_job_reaches_the_worker_and_finishes(client, session_factory):
+    params = {"trace_ids": ["trace-1"], "redo": ["all"], "limit": 1}
+    with session_factory() as db:
+        db.add(
+            LiveJob(
+                id="redo",
+                source_id="source",
+                kind="reevaluate",
+                params=params,
+                status="queued",
+                requested_by_user_id="live-user-1",
+                requested_at=NOW + timedelta(minutes=2),
+                updated_at=NOW,
+            )
+        )
+        db.commit()
+    before = _control(client)
+    assert before.status_code == 200, before.text
+    assert before.json()["jobs"][-1] == {
+        "id": "redo",
+        "kind": "reevaluate",
+        "params": params,
+        "status": "queued",
+        "progress": {},
+        "cancel_requested": False,
+    }
+    running = _progress(
+        client,
+        job_id="redo",
+        progress={"found": 1, "listed": 1, "waiting": "live batch"},
+    )
+    assert running.status_code == 200, running.text
+    assert running.json()["status"] == "running"
+    changed = _control(client, **{"If-None-Match": before.headers["etag"]})
+    assert changed.status_code == 200
+    assert changed.json()["jobs"][-1]["status"] == "running"
+    done = _progress(
+        client,
+        "done",
+        job_id="redo",
+        progress={"found": 1, "listed": 1, "evaluated": 1, "redone": 1, "judged": 1},
+    )
+    assert done.status_code == 200, done.text
+    with session_factory() as db:
+        job = db.get(LiveJob, "redo")
+        assert (job.status, job.progress["redone"]) == ("done", 1)
+        assert job.started_at is not None and job.finished_at is not None
+    assert [job["id"] for job in _control(client).json()["jobs"]] == ["old", "new"]
+    _assert_error(
+        _progress(client, "failed", job_id="redo"), 409, "job already finished"
+    )
+
+
+def test_reevaluate_job_failure_keeps_the_worker_error(client, session_factory):
+    with session_factory() as db:
+        db.add(
+            LiveJob(
+                id="redo",
+                source_id="source",
+                kind="reevaluate",
+                params={"trace_ids": ["trace-1"], "redo": ["all"], "limit": 1},
+                status="queued",
+            )
+        )
+        db.commit()
+    response = _progress(client, "failed", job_id="redo", error="unsupported job kind")
+    assert response.status_code == 200, response.text
+    with session_factory() as db:
+        job = db.get(LiveJob, "redo")
+        assert (job.status, job.error) == ("failed", "unsupported job kind")

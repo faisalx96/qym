@@ -18,7 +18,7 @@ from qym_platform.datetime_utils import to_api_timestamp
 from qym_platform.db.feedback_models import (FeedbackAgentConnection,
                                              FeedbackMessage, FeedbackRequest,
                                              FeedbackRequestEvent)
-from qym_platform.deps import get_db
+from qym_platform.deps import AsyncDb, get_async_db, get_db
 from qym_platform.feedback_agent import agent as agent_mod
 from qym_platform.feedback_agent import connection as conn_mod
 from qym_platform.feedback_agent import export as export_mod
@@ -42,6 +42,7 @@ from qym_platform.log import get_logger
 from qym_platform.secrets import build_llm_config_storage, encryption_available
 from qym_platform.settings import PlatformSettings
 from sqlalchemy import func
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 logger = get_logger(__name__)
@@ -351,14 +352,13 @@ def _public_error(data: dict[str, Any], admin: bool) -> dict[str, Any]:
 
 async def _turn_response(
     request: Request,
-    db: Session,
+    engine: Engine,
     principal: Principal,
-    req: FeedbackRequest,
+    request_id: str,
     preface: list[tuple[str, dict[str, Any]]],
 ) -> Response:
-    engine = db.get_bind()
+    """Stream (or collect) the assistant's turn; ``engine`` is the sync engine the runner's sessions use."""
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
-    request_id = req.id
     admin = is_admin(principal)
     queue: "asyncio.Queue[Optional[tuple[str, dict[str, Any]]]]" = asyncio.Queue()
     runner = agent_mod.TurnRunner(factory, request_id, queue=queue)
@@ -432,74 +432,82 @@ async def post_message(
     ref: str,
     body: MessageBody,
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncDb = Depends(get_async_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Response:
-    req = load_own_draft(db, principal, ref)
-    _require_configured(db)
-    content = lifecycle.clean_message(body.content)
-    _begin_turn(db, req)
-    lifecycle.check_message_rate(db, principal.user.id)
-    msg = add_message(db, req.id, "user", content)
-    if req.proposal and not req.proposal.get("superseded"):
-        req.proposal = {**req.proposal, "superseded": True}
-    now = datetime.utcnow()
-    req.phase = "thinking"
-    req.turn_started_at = now
-    req.last_activity_at = now
-    preface = [
-        (
-            "message",
-            {
-                "id": msg.id,
-                "seq": msg.seq,
-                "role": "user",
-                "created_at": to_api_timestamp(msg.created_at),
-            },
-        )
-    ]
-    db.commit()
-    return await _turn_response(request, db, principal, req, preface)
+    def prepare(session: Session) -> tuple[str, list[tuple[str, dict[str, Any]]]]:
+        req = load_own_draft(session, principal, ref)
+        _require_configured(session)
+        content = lifecycle.clean_message(body.content)
+        _begin_turn(session, req)
+        lifecycle.check_message_rate(session, principal.user.id)
+        msg = add_message(session, req.id, "user", content)
+        if req.proposal and not req.proposal.get("superseded"):
+            req.proposal = {**req.proposal, "superseded": True}
+        now = datetime.utcnow()
+        req.phase = "thinking"
+        req.turn_started_at = now
+        req.last_activity_at = now
+        preface = [
+            (
+                "message",
+                {
+                    "id": msg.id,
+                    "seq": msg.seq,
+                    "role": "user",
+                    "created_at": to_api_timestamp(msg.created_at),
+                },
+            )
+        ]
+        session.commit()
+        return req.id, preface
+
+    request_id, preface = await db.run_sync(prepare)
+    return await _turn_response(request, db.sync_bind, principal, request_id, preface)
 
 
 @router.post("/v1/feedback/{ref}/turn")
 async def post_turn(
     ref: str,
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncDb = Depends(get_async_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Response:
-    req = load_own_draft(db, principal, ref)
-    _require_configured(db)
-    _begin_turn(db, req)
-    last = (
-        db.query(FeedbackMessage)
-        .filter(
-            FeedbackMessage.request_id == req.id,
-            FeedbackMessage.role.in_(("user", "assistant")),
+    def prepare(session: Session) -> str:
+        req = load_own_draft(session, principal, ref)
+        _require_configured(session)
+        _begin_turn(session, req)
+        last = (
+            session.query(FeedbackMessage)
+            .filter(
+                FeedbackMessage.request_id == req.id,
+                FeedbackMessage.role.in_(("user", "assistant")),
+            )
+            .order_by(FeedbackMessage.seq.desc())
+            .first()
         )
-        .order_by(FeedbackMessage.seq.desc())
-        .first()
-    )
-    if last is None or last.role != "user":
-        raise error(
-            409, "nothing_to_answer", "There is no message waiting for an answer"
-        )
-    now = datetime.utcnow()
-    req.phase = "thinking"
-    req.turn_started_at = now
-    db.commit()
-    return await _turn_response(request, db, principal, req, [])
+        if last is None or last.role != "user":
+            raise error(
+                409, "nothing_to_answer", "There is no message waiting for an answer"
+            )
+        now = datetime.utcnow()
+        req.phase = "thinking"
+        req.turn_started_at = now
+        session.commit()
+        return req.id
+
+    request_id = await db.run_sync(prepare)
+    return await _turn_response(request, db.sync_bind, principal, request_id, [])
 
 
 @router.post("/v1/feedback/{ref}/stop", status_code=204)
 async def stop_turn(
     ref: str,
-    db: Session = Depends(get_db),
+    db: AsyncDb = Depends(get_async_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Response:
-    req = load_own_draft(db, principal, ref)
-    task = agent_mod.RUNNING.get(req.id)
+    request_id = await db.run_sync(lambda session: load_own_draft(session, principal, ref).id)
+    task = agent_mod.RUNNING.get(request_id)
     if task is not None and not task.done():
         task.cancel()
         try:
@@ -836,62 +844,75 @@ def delete_agent_connection(
 @router.post("/v1/admin/feedback-agent/test")
 async def test_agent_connection(
     body: Optional[ConnectionBody] = None,
-    db: Session = Depends(get_db),
+    db: AsyncDb = Depends(get_async_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> dict[str, Any]:
     _require_admin(principal)
     body = body or ConnectionBody()
     settings = PlatformSettings()
-    conn = conn_mod.get_connection(db)
-    url = (body.llm_base_url or "").strip() or (conn.llm_base_url if conn else "")
-    model = (body.llm_model or "").strip() or (conn.llm_model if conn else "")
-    key = (body.llm_api_key or "").strip()
-    stored_key = False
-    if not key or key == "__KEEP__":
-        if conn is None or not conn.llm_api_key_encrypted:
-            raise error(
-                422, "validation", "An API key is required.", field="llm_api_key"
-            )
-        # Test an unsaved URL with the stored key only on the key's own host (C004).
-        if key_host_changed(conn.llm_base_url, url):
-            raise error(
-                422,
-                "validation",
-                KEY_FOR_NEW_HOST_MESSAGE + ".",
-                field="llm_api_key",
-            )
-        try:
-            key = conn_mod.read_api_key(conn, settings)
-        except conn_mod.AgentError as exc:
-            result = {
-                "ok": False,
-                "model": model,
-                "latency_ms": 0,
-                "tool_call": False,
-                "detail": exc.admin_detail or exc.message,
-            }
-            return result
-        stored_key = True
-    if not url or not model:
-        raise error(422, "validation", "Base URL and model are required.")
-    url = _validated_url(url, settings)
+
+    def prepare(session: Session) -> tuple[Optional[dict[str, Any]], str, str, str, bool]:
+        conn = conn_mod.get_connection(session)
+        url = (body.llm_base_url or "").strip() or (conn.llm_base_url if conn else "")
+        model = (body.llm_model or "").strip() or (conn.llm_model if conn else "")
+        key = (body.llm_api_key or "").strip()
+        stored_key = False
+        if not key or key == "__KEEP__":
+            if conn is None or not conn.llm_api_key_encrypted:
+                raise error(
+                    422, "validation", "An API key is required.", field="llm_api_key"
+                )
+            # Test an unsaved URL with the stored key only on the key's own host (C004).
+            if key_host_changed(conn.llm_base_url, url):
+                raise error(
+                    422,
+                    "validation",
+                    KEY_FOR_NEW_HOST_MESSAGE + ".",
+                    field="llm_api_key",
+                )
+            try:
+                key = conn_mod.read_api_key(conn, settings)
+            except conn_mod.AgentError as exc:
+                result = {
+                    "ok": False,
+                    "model": model,
+                    "latency_ms": 0,
+                    "tool_call": False,
+                    "detail": exc.admin_detail or exc.message,
+                }
+                return result, url, model, key, stored_key
+            stored_key = True
+        if not url or not model:
+            raise error(422, "validation", "Base URL and model are required.")
+        return None, _validated_url(url, settings), model, key, stored_key
+
+    early, url, model, key, stored_key = await db.run_sync(prepare)
+    if early is not None:
+        return early
+    # The model call runs with no transaction open.
+    await db.rollback()
     result = await conn_mod.test_connection(url, model, key)
-    if (
-        conn is not None
-        and stored_key
-        and url == conn.llm_base_url
-        and model == conn.llm_model
-    ):
-        conn.last_test_at = datetime.utcnow()
-        conn.last_test_ok = bool(result["ok"])
-        conn.last_test_detail = (result.get("detail") or "")[:500] or None
-    audit(
-        db,
-        principal.user.id,
-        "feedback.agent_connection_tested",
-        "connection",
-        {},
-        {"ok": bool(result["ok"]), "latency_ms": result["latency_ms"]},
-    )
-    db.commit()
+
+    def record(session: Session) -> None:
+        conn = conn_mod.get_connection(session)
+        if (
+            conn is not None
+            and stored_key
+            and url == conn.llm_base_url
+            and model == conn.llm_model
+        ):
+            conn.last_test_at = datetime.utcnow()
+            conn.last_test_ok = bool(result["ok"])
+            conn.last_test_detail = (result.get("detail") or "")[:500] or None
+        audit(
+            session,
+            principal.user.id,
+            "feedback.agent_connection_tested",
+            "connection",
+            {},
+            {"ok": bool(result["ok"]), "latency_ms": result["latency_ms"]},
+        )
+        session.commit()
+
+    await db.run_sync(record)
     return result

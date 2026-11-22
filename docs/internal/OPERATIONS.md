@@ -32,6 +32,7 @@ sure one process runs a given job.
 | `QYM_WEB_WORKERS` | `1` | HTTP processes per API pod. Above 1, see "Several web processes in one pod" |
 | `QYM_MAINTENANCE_MODE` | `false` | Reject ingest with 503 during a window |
 | `QYM_LIVE_RETENTION_DAYS` | `180` | Days of live turns, scores and canary checks to retain; day rows have a separate two-year retention |
+| `QYM_LIVE_CHART_IMAGE_RETENTION_DAYS` | `30` | Days a live chart screenshot is kept after its upload; the turn and its scores stay for `QYM_LIVE_RETENTION_DAYS` |
 | `QYM_LIVE_STALE_AFTER_SECONDS` | `300` | Seconds since the last received heartbeat before a live evaluation worker is shown as stale |
 | `QYM_LIVE_TURN_BATCH_MAX` | `100` | Maximum number of turns accepted in one live ingest batch |
 | `QYM_LIVE_DETAIL_MAX_BYTES` | `524288` | Maximum serialized bytes of a live turn's detail; larger detail is dropped and flagged in its summary |
@@ -51,9 +52,13 @@ sure one process runs a given job.
 | `QYM_FEEDBACK_MESSAGES_PER_HOUR` / `QYM_FEEDBACK_DRAFTS_PER_DAY` | `30` / `5` | Feedback assistant limits per user (0 disables); see "Feedback assistant" |
 | `QYM_PRODUCT_EVAL_MAX_RETAINED_JOBS` | `100` | Finished product evals kept in each process's memory; older ones are served from `background_jobs` |
 | `QYM_DB_WORKER_POOL_SIZE` / `QYM_DB_WORKER_MAX_OVERFLOW` | `3` / `2` | Worker pool |
+| `QYM_DB_ASYNC_DRIVER` / `QYM_DATABASE_ASYNC_URL` | `auto` / empty | The async engine behind the `async def` request handlers (environment create/test/refresh, versioning details and tasks, feedback turns, orphan cancel, analysis document upload). `auto` derives the async URL from `QYM_DATABASE_URL` with `asyncpg` (or `psycopg` v3) when the package is installed (the image installs the `[async]` extra); `off`, or no driver, makes those handlers run their database work on the request thread pool instead, like the sync handlers. The async pool uses the API pool sizes and timeouts and reports `application_name=qym-api-async`. `QYM_DATABASE_ASYNC_URL` names the URL outright (same database, async driver). See "Async database driver" |
+| `QYM_INGEST_WRITE_BATCH_SIZE` | `400` | Rows per statement when one ingest batch writes `run_events` and `spans`, and ids per IN-list when it looks up existing rows. Lower it when a proxy or `work_mem` limits statement size; raise it for fewer round trips on very large batches |
+| `QYM_DASHBOARD_WORKER_INTERVAL_SECONDS` / `QYM_DASHBOARD_WORKER_MAX_PARTITIONS` / `QYM_DASHBOARD_WORKER_MAX_EVENTS` / `QYM_DASHBOARD_WORKER_BACKFILL_CHUNK` / `QYM_DASHBOARD_EVENT_PRUNE_INTERVAL_SECONDS` | `1` / `20` / `500` / `200` / `60` | The summary worker: idle poll interval, partitions serialized per tick, outbox events applied per partition transaction, source rows locked per backfill transaction, seconds between outbox prune passes. Ingest waits on the partition and bucket locks a partition transaction holds, so under heavy ingest lower `MAX_EVENTS` and `BACKFILL_CHUNK` (shorter locks) and raise the interval; to drain a backlog faster raise `MAX_PARTITIONS` and `MAX_EVENTS` |
 | `QYM_DB_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement guard on API connections |
 | `QYM_DB_LOCK_TIMEOUT_MS` | `5000` | Lock-wait guard (all roles) |
 | `QYM_DASHBOARD_LIVE_REFRESH_SECONDS` | `2` | How often the summary worker rebuilds a live run's dashboard numbers after its events committed. A rebuild never waits for a row held by another transaction (`NOWAIT`): it is skipped and retried after this interval, counted in the worker's `live_refresh_busy`. Raise it under heavy ingest |
+| `QYM_FACTORY_LLM_CONCURRENCY` / `QYM_FACTORY_LLM_TIMEOUT_SECONDS` / `QYM_FACTORY_ANALYSIS_BATCH_ITEMS` | `4` / `180` / `25` | Data factory jobs: model calls in flight per job; seconds one model call may take before the client gives up (one retry follows; a job has no overall deadline, and its lease is renewed by a heartbeat while calls run); items one rule-analysis call reads (the prompt size). A slow model wants a smaller batch and lower concurrency before a longer timeout |
 | `QYM_RUN_LIVE_REFRESH_SECONDS` | `15` | How often an open run page probes a live run (`/live-status`) and the floor of its row reloads. The page reads it from the run payload and every probe answer, so a change applies to every viewer on their next load. Each reload of a large repeat run costs the API a few hundred ms; raise this when many people watch long runs |
 | `QYM_REQUEST_TIMING` | `false` | `Server-Timing` header + per-request log line (logger `qym_platform.middleware.timing`, was `qym.timing`) |
 | `QYM_LOG_LEVEL` | `INFO` | Platform log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). See "Logging" |
@@ -215,12 +220,12 @@ A component that tries to write anywhere else now fails loudly
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0102`, following `0050` through
+The combined migration chain has one head, `0105`, following `0050` through
 `0051`–`0085`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
-Migrations `0058`–`0084`, `0086`–`0097`, `0099`, `0100` and `0102` are quick DDL or small job/queue inserts.
+Migrations `0058`–`0084`, `0086`–`0097`, `0099`, `0100` and `0102`–`0105` are quick DDL or small job/queue inserts.
 `0098` builds one partial index on `dashboard_change_events`; when that table is over
 256 MB it queues the build (`create_deferred_indexes`, CONCURRENTLY) instead.
 `0101` builds two covering indexes (`run_item_pass_scores`, and `spans` on every partition);
@@ -259,9 +264,12 @@ replica and worker.
 | 0065 | Nullable `projects.archived_at` and `runs.purge_clock_started_at`; sets `archived_at` on projects already archived (a handful of rows) | None: Trash purging pauses for archived projects from now on |
 | 0066 | Empty `background_jobs` table (shared job state for several web processes) | None |
 | 0067 | `projects.correction_approvers` (default `members`) and `projects.correction_require_different_reviewer` (default false), constant defaults on the small projects table; nullable `run_workflow_events.on_behalf_of_user_id` | None: every project keeps today's review behaviour until a manager changes it |
-| 0068 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (on every database, an empty one included, since the job also builds the index): fills search text in id windows (one statement per 500-item window), stores lineage counts of published versions, builds the small partial index `ix_dataset_items_unindexed_version` CONCURRENTLY, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the trigram index; search stays correct, only unindexed. Until the job reaches a row, search rebuilds that row's text on read; results match except a search for a JSON fragment spanning several keys of one object, whose key order PostgreSQL's JSONB text may differ. If the job ever failed (Admin → Maintenance shows it), start `backfill_dataset_search_text` again there: it resumes and is safe to repeat |
+| 0068 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (on every database, an empty one included, since the job also builds the index): fills search text in id windows (one statement per 500-item window), stores lineage counts of published versions, builds the small partial index `ix_dataset_items_unindexed_version` CONCURRENTLY, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the trigram index; search stays correct, only unindexed. Until the job reaches a row, search rebuilds that row's text on read; results match except a search for a JSON fragment spanning several keys of one object, whose key order PostgreSQL's JSONB text may differ. If the job ever failed (Admin → Maintenance shows it), start `backfill_dataset_search_text` again there: it resumes and is safe to repeat |
 | 0069 | Empty `dashboard_run_overview` (each run's overview inputs) and `dashboard_overview_snapshots` (the overview shared by every process and pod) tables | `backfill_dashboard_overview` — **queued, runs by itself** (on every database; on SQLite, or with no runs, it finishes at once): stores each run's overview inputs in run-key windows (one statement per 500-run window; about 0.4 s per 1,000 runs on the perf lab). Until it reaches a run, the overview reads that run's JSON, with the same numbers; the summary worker stores every run it publishes from the start. Resumable and safe to start again from Admin → Maintenance |
-| 0070 | — (one job insert) | `build_runs_search_index` — **queued, runs by itself**: runs `CREATE EXTENSION IF NOT EXISTS pg_trgm`, then builds `ix_dashboard_run_dimensions_search_trgm` (the Runs search box) CONCURRENTLY. Without the privilege to create the extension it logs "runs search index skipped" and finishes; the search stays correct, only unindexed. Safe to start again: it rebuilds the index |
+| 0070 | — (one job insert) | `build_runs_search_index` — **queued, runs by itself**: runs `CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public`, then builds `ix_dashboard_run_dimensions_search_trgm` (the Runs search box) CONCURRENTLY. Without the privilege to create the extension it logs "runs search index skipped" and finishes; the search stays correct, only unindexed. Safe to start again: it rebuilds the index |
+| 0105 | Six empty data factory tables: `data_factories`, `factory_grants`, `factory_rule_categories`, `factory_rules`, `factory_rule_links`, `factory_jobs` (rows go with their factory, a factory with its dataset, by `ON DELETE CASCADE`) | None. Quick DDL, nothing to backfill. The factory worker loop (`services/data_factory.py`) starts with the API in `all` mode and with the workers service in split mode |
+| 0104 | Empty `run_bookmarks` table (a user's bookmark of a run with a markdown note, private or public, pinned or not; rows go with the run and the user by `ON DELETE CASCADE`) | None. Quick DDL, nothing to backfill |
+| 0103 | Empty `live_chart_snapshots` (the drawn chart of a live turn as compressed text; FK to the turn `ON DELETE CASCADE`) and `live_chart_styles` (one stylesheet per source and content hash; FK to the source `ON DELETE CASCADE`) | None: PNG uploads work as before |
 | 0102 | `projectrole` gains `VIEWER` (Postgres `ALTER TYPE ... ADD VALUE`, outside the transaction; no rewrite) | None. Managers can now give a member the Viewer role (C033) |
 | 0101 | Covering indexes `ix_run_item_pass_scores_cover` (`run_id, metric_name, item_id, pass_number` INCLUDE `score_numeric`) and `ix_span_run_start_cover` on every span partition (`run_id, start_time_ns` INCLUDE the columns step latency reads), so these reads are index-only (C073) | `create_deferred_indexes` — **queued, runs by itself** only for a table over 256 MB: builds each index CONCURRENTLY (span partitions one by one, attached to the parent index), then runs `VACUUM (ANALYZE)` on `run_item_pass_scores` and on the finished span partitions. About 0.6–0.7 GB of index for 3 M spans |
 | 0100 | Empty `run_create_keys` (an `Idempotency-Key` of `POST /v1/runs` and the run it created, kept 24 hours; FK to the run `ON DELETE CASCADE`) | None: clients that send no key create runs as before |
@@ -426,7 +434,7 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0102` and a healthy API. The API process then runs every queued job itself.
+   `0105` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -487,6 +495,48 @@ log_min_duration_statement = 500ms
 autovacuum_naptime = 15s        autovacuum_vacuum_cost_limit = 1000
 ALTER TABLE run_events, dashboard_change_events, dashboard_record_state SET (autovacuum_vacuum_scale_factor = 0.02, autovacuum_analyze_scale_factor = 0.01);
 ```
+
+## Async database driver
+
+The data layer is synchronous SQLAlchemy on `psycopg2`: every sync request
+handler runs on the request thread pool (capped at the API pool size) with one
+pooled connection for its duration. A few handlers are `async def` because they
+await another service (an Evaluation Service probe, the feedback model, a model
+call) between their database phases. Those take their database handle from
+`deps.get_async_db` and run each database phase with `await db.run_sync(fn)`:
+
+- with an async driver, `fn` runs against the async engine
+  (`db/session.py` `build_async_engine`; `asyncpg` for PostgreSQL, from the
+  `[async]` extra the image installs) and the request loop never blocks on the
+  database;
+- without one (`QYM_DB_ASYNC_DRIVER=off`, the driver or `greenlet` missing, or a
+  test that overrides `get_db`), the same `fn` runs on the request thread pool.
+
+SQLAlchemy's asyncio extension runs on `greenlet`, which SQLAlchemy 2.1 no longer
+installs by itself; the `[async]` extra includes `sqlalchemy[asyncio]` for it. An
+image built from the platform package without that extra (or with an older
+`[async]` that listed only the drivers) logs `async database engine not
+available: the greenlet package is missing` at the first async handler and runs
+those handlers on the thread pool; install `sqlalchemy[asyncio]` to get the
+async engine back.
+
+Either way the handler ends its transaction (`await db.rollback()`) before
+awaiting the remote call, so no connection sits idle in transaction for the
+call's duration (the `idle_in_transaction_session_timeout` of 60 s used to kill
+the connection under a slow probe, and the pool slot was held meanwhile).
+
+The async pool is sized like the API pool (`QYM_DB_POOL_SIZE` +
+`QYM_DB_MAX_OVERFLOW`) and connects with `application_name=qym-api-async`, so
+`pg_stat_activity` shows both. Count it when sizing `max_connections`: a web
+process can now hold up to twice the API pool, though the async pool only grows
+with concurrent async handlers.
+
+The analysis aggregation and the rule writer are coroutines that interleave
+model calls with synchronous database work (the same code runs inside analysis
+jobs). Their request handlers run them through
+`services/loop_offload.run_blocking_coroutine`: a worker thread with its own
+event loop, separate from the request thread pool, so one model call lasting
+minutes neither stalls the request loop nor takes one of the request threads.
 
 ## Backups
 
@@ -608,7 +658,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0102`.
+deployment only after the API has migrated to `0105`.
 
 ```yaml
 apiVersion: apps/v1
@@ -838,6 +888,7 @@ main:
 | `QYM_PROXY_SHARED_SECRET` | with `proxy_headers` | — | The value the proxy sends in `X-Qym-Proxy-Secret`; main does not start without it outside dev/test/local |
 | `QYM_WEB_WORKERS` | no | `1` | 2 recommended; no loop process is started for `main` |
 | `QYM_DB_POOL_SIZE` / `QYM_DB_MAX_OVERFLOW` / `QYM_HTTP_THREADPOOL_SIZE` | no | `10` / `10` / `0` | Per web process |
+| `QYM_DB_ASYNC_DRIVER` / `QYM_DATABASE_ASYNC_URL` | no | `auto` / empty | Async engine for the async handlers; a second pool of the same size per web process (count it against `max_connections`). See "Async database driver" |
 | `QYM_MAX_UPLOAD_BYTES` | no | 100 MB | Dataset uploads |
 | `QYM_MAIN_INCLUDE_INGEST` | no | `true` | Keep the ingest routes (works without the ingress rules) |
 | `QYM_PRODUCT_EVAL_MAX_QUEUED` | no | `0` | Queue cap for product evals (0 = `QYM_PRODUCT_EVAL_MAX_WORKERS`) |
@@ -854,6 +905,7 @@ ingestion:
 | `QYM_MAX_INGEST_BODY_BYTES` | no | 20 MB | Per events POST |
 | `QYM_MAX_UPLOAD_BYTES` | no | 100 MB | `POST /v1/runs:upload` |
 | `QYM_EVENT_LOG_MODE` | no | `full` | `structural` after rollout |
+| `QYM_INGEST_WRITE_BATCH_SIZE` | no | `400` | Rows per `run_events` / `spans` INSERT in one batch |
 | `QYM_SPAN_MAX_BYTES` | no | 1 MiB | |
 | `QYM_WEB_WORKERS`, `QYM_DB_POOL_SIZE`, `QYM_DB_MAX_OVERFLOW` | no | `1`, `10`, `10` | Per process; scale with replicas |
 | `QYM_RUN_STALE_TIMEOUT_SECONDS` | no | `180` | Same value as main |
@@ -870,6 +922,7 @@ workers:
 | `QYM_PRODUCT_EVAL_MAX_WORKERS`, `QYM_PRODUCT_EVAL_*` (concurrency, timeout, run count, default dataset, `MAX_RETAINED_JOBS`) | no | `3`, … | Per workers process |
 | `QYM_JOB_POLL_INTERVAL_SECONDS`, `QYM_SERVICE_HEARTBEAT_SECONDS` | no | `1`, `10` | |
 | `QYM_DASHBOARD_LIVE_REFRESH_SECONDS` | no | `2` | Live dashboard rebuild interval (see the single-server table) |
+| `QYM_DASHBOARD_WORKER_INTERVAL_SECONDS`, `QYM_DASHBOARD_WORKER_MAX_PARTITIONS`, `QYM_DASHBOARD_WORKER_MAX_EVENTS`, `QYM_DASHBOARD_WORKER_BACKFILL_CHUNK`, `QYM_DASHBOARD_EVENT_PRUNE_INTERVAL_SECONDS` | no | `1`, `20`, `500`, `200`, `60` | Summary worker batch sizes (see the single-server table) |
 | `QYM_RUN_LIVE_REFRESH_SECONDS` | no | `15` | Run page probe interval for live runs (see the single-server table) |
 | `QYM_EVAL_JOB_TIMEOUT_SECONDS`, `QYM_EVAL_*` | no | `8100` | Evaluation Service dispatcher |
 | `QYM_SPAN_RETENTION_DAYS`, `QYM_DELETED_RUN_GRACE_DAYS`, `QYM_SPAN_PARTITION_DAYS_AHEAD` | no | `60`, `30`, `14` | Retention runs here |
@@ -1024,9 +1077,44 @@ database configuration.
 `QYM_LIVE_CHART_IMAGE_MAX_BYTES` (default 2097152, 2 MiB; minimum 65536) and
 `QYM_LIVE_CHART_IMAGES_PER_TURN` (default 10) cap each image and the number of
 distinct image refs per turn. Budget roughly 150–300 KB per chart: about
-15 MB/day at 100 turns/day with 40 % charted turns, or 2.7 GB at the default
-180-day retention. Images follow turn retention and project deletion; backups
-remain a single `pg_dump`.
+15 MB/day at 100 turns/day with 40 % charted turns, or 450 MB at the default
+30-day image retention. Retention deletes an image 30 days after its upload
+(`QYM_LIVE_CHART_IMAGE_RETENTION_DAYS`). The period counts from the upload, not
+from the turn's day, so a backfill's new screenshot of an old turn is kept for
+the full period. The turn, its scores and the chart reading stay for
+`QYM_LIVE_RETENTION_DAYS`; the turn page then says that the screenshot is no
+longer stored. Images are also deleted with their turn and on project deletion;
+backups remain a single `pg_dump`.
+
+**Chart snapshots.** A worker that sends chart snapshots uploads the drawn
+chart as text (its HTML and SVG) and no picture; a PNG still arrives for charts
+that cannot be captured as text, such as maps. qym stores the markup
+zlib-compressed in `live_chart_snapshots` and the stylesheet it needs once per
+source and content hash in `live_chart_styles` (migration `0103`).
+`QYM_LIVE_CHART_SNAPSHOT_MAX_BYTES` and `QYM_LIVE_CHART_STYLE_MAX_BYTES` (both
+default 2097152, 2 MiB; minimum 65536) cap the uncompressed markup and
+stylesheet; `QYM_LIVE_CHART_IMAGES_PER_TURN` also caps the snapshot refs per
+turn. Budget about 6 KB per chart against 150–300 KB for a picture: on the
+basis above roughly 0.4 MB/day, or about 70 MB at the default 180-day
+retention, plus one stylesheet of about 150 KB compressed per renderer build
+and source. A snapshot is kept as long as its turn; the 30-day image rule does
+not apply to it. Retention deletes a stylesheet that no snapshot of its source
+names once it is a day old. A chart keeps one kind of evidence: a new snapshot
+removes the chart's PNG, and a new PNG removes its snapshot.
+
+The markup comes from model output, so qym treats it as untrusted. It is
+refused at ingest when it does not begin with a plain `<html>` tag and its
+empty head, or contains script, iframe, object, embed, link, meta, base,
+template or noscript tags. It is served only as JSON (`chart-snapshot`) and CSS
+(`chart-style`), never as `text/html`, with `nosniff` and a
+`Content-Security-Policy: sandbox; default-src 'none'` header of their own.
+The turn page redraws it inside a sandboxed frame without scripts, same-origin
+access or network access; the frame's policy is written ahead of the stored
+markup and is repeated on the frame itself. That
+frame's document is built in the page, so a `Content-Security-Policy` that a
+proxy adds to qym's pages applies inside it as well: such a policy must allow
+inline styles and `data:` fonts and images, or redrawn charts lose their
+styling.
 
 Platform env settings for screenshots and worker control:
 
@@ -1034,6 +1122,9 @@ Platform env settings for screenshots and worker control:
 |---|---|---|
 | `QYM_LIVE_CHART_IMAGE_MAX_BYTES` | `2097152` | Maximum bytes per PNG (2 MiB; minimum 65536) |
 | `QYM_LIVE_CHART_IMAGES_PER_TURN` | `10` | Maximum distinct chart image refs per turn |
+| `QYM_LIVE_CHART_IMAGE_RETENTION_DAYS` | `30` | Days a screenshot is kept after its upload |
+| `QYM_LIVE_CHART_SNAPSHOT_MAX_BYTES` | `2097152` | Maximum UTF-8 bytes of one chart snapshot's markup (2 MiB; minimum 65536) |
+| `QYM_LIVE_CHART_STYLE_MAX_BYTES` | `2097152` | Maximum bytes of one snapshot stylesheet (2 MiB; minimum 65536) |
 | `QYM_LIVE_JOBS_RETENTION_DAYS` | `90` | Job history retention in days |
 | `QYM_LIVE_EVENTS_RETENTION_DAYS` | `30` | Worker event retention in days |
 | `QYM_LIVE_JOB_MAX_DAYS` | `31` | Maximum inclusive days per job |
@@ -1170,6 +1261,18 @@ the current status and the affected day's gaps when investigating missing turns.
 retention of live turns, scores and canary checks. Day rows have separate
 two-year retention. Configure it on the qym process that runs retention, and
 keep the background loops running in the single-server or split layout.
+
+`QYM_LIVE_CHART_IMAGE_RETENTION_DAYS` (default 30) is read by the same process.
+It deletes a chart screenshot that many days after its upload and leaves the
+turn and its scores in place. A value at or above `QYM_LIVE_RETENTION_DAYS`
+has no practical effect: the images then go with their turns. The
+`live_retention` audit entry counts these deletions as `chart_images_expired`,
+apart from `chart_images`, the screenshots deleted with their turns.
+
+Chart snapshots have no setting of their own: they are deleted with their turn
+(`chart_snapshots` in the audit entry). The same run deletes a snapshot
+stylesheet that no snapshot of its source names and that was uploaded more than
+a day ago (`chart_styles`).
 
 ### Troubleshooting
 

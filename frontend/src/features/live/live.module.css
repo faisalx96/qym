@@ -12,6 +12,10 @@
   min-inline-size: 0;
 }
 
+.overviewHeader [data-page-header] {
+  margin: 0;
+}
+
 .page [dir='auto'] {
   text-align: start;
   overflow-wrap: anywhere;
@@ -50,7 +54,27 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm) var(--space-md);
+  margin: 0;
   font-size: var(--font-base);
+}
+
+.statusItem {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-sm);
+  max-inline-size: 100%;
+}
+
+.statusItem dt {
+  color: var(--text-muted);
+}
+
+.statusItem dd {
+  min-inline-size: 0;
+  margin: 0;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
 
 .number {
@@ -77,22 +101,29 @@
   color: var(--tone-text);
 }
 
-/* D-08: the Days heading above the table. */
-.blockTitle {
-  margin-block-end: var(--space-sm);
-}
-
 .mixRow {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
   gap: var(--space-md);
+}
+
+.mixContent {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.mixPlot {
+  margin: var(--card-padding);
 }
 
 .mix {
   display: flex;
-  gap: 1px;
+  gap: calc(var(--space-xs) / 2);
   min-inline-size: 0;
   block-size: var(--control-height);
+  background: var(--bg-surface);
 }
 
 .mixSegment {
@@ -107,22 +138,20 @@
   block-size: 100%;
 }
 
-.mixLegend {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-sm) var(--space-md);
-  margin-block-start: var(--space-md);
-}
-
 .legendItem {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
-.legendItem strong {
-  margin-inline-start: auto;
+.diagnosisLabel,
+.metricLabel {
+  display: block;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  text-align: start;
   color: var(--text-primary);
 }
 
@@ -134,122 +163,221 @@
   background: var(--tone);
 }
 
-/* B-07: Unanswerable is the darker grey, solid (the mix bar segment and a legend swatch). */
-.mixSegment[data-dark],
-[data-dark] > .swatch {
-  --tone: var(--text-dim);
-}
-
 .received {
   display: block;
-  margin-block-start: var(--space-md);
+  padding: var(--card-padding);
 }
 
-.metricRows {
-  display: grid;
-  gap: var(--space-sm);
+.metricMeter {
+  display: block;
+  inline-size: 100%;
+  block-size: calc(var(--space-xs) * 1.5);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
 }
 
-.metricRow {
+.metricMeter > span {
+  display: block;
+  block-size: 100%;
+  border-radius: inherit;
+  background: var(--tone, var(--text-muted));
+}
+
+.compactMix {
+  block-size: calc(var(--space-sm) + var(--space-xs) / 2);
+}
+
+.trendContent {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-xs) var(--space-sm);
-  padding-block: var(--space-xs);
-  font-size: var(--font-base);
-}
-
-.canaries {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-sm) var(--space-md);
-  padding-block-start: var(--space-md);
-  margin-block-start: var(--space-md);
-  border-block-start: 1px solid var(--border-subtle);
-  font-size: var(--font-sm);
+  flex-direction: column;
+  gap: var(--space-lg);
+  min-inline-size: 0;
 }
 
 .trendPlot {
+  --live-axis-width: calc(var(--space-xl) + var(--space-md));
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-inline-size: 0;
+  padding-block-end: var(--space-xs);
+}
+
+.trendTitle {
+  margin: 0;
+  padding-inline-start: var(--live-axis-width);
+}
+
+.trendPanel {
+  position: relative;
+  block-size: calc(var(--space-xl) * 5);
+  margin-block: var(--space-sm);
+  padding-inline-start: var(--live-axis-width);
+}
+
+.trendPanel[data-live-panel='rate'] {
+  block-size: calc(var(--space-xl) * 3);
+  margin-block-start: var(--space-md);
+}
+
+.trendArea {
+  position: relative;
+  block-size: 100%;
+  min-inline-size: 0;
+}
+
+.trendYAxis {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: calc(var(--live-axis-width) - var(--space-sm));
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.trendYAxis > span {
+  position: absolute;
+  inset-inline-end: 0;
+  transform: translateY(50%);
+}
+
+.trendGrid {
+  position: absolute;
+  inset-block: 0;
+  inset-inline: var(--live-axis-width) 0;
+  pointer-events: none;
+}
+
+.trendGrid > span {
+  position: absolute;
+  inset-inline: 0;
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.trendColumns {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--live-day-count), minmax(0, 1fr));
+  block-size: 100%;
+}
+
+/* Native buttons need explicit alignment in Chrome 131 and earlier. */
+.trendDay {
   position: relative;
   display: flex;
-  min-inline-size: 0;
-  min-block-size: calc(var(--space-xl) * 6);
-  margin-inline: calc(var(--live-trend-overhang, 0px) * -1);
-}
-
-/* Half-gap edge padding keeps pitch = plot width / count in both layouts, matching BarColumns' label rule. */
-.trendPlot[data-dense='true'] .trendColumns {
-  gap: calc(var(--space-xs) / 4);
-  padding-inline: calc(var(--space-xs) / 8);
-}
-
-.trendPlot[data-dense='true'] [data-part='well'] {
-  margin-inline: calc(var(--space-xs) / -8);
-  padding-inline: calc(var(--space-xs) / 8);
-}
-
-.trendPlot[data-dense='true'] [data-live-trend-day] {
-  min-inline-size: calc(var(--space-xs) / 2);
-}
-
-.trendPlot[data-dense='true'] [data-live-trend-day]:first-child [data-part='count'] {
-  align-self: flex-start;
-}
-
-.trendPlot[data-dense='true'] [data-live-trend-day]:last-child [data-part='count'] {
-  align-self: flex-end;
-}
-
-.trendPlot[data-dense='true'] [data-live-trend-day]:first-child [data-part='foot'] {
-  align-items: flex-start;
-}
-
-.trendPlot[data-dense='true'] [data-live-trend-day]:last-child [data-part='foot'] {
   align-items: flex-end;
+  justify-content: center;
+  min-inline-size: 0;
+  block-size: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
 }
 
-.trendPlot[data-dense='true'] [data-live-trend-day]:not([data-zero]) [data-part='bar'] {
-  min-block-size: calc(var(--space-xs) / 2);
+.trendDay:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.trendBar {
+  position: relative;
+  display: block;
+  inline-size: min(var(--control-height), calc(100% - var(--space-xs)));
+  border-start-start-radius: var(--space-xs);
+  border-start-end-radius: var(--space-xs);
+}
+
+.trendPlot[data-dense='true'] .trendBar {
+  inline-size: max(2px, calc(100% - 1px));
+  max-inline-size: var(--control-height);
+}
+
+.trendCount {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-end: calc(100% + var(--space-xs));
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 .rateLine {
   position: absolute;
-  inset-block: var(--space-lg) calc(var(--space-md) + var(--space-xs));
-  inset-inline: 0;
+  inset: 0;
   inline-size: 100%;
-  block-size: calc(100% - var(--space-lg) - var(--space-md) - var(--space-xs));
+  block-size: 100%;
   overflow: visible;
   pointer-events: none;
 }
 
 .rateLine polyline {
   fill: none;
-  stroke: var(--text-primary);
+  stroke: var(--chart-1);
   stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }
 
-.rateLine circle {
-  fill: var(--text-primary);
+.ratePosition {
+  position: absolute;
+  inset-inline-start: 50%;
+  inline-size: 0;
+  block-size: 0;
 }
 
-.lineKey {
-  inline-size: var(--space-md);
-  border-block-start: 2px solid var(--text-primary);
+.rateDot {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  inline-size: var(--space-sm);
+  block-size: var(--space-sm);
+  border: 2px solid var(--bg-surface);
+  border-radius: 50%;
+  background: var(--chart-1);
+  transform: translate(-50%, -50%);
 }
 
-.trendPlot [data-live-gap='true'] [data-part='bar'] {
-  flex: 1;
-  min-block-size: var(--bar-action-h);
+.rateValue {
+  position: absolute;
+  inset-block-end: var(--space-sm);
+  inline-size: calc(var(--space-xl) + var(--space-lg));
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
 }
 
-.trendPlot [data-live-gap='true'] [data-part='well']::before {
-  flex: 0;
+.rateValue[data-low]:not([data-last]) {
+  inset-block-start: var(--space-sm);
+  inset-block-end: auto;
 }
 
-/* Reserve the measured implementation's frames during the pending delay (impl-*.json). */
+.trendXAxis {
+  position: relative;
+  block-size: var(--space-md);
+  margin-inline-start: var(--live-axis-width);
+  margin-block-start: var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.trendXAxis > span {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+/* Keep the loading frame reserved during the pending delay. */
 .loading {
   --live-status-height: calc(var(--control-height) + var(--space-md));
   --live-tiles-height: calc(var(--space-xl) * 2 + var(--space-sm) + 2px);
@@ -268,19 +396,18 @@
   visibility: hidden;
 }
 
-@container (width < 900px) {
+@container (width < 1100px) {
   .mixRow {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .tiles > [role='list'] {
-    grid-template-columns: repeat(12, minmax(0, 1fr));
+  .tiles > [role='group'] {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
 
-  .tiles > [role='list'] > [data-tile]:nth-child(n + 5) {
-    grid-column: span 6;
-  }
-
+@container (width < 900px) {
   .loading {
     --live-tiles-height: calc(var(--space-xl) * 4 + var(--space-lg) - 1px);
     --live-mix-height: calc(var(--space-xl) * 6 + var(--space-md) + var(--space-xs));
@@ -291,8 +418,8 @@
 }
 
 @container (width < 480px) {
-  .mixLegend {
-    grid-template-columns: minmax(0, 1fr);
+  .tiles > [role='group'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .loading {

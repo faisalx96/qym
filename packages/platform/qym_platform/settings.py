@@ -114,6 +114,16 @@ class PlatformSettings(BaseSettings):
     db_worker_statement_timeout_ms: int = Field(default=300_000, ge=1000)
     db_lock_timeout_ms: int = Field(default=5_000, ge=100)
     db_idle_in_transaction_timeout_ms: int = Field(default=60_000, ge=1000)
+    # Async driver for the ``async def`` request handlers (db/session.py
+    # ``build_async_engine``). ``database_async_url`` names the async form of
+    # ``database_url`` outright (``postgresql+asyncpg://...``); otherwise
+    # ``db_async_driver`` derives it: ``auto`` takes ``asyncpg`` (PostgreSQL)
+    # or ``aiosqlite`` (a SQLite file) when the package is installed
+    # (``pip install qym-platform[async]``), ``off`` never builds an async
+    # engine. Without one, those handlers run their database work on the
+    # request thread pool, like the sync handlers.
+    database_async_url: str = Field(default="")
+    db_async_driver: str = Field(default="auto", pattern="^(auto|off|asyncpg|psycopg|aiosqlite)$")
 
     # Secrets
     llm_config_encryption_key: str = Field(default="")
@@ -174,6 +184,17 @@ class PlatformSettings(BaseSettings):
     # its events committed (each rebuild is a short transaction). Raise it under
     # heavy ingest to trade dashboard freshness for fewer lock collisions.
     dashboard_live_refresh_seconds: float = Field(default=2.0, gt=0, le=300)
+    # Dashboard summary worker (services/dashboard_summaries.py): the idle
+    # poll interval, how many partitions one tick serializes, how many
+    # outbox events one partition transaction applies, how many source rows
+    # one backfill transaction locks, and how often published outbox rows
+    # are pruned. Smaller batches hold the partition and bucket locks for
+    # less time (ingest waits on them); larger ones drain a backlog faster.
+    dashboard_worker_interval_seconds: float = Field(default=1.0, gt=0, le=60)
+    dashboard_worker_max_partitions: int = Field(default=20, ge=1, le=500)
+    dashboard_worker_max_events: int = Field(default=500, ge=1, le=10_000)
+    dashboard_worker_backfill_chunk: int = Field(default=200, ge=1, le=10_000)
+    dashboard_event_prune_interval_seconds: float = Field(default=60.0, ge=1, le=3600)
     # How often a run page probes a live run (``/live-status``) and the floor
     # of its row reloads. Served to the page in the run payload and the probe
     # answer, so one deployment value governs every viewer.
@@ -211,17 +232,31 @@ class PlatformSettings(BaseSettings):
     # "structural" drops item/metric bodies that already live in run_items,
     # run_item_attempts and run_item_scores, keeping ids, numbers and status.
     event_log_mode: str = Field(default="full", pattern="^(full|structural)$")
+    # Rows per statement when an ingest batch writes run_events and spans,
+    # and ids per IN-list when it looks up existing rows. Lower it when the
+    # server's work_mem or a proxy's statement size limit is tight; raise it
+    # for fewer round trips on batches of many thousand events.
+    ingest_write_batch_size: int = Field(default=400, ge=50, le=5000)
 
     # Run lifecycle. A RUNNING run with no event for this long is shown STOPPED
     # (lease_timeout) until its next event. The SDK heartbeats every 15s, but a
     # heartbeat can wait behind a slow upload, so keep a wide margin.
     run_stale_timeout_seconds: int = Field(default=180, ge=5)
     analysis_job_max_workers: int = Field(default=2, ge=1)
+    # Data factory: model calls in flight per job (generation and analysis batches).
+    factory_llm_concurrency: int = Field(default=4, ge=1, le=16)
+    # One model call of a factory job: seconds before the client gives up (one retry
+    # follows), and the items one rule-analysis call reads (the prompt size).
+    factory_llm_timeout_seconds: int = Field(default=180, ge=10, le=3600)
+    factory_analysis_batch_items: int = Field(default=25, ge=5, le=100)
     analysis_max_concurrency: int = Field(default=20, ge=1, le=20)
     analysis_max_retries: int = Field(default=1, ge=0, le=5)
 
     # Live evaluation (feature round 2026-11-live-evaluation)
     live_retention_days: int = Field(default=180, ge=1)
+    # Chart screenshots are deleted this many days after their upload; the turn
+    # and its scores stay until live_retention_days.
+    live_chart_image_retention_days: int = Field(default=30, ge=1)
     live_stale_after_seconds: int = Field(default=300, ge=30)
     live_turn_batch_max: int = Field(default=100, ge=1, le=1000)
     live_detail_max_bytes: int = Field(default=524288, ge=4096)
@@ -229,6 +264,10 @@ class PlatformSettings(BaseSettings):
     live_ingest_max_body_bytes: int = Field(default=64 * 1024 * 1024, ge=1_048_576)
     live_chart_image_max_bytes: int = Field(default=2 * 1024 * 1024, ge=65536)
     live_chart_images_per_turn: int = Field(default=10, ge=1, le=100)
+    # A chart snapshot is the drawn chart as HTML text; its stylesheet is stored
+    # once per source and content hash. Both caps count uncompressed UTF-8 bytes.
+    live_chart_snapshot_max_bytes: int = Field(default=2 * 1024 * 1024, ge=65536)
+    live_chart_style_max_bytes: int = Field(default=2 * 1024 * 1024, ge=65536)
     live_jobs_retention_days: int = Field(default=90, ge=1)
     live_events_retention_days: int = Field(default=30, ge=1)
     live_job_max_days: int = Field(default=31, ge=1)

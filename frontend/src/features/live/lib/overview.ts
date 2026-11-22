@@ -26,7 +26,7 @@ export function useCachedOverview(slug: string, source: string) {
   return latest?.state.data as LiveOverview | undefined;
 }
 
-/** Measured impl frames: seven services, fourteen day rows; each extra day is 40px. */
+/** First-load estimates for the services table, two chart panels and day rows (40px per row). */
 export function overviewFrames(overview: LiveOverview | undefined, daysPage: number): Record<string, string> {
   const services = overview?.day.services.length ?? 7;
   const rows = overview
@@ -35,20 +35,16 @@ export function overviewFrames(overview: LiveOverview | undefined, daysPage: num
         Math.max(0, overview.days.total - (daysPage - 1) * overview.days.page_size),
       )
     : 14;
-  const wide = Math.ceil(services / 7);
-  const medium = Math.ceil(services / 3);
-  const narrow = Math.ceil(services / 2);
-  // Fixed chrome includes the canary line at the measured column width. Wrapping names
-  // can still change it: preserve loaded data during day switches instead of estimating again.
+  // Names and captions may wrap; keep loaded data during day switches rather than replacing it with estimates.
   return {
-    '--live-services-wide': `${126 + wide * 66}px`,
-    '--live-services-medium': `${154 + medium * 66 + Math.max(0, medium - 1) * 14}px`,
-    '--live-services-narrow': `${266 + narrow * 66 + Math.max(0, narrow - 1) * 14}px`,
-    '--live-days-wide': `${116 + rows * 40}px`,
-    '--live-days-medium': `${128 + rows * 40}px`,
-    '--live-days-narrow': `${156 + rows * 40}px`,
-    '--live-trend-wide': '330px',
-    '--live-trend-medium': '330px',
-    '--live-trend-narrow': '427px',
+    '--live-services-wide': `${100 + services * 40}px`,
+    '--live-services-medium': `${100 + services * 40}px`,
+    '--live-services-narrow': `${138 + services * 40}px`,
+    '--live-days-wide': `${148 + rows * 40}px`,
+    '--live-days-medium': `${148 + rows * 40}px`,
+    '--live-days-narrow': `${180 + rows * 40}px`,
+    '--live-trend-wide': '500px',
+    '--live-trend-medium': '520px',
+    '--live-trend-narrow': '620px',
   };
 }

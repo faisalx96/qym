@@ -1,6 +1,11 @@
 /** Static API-shaped examples for the Live design round. Vocabulary matches scripts/seed_live.py. */
 import evidenceFixtures from './liveEvidenceFixtures.json';
-import { workerDefaults, type LiveWorkerRead, type LiveWorkerEvent } from '@/api/liveWorker';
+import {
+  workerDefaults,
+  type LiveActivity,
+  type LiveWorkerRead,
+  type LiveWorkerEvent,
+} from '@/api/liveWorker';
 import type { LiveMetricSpec, LiveOverview, LiveTurnDetail, LiveTurnsPage } from '@/api/live';
 
 const metric = (
@@ -540,13 +545,32 @@ export const liveWorkerRead: LiveWorkerRead = {
     version: 3,
     created_at: workerAt,
     created_by: 'Ali',
-    note: 'Production settings',
+    note: 'Switched Judge B to the new model and turned chart vision on for preprod.',
     values: workerValues,
     secret_hints: { langfuse_secret_key: '1234', database_password: '5678', dataiku_api_key: '9012' },
   },
   versions: [
-    { version: 3, created_at: workerAt, created_by: 'Ali', note: 'Production settings' },
-    { version: 2, created_at: '2026-11-02T09:00:00Z', created_by: 'Sara', note: 'Initial connection checks' },
+    {
+      version: 3,
+      created_at: workerAt,
+      created_by: 'Ali',
+      note: 'Switched Judge B to the new model and turned chart vision on for preprod.',
+      changed_sections: ['models', 'evaluation'],
+    },
+    {
+      version: 2,
+      created_at: '2026-11-02T09:00:00Z',
+      created_by: 'Sara',
+      note: 'Connection checks passed for Langfuse, Dataiku and the database.',
+      changed_sections: ['langfuse', 'dataiku', 'database'],
+    },
+    {
+      version: 1,
+      created_at: '2026-11-01T09:00:00Z',
+      created_by: 'Sara',
+      note: null,
+      changed_sections: ['evaluation', 'models', 'langfuse', 'evaluator_traces', 'dataiku', 'database'],
+    },
   ],
   jobs: [
     {
@@ -587,6 +611,26 @@ export const liveWorkerRead: LiveWorkerRead = {
       updated_at: '2026-11-02T09:00:04Z',
       started_at: '2026-11-02T09:00:01Z',
       finished_at: '2026-11-02T09:00:04Z',
+      cancel_requested: false,
+    },
+    {
+      id: 'job-failed',
+      kind: 'backfill',
+      params: {
+        since_day: '2026-10-28',
+        until_day: '2026-10-29',
+        since: '2026-10-28T00:00:00Z',
+        until: '2026-10-30T00:00:00Z',
+        limit: 200,
+      },
+      status: 'failed',
+      progress: { found: 91, skipped_existing: 0, evaluated: 46, failed: 1 },
+      error: 'Dataiku did not answer for 10 minutes; the job stopped after 46 of 91 turns.',
+      requested_by: 'Sara',
+      requested_at: '2026-11-01T09:00:00Z',
+      updated_at: '2026-11-01T09:10:00Z',
+      started_at: '2026-11-01T09:00:00Z',
+      finished_at: '2026-11-01T09:10:00Z',
       cancel_requested: false,
     },
   ],
@@ -658,7 +702,13 @@ export const liveWorkerPending: LiveWorkerRead = {
     },
   },
   versions: [
-    { version: 4, created_at: workerAt, created_by: 'Ali', note: 'Change database host' },
+    {
+      version: 4,
+      created_at: workerAt,
+      created_by: 'Ali',
+      note: 'Change database host',
+      changed_sections: ['database'],
+    },
     ...liveWorkerRead.versions,
   ],
   running: { ...liveWorkerRead.running!, settings_version_applied: 3, verification: null },
@@ -750,3 +800,103 @@ export const liveWorkerEvents: LiveWorkerEvent[] = [
     last_at: '2026-11-03T13:40:00Z',
   },
 ];
+
+/** Activity line answers (GET …/live/worker/activity): what the worker last reported it is doing. */
+const activityAt = '2026-11-03T14:20:05Z';
+// The worker's order: the chart check runs before the judges.
+const activitySteps = ['fetch', 'chart', 'judge', 'sql', 'save'];
+const activityWorker: LiveActivity['worker'] = {
+  state: 'running',
+  reason: null,
+  last_report_at: activityAt,
+  stale: false,
+  last_poll_at: '2026-11-03T14:20:00Z',
+  poll_interval_s: 30,
+};
+const activityJob: NonNullable<LiveActivity['job']> = {
+  id: 'job-running',
+  kind: 'backfill',
+  status: 'running',
+  trace_id: null,
+  progress: { found: 20, evaluated: 7 },
+  requested_at: '2026-11-03T14:10:00Z',
+  requested_by: 'Ali',
+  updated_at: activityAt,
+};
+const activitySlot = { step_count: 5, started_at: '2026-11-03T14:19:40Z', reported_at: activityAt };
+export const liveActivityIdle: LiveActivity = {
+  server_time: '2026-11-03T14:20:08Z',
+  worker: activityWorker,
+  activity: { steps: activitySteps, live: null, job: null },
+  job: null,
+};
+export const liveActivityLive: LiveActivity = {
+  ...liveActivityIdle,
+  activity: {
+    steps: activitySteps,
+    live: {
+      ...activitySlot,
+      kind: 'live',
+      trace_id: 'turn-live',
+      step: 'judge',
+      step_index: 3,
+      done: 0,
+      total: 2,
+    },
+    job: null,
+  },
+};
+export const liveActivityBackfill: LiveActivity = {
+  ...liveActivityIdle,
+  activity: {
+    steps: activitySteps,
+    live: null,
+    job: {
+      ...activitySlot,
+      kind: 'backfill',
+      job_id: 'job-running',
+      trace_id: 'turn-backfill',
+      step: 'judge',
+      step_index: 3,
+      done: 7,
+      total: 20,
+    },
+  },
+  job: activityJob,
+};
+export const liveActivityQueued: LiveActivity = {
+  ...liveActivityIdle,
+  job: { ...activityJob, id: 'job-queued', status: 'queued', progress: {} },
+};
+export const liveActivityReevaluate: LiveActivity = {
+  ...liveActivityIdle,
+  activity: {
+    steps: activitySteps,
+    live: null,
+    job: {
+      ...activitySlot,
+      kind: 'reevaluate',
+      job_id: 'job-redo',
+      trace_id: firstTurn.turn_id,
+      step: 'sql',
+      step_index: 4,
+      done: 0,
+      total: 1,
+    },
+  },
+  job: {
+    ...activityJob,
+    id: 'job-redo',
+    kind: 'reevaluate',
+    trace_id: firstTurn.turn_id,
+    progress: { found: 1, evaluated: 0 },
+  },
+};
+/** The worker went silent 2 minutes and 5 seconds before the answer, in the middle of a backfill turn. */
+export const liveActivityStale: LiveActivity = {
+  ...liveActivityBackfill,
+  server_time: '2026-11-03T14:22:10Z',
+  worker: { ...activityWorker, stale: true },
+};
+/** A worker older than the activity line: it reports no activity object. */
+export const liveActivityOldWorker: LiveActivity = { ...liveActivityIdle, activity: null, job: activityJob };

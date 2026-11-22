@@ -32,6 +32,20 @@ SECRET_FIELDS = (
     "database_password",
     "evaluator_traces_secret_key",
 )
+SETTINGS_SECTIONS = (
+    "evaluation",
+    "models",
+    "langfuse",
+    "evaluator_traces",
+    "dataiku",
+    "database",
+)
+SECRET_SECTIONS = {
+    "langfuse_secret_key": "langfuse",
+    "evaluator_traces_secret_key": "evaluator_traces",
+    "dataiku_api_key": "dataiku",
+    "database_password": "database",
+}
 
 
 def _absolute_http_url(value: str) -> str:
@@ -337,6 +351,54 @@ def resolved_secrets(
 def secrets_digest(resolved: dict) -> str:
     content = "\n".join(f"{key}={value}" for key, value in sorted(resolved.items()))
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def changed_sections(
+    row: LiveWorkerSettings, previous: Optional[LiveWorkerSettings]
+) -> Optional[list[str]]:
+    """Compare values in memory; return section names, never secret material.
+
+    An unreadable historical secret makes the comparison unavailable, without
+    preventing the settings page from loading its existing safe metadata.
+    """
+    if previous is None:
+        return list(SETTINGS_SECTIONS)
+    defaults = {"evaluator_traces": EvaluatorTracesValues().model_dump()}
+    changed = {
+        section
+        for section in SETTINGS_SECTIONS
+        if {**defaults.get(section, {}), **row.values.get(section, {})}
+        != {**defaults.get(section, {}), **previous.values.get(section, {})}
+    }
+    for name, section in SECRET_SECTIONS.items():
+        current = row.secrets_encrypted.get(name)
+        prior = previous.secrets_encrypted.get(name)
+        if current == prior or section in changed:
+            continue
+        if current is None or prior is None:
+            changed.add(section)
+            continue
+        try:
+            # Fernet tokens differ when the same value is saved again or rekeyed.
+            if secret_storage.decrypt_llm_api_key(
+                current
+            ) != secret_storage.decrypt_llm_api_key(prior):
+                changed.add(section)
+        except (RuntimeError, ValueError, TypeError, InvalidToken):
+            return None
+    return [section for section in SETTINGS_SECTIONS if section in changed]
+
+
+def version_history_summary(
+    row: LiveWorkerSettings,
+    previous: Optional[LiveWorkerSettings],
+    user_name: Optional[Callable[[Optional[str]], Optional[str]]] = None,
+) -> dict:
+    summary = version_summary(row, user_name)
+    sections = changed_sections(row, previous)
+    if sections is not None:
+        summary["changed_sections"] = sections
+    return summary
 
 
 def version_summary(

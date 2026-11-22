@@ -42,7 +42,7 @@ from qym_platform.db.models import (
     EvalPriority,
     Project,
 )
-from qym_platform.deps import get_db
+from qym_platform.deps import AsyncDb, get_async_db, get_db
 from qym_platform.llm_endpoint_security import (
     KEY_FOR_NEW_HOST_MESSAGE,
     LlmEndpointValidationError,
@@ -780,75 +780,85 @@ def get_environment(
 async def create_environment(
     project_id: str,
     req: EnvironmentCreateRequest,
-    db: Session = Depends(get_db),
+    db: AsyncDb = Depends(get_async_db),
     principal: Principal = Depends(require_ui_principal),
     client_factory: EvalClientFactory = Depends(get_eval_client_factory),
 ) -> Dict[str, Any]:
-    _require_project_manager(db, principal, project_id)
-    require_project_writable(db, project_id)
     settings = PlatformSettings()
-    if not encryption_available(settings):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Environment key encryption is not configured "
-                "(set QYM_LLM_CONFIG_ENCRYPTION_KEY)"
-            ),
+
+    def prepare(session: Session) -> Tuple[EvalEnvironment, str, str]:
+        _require_project_manager(session, principal, project_id)
+        require_project_writable(session, project_id)
+        if not encryption_available(settings):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Environment key encryption is not configured "
+                    "(set QYM_LLM_CONFIG_ENCRYPTION_KEY)"
+                ),
+            )
+        name = req.name.strip()
+        api_key = req.api_key.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="A name is required")
+        if not api_key:
+            raise HTTPException(status_code=400, detail="An API key is required")
+        base_url = normalize_environment_url(req.base_url, settings)
+        _ensure_name_available(session, project_id, name, exclude_env_id=None)
+        _ensure_url_available(session, base_url, project_id=project_id, exclude_env_id=None)
+
+        env = EvalEnvironment(
+            project_id=project_id,
+            name=name,
+            description=req.description.strip(),
+            base_url=base_url,
+            default_priority=req.default_priority,
+            max_priority=req.max_priority,
+            latency_sensitive_min_role=req.latency_sensitive_min_role,
+            allow_connection_keys=req.allow_connection_keys,
+            ranking_metric=(req.ranking_metric or "").strip() or None,
+            ranking_k=req.ranking_k,
+            created_by_user_id=principal.user.id,
         )
-    name = req.name.strip()
-    api_key = req.api_key.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="A name is required")
-    if not api_key:
-        raise HTTPException(status_code=400, detail="An API key is required")
-    base_url = normalize_environment_url(req.base_url, settings)
-    _ensure_name_available(db, project_id, name, exclude_env_id=None)
-    _ensure_url_available(db, base_url, project_id=project_id, exclude_env_id=None)
+        _check_priorities(env)
+        _store_key(env, api_key, settings)
+        return env, base_url, api_key
 
-    env = EvalEnvironment(
-        project_id=project_id,
-        name=name,
-        description=req.description.strip(),
-        base_url=base_url,
-        default_priority=req.default_priority,
-        max_priority=req.max_priority,
-        latency_sensitive_min_role=req.latency_sensitive_min_role,
-        allow_connection_keys=req.allow_connection_keys,
-        ranking_metric=(req.ranking_metric or "").strip() or None,
-        ranking_k=req.ranking_k,
-        created_by_user_id=principal.user.id,
-    )
-    _check_priorities(env)
-    _store_key(env, api_key, settings)
-
+    env, base_url, api_key = await db.run_sync(prepare)
+    # No transaction stays open across the probe: it would hold a pool
+    # connection idle for the probe's duration (and past the idle timeout).
+    await db.rollback()
     try:
         schema_json, evaluator = await _probe(client_factory, base_url, api_key)
     except _REMOTE_ERRORS as exc:
         raise _remote_http_error(exc, api_key)
 
-    db.add(env)
-    try:
-        db.flush()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail="An environment with that name or URL already exists",
-        )
-    schema, _ = _adopt_schema(db, env, schema_json)
-    evaluator_block = _adopt_evaluator(db, env, evaluator)
-    _record_health(env, ok=True)
-    _commit(db)
-    db.refresh(env)
-    slots = list_model_slots(db, schema.id)
-    logger.info("Evaluation environment %s created in project %s", env.id, project_id)
-    return {
-        "environment": _serialize_environment(
-            env, schema, _slot_summary(slots), None, current_evaluator_schema(db, env)
-        ),
-        "evaluator": evaluator_block,
-        **_slots_payload(slots),
-    }
+    def save(session: Session) -> Dict[str, Any]:
+        session.add(env)
+        try:
+            session.flush()
+        except IntegrityError:
+            session.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="An environment with that name or URL already exists",
+            )
+        schema, _ = _adopt_schema(session, env, schema_json)
+        evaluator_block = _adopt_evaluator(session, env, evaluator)
+        _record_health(env, ok=True)
+        _commit(session)
+        session.refresh(env)
+        slots = list_model_slots(session, schema.id)
+        logger.info("Evaluation environment %s created in project %s", env.id, project_id)
+        return {
+            "environment": _serialize_environment(
+                env, schema, _slot_summary(slots), None, current_evaluator_schema(session, env)
+            ),
+            "evaluator": evaluator_block,
+            **_slots_payload(slots),
+        }
+
+    return await db.run_sync(save)
 
 
 @router.put(_PREFIX + "/{env_id}")
@@ -997,29 +1007,52 @@ def delete_environment(
 async def test_environment(
     project_id: str,
     env_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncDb = Depends(get_async_db),
     principal: Principal = Depends(require_ui_principal),
     client_factory: EvalClientFactory = Depends(get_eval_client_factory),
 ) -> Dict[str, Any]:
-    _require_project_manager(db, principal, project_id)
     settings = PlatformSettings()
-    env = _get_environment(db, project_id, env_id)
-    api_key = _stored_key(env, settings)
-    current = (
-        db.get(EvalEnvironmentSchema, env.current_schema_id)
-        if env.current_schema_id
-        else None
-    )
-    current_evaluator = current_evaluator_schema(db, env)
+
+    def prepare(session: Session) -> Tuple[str, str, Optional[str], Optional[str]]:
+        _require_project_manager(session, principal, project_id)
+        env = _get_environment(session, project_id, env_id)
+        api_key = _stored_key(env, settings)
+        current = (
+            session.get(EvalEnvironmentSchema, env.current_schema_id)
+            if env.current_schema_id
+            else None
+        )
+        current_evaluator = current_evaluator_schema(session, env)
+        return (
+            env.base_url,
+            api_key,
+            current.schema_hash if current else None,
+            current_evaluator.schema_hash if current_evaluator else None,
+        )
+
+    base_url, api_key, current_hash, current_evaluator_hash = await db.run_sync(prepare)
+    await db.rollback()
     try:
-        schema_json, evaluator = await _probe(client_factory, env.base_url, api_key)
+        schema_json, evaluator = await _probe(client_factory, base_url, api_key)
     except _REMOTE_ERRORS as exc:
         error = _remote_http_error(exc, api_key).detail
-        _record_health(env, ok=False, error=error)
-        db.commit()
-        return {"ok": False, "error": error, "health_status": env.health_status}
-    _record_health(env, ok=True)
-    db.commit()
+
+        def record_failure(session: Session) -> str:
+            env = _get_environment(session, project_id, env_id)
+            _record_health(env, ok=False, error=error)
+            session.commit()
+            return env.health_status
+
+        health_status = await db.run_sync(record_failure)
+        return {"ok": False, "error": error, "health_status": health_status}
+
+    def record_success(session: Session) -> str:
+        env = _get_environment(session, project_id, env_id)
+        _record_health(env, ok=True)
+        session.commit()
+        return env.health_status
+
+    health_status = await db.run_sync(record_success)
     digest = _schema_hash(schema_json)
     evaluator_digest = (
         evaluator_schema_hash(evaluator.schema)
@@ -1028,16 +1061,15 @@ async def test_environment(
     )
     return {
         "ok": True,
-        "health_status": env.health_status,
+        "health_status": health_status,
         "schema_hash": digest,
-        "schema_changed": current is None or current.schema_hash != digest,
+        "schema_changed": current_hash is None or current_hash != digest,
         # Guide v1.1 §3.4; ``supported`` is false on older services (404).
         "evaluator_schema": {
             "supported": evaluator.supported if evaluator.error is None else None,
             "schema_hash": evaluator_digest,
             "changed": evaluator.error is None
-            and (current_evaluator.schema_hash if current_evaluator else None)
-            != evaluator_digest,
+            and current_evaluator_hash != evaluator_digest,
             "error": evaluator.error,
         },
     }
@@ -1047,25 +1079,35 @@ async def test_environment(
 async def refresh_environment_schema(
     project_id: str,
     env_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncDb = Depends(get_async_db),
     principal: Principal = Depends(require_ui_principal),
     client_factory: EvalClientFactory = Depends(get_eval_client_factory),
 ) -> Dict[str, Any]:
     # Any project member: the new-experiment page refreshes the schema of the
     # environments it opens on (it only re-reads the service; slots stay manager-edited).
-    _require_project_access(db, principal, project_id)
-    require_project_writable(db, project_id)
     settings = PlatformSettings()
-    env = _get_environment(db, project_id, env_id)
-    api_key = _stored_key(env, settings)
-    client = client_factory(env.base_url, api_key)
+
+    def prepare(session: Session) -> Tuple[str, str]:
+        _require_project_access(session, principal, project_id)
+        require_project_writable(session, project_id)
+        env = _get_environment(session, project_id, env_id)
+        return env.base_url, _stored_key(env, settings)
+
+    base_url, api_key = await db.run_sync(prepare)
+    await db.rollback()
+    client = client_factory(base_url, api_key)
     try:
         schema_json = await client.env_overrides_schema()
         evaluator = await _fetch_evaluator_schema(client, api_key)
     except _REMOTE_ERRORS as exc:
         http_error = _remote_http_error(exc, api_key)
-        _record_health(env, ok=False, error=http_error.detail)
-        db.commit()
+
+        def record_failure(session: Session) -> None:
+            env = _get_environment(session, project_id, env_id)
+            _record_health(env, ok=False, error=http_error.detail)
+            session.commit()
+
+        await db.run_sync(record_failure)
         raise http_error
     finally:
         await client.aclose()
@@ -1074,39 +1116,43 @@ async def refresh_environment_schema(
             status_code=502, detail="Evaluation service returned an invalid schema"
         )
 
-    schema, previous = _adopt_schema(db, env, schema_json)
-    env_changed = previous is None or previous.id != schema.id
-    diff = (
-        _schema_diff(
-            descriptor_for_schema(previous) if previous else None,
-            descriptor_for_schema(schema),
+    def save(session: Session) -> Dict[str, Any]:
+        env = _get_environment(session, project_id, env_id)
+        schema, previous = _adopt_schema(session, env, schema_json)
+        env_changed = previous is None or previous.id != schema.id
+        diff = (
+            _schema_diff(
+                descriptor_for_schema(previous) if previous else None,
+                descriptor_for_schema(schema),
+            )
+            if env_changed
+            else {"added": [], "removed": [], "changed_types": []}
         )
-        if env_changed
-        else {"added": [], "removed": [], "changed_types": []}
-    )
-    evaluator_block = _adopt_evaluator(db, env, evaluator)
-    _record_health(env, ok=True)
-    _commit(db)
-    slots = list_model_slots(db, schema.id)
-    logger.info(
-        "Evaluation environment %s schema refreshed (env_overrides_changed=%s, evaluator_changed=%s)",
-        env.id,
-        env_changed,
-        evaluator_block["changed"],
-    )
-    return {
-        # Either schema: the launch form reloads its forms and re-maps its base.
-        "changed": env_changed or evaluator_block["changed"],
-        "env_overrides_changed": env_changed,
-        # ``added``/``removed``/``changed_types`` are env_overrides pointers; the
-        # evaluator.config ones are under ``evaluator``.
-        **diff,
-        "evaluator": evaluator_block,
-        "schema_id": schema.id,
-        "schema_hash": schema.schema_hash,
-        "previous_schema_id": previous.id if previous else None,
-        **_slots_payload(slots),
-    }
+        evaluator_block = _adopt_evaluator(session, env, evaluator)
+        _record_health(env, ok=True)
+        _commit(session)
+        slots = list_model_slots(session, schema.id)
+        logger.info(
+            "Evaluation environment %s schema refreshed (env_overrides_changed=%s, evaluator_changed=%s)",
+            env.id,
+            env_changed,
+            evaluator_block["changed"],
+        )
+        return {
+            # Either schema: the launch form reloads its forms and re-maps its base.
+            "changed": env_changed or evaluator_block["changed"],
+            "env_overrides_changed": env_changed,
+            # ``added``/``removed``/``changed_types`` are env_overrides pointers; the
+            # evaluator.config ones are under ``evaluator``.
+            **diff,
+            "evaluator": evaluator_block,
+            "schema_id": schema.id,
+            "schema_hash": schema.schema_hash,
+            "previous_schema_id": previous.id if previous else None,
+            **_slots_payload(slots),
+        }
+
+    return await db.run_sync(save)
 
 
 @router.get(_PREFIX + "/{env_id}/form")
@@ -1139,7 +1185,7 @@ def get_environment_form(
 async def get_environment_versioning_details(
     project_id: str,
     env_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncDb = Depends(get_async_db),
     principal: Principal = Depends(require_ui_principal),
     client_factory: EvalClientFactory = Depends(get_eval_client_factory),
 ) -> Dict[str, Any]:
@@ -1155,11 +1201,16 @@ async def get_environment_versioning_details(
     (``error`` says why: the service could not read its KB version, is unreachable,
     or rejected the key). Always 200 so the page can show the state in place.
     """
-    _require_project_access(db, principal, project_id)
     settings = PlatformSettings()
-    env = _get_environment(db, project_id, env_id)
-    api_key = _stored_key(env, settings)
-    client = client_factory(env.base_url, api_key)
+
+    def prepare(session: Session) -> Tuple[str, str]:
+        _require_project_access(session, principal, project_id)
+        env = _get_environment(session, project_id, env_id)
+        return env.base_url, _stored_key(env, settings)
+
+    base_url, api_key = await db.run_sync(prepare)
+    await db.rollback()
+    client = client_factory(base_url, api_key)
     status = "ok"
     details: Dict[str, Any] = {}
     error: Optional[str] = None
@@ -1177,7 +1228,7 @@ async def get_environment_versioning_details(
     finally:
         await client.aclose()
     return {
-        "environment_id": env.id,
+        "environment_id": env_id,
         "status": status,
         "versioning_details": details,
         "error": error,
@@ -1225,7 +1276,7 @@ def _trim_tasks(items: Any) -> List[Dict[str, Any]]:
 async def get_environment_tasks(
     project_id: str,
     env_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncDb = Depends(get_async_db),
     principal: Principal = Depends(require_ui_principal),
     client_factory: EvalClientFactory = Depends(get_eval_client_factory),
 ) -> Dict[str, Any]:
@@ -1237,18 +1288,24 @@ async def get_environment_tasks(
     405 or 422, as a v1.3 service does) or ``error`` (``error`` says why). Always 200
     so the launch page can show the state in place.
     """
-    _require_project_access(db, principal, project_id)
     settings = PlatformSettings()
-    env = _get_environment(db, project_id, env_id)
+
+    def prepare(session: Session) -> Tuple[str, Optional[str], bool]:
+        _require_project_access(session, principal, project_id)
+        env = _get_environment(session, project_id, env_id)
+        schema_json = environment_evaluator_schema(session, env)
+        supported = bool(evaluator_capabilities(schema_json)["task"])
+        return env.base_url, _stored_key(env, settings) if supported else None, supported
+
+    base_url, api_key, supported = await db.run_sync(prepare)
+    await db.rollback()
     status = "ok"
     tasks: List[Dict[str, Any]] = []
     error: Optional[str] = None
-    schema_json = environment_evaluator_schema(db, env)
-    if not evaluator_capabilities(schema_json)["task"]:
+    if not supported or api_key is None:
         status = "unsupported"
     else:
-        api_key = _stored_key(env, settings)
-        client = client_factory(env.base_url, api_key)
+        client = client_factory(base_url, api_key)
         try:
             data = await client.tasks_list()
         except TasksUnavailable as exc:
@@ -1263,7 +1320,7 @@ async def get_environment_tasks(
         finally:
             await client.aclose()
     return {
-        "environment_id": env.id,
+        "environment_id": env_id,
         "status": status,
         "tasks": tasks,
         "error": error,

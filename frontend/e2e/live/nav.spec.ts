@@ -20,7 +20,7 @@ test('Live is the second project link and a seeded project opens the overview', 
   await expect(crumbs.locator('[aria-current="page"]')).toHaveText('Turns');
 
   await gotoApp(page, `/projects/${projectSlug}/live/turns/abc/def`);
-  await expect(page.getByRole('heading', { name: 'Turn', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Couldn’t load this turn', exact: true })).toBeVisible();
   await expect(crumbs.getByRole('link', { name: 'Turns', exact: true })).toBeVisible();
   await expect(crumbs.locator('[aria-current="page"]')).toHaveText('abc/def');
   await expect(crumbs.locator('[aria-current="page"]')).toHaveAttribute('data-mono', '');

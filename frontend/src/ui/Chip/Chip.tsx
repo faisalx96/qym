@@ -9,6 +9,10 @@ export interface ChipProps extends Omit<ToggleButtonProps, 'className' | 'style'
   count?: number;
   /** Selected colour from an information tone (e.g. a status filter). Default: the accent. */
   tone?: ChipTone;
+  /** Keep selection neutral when colour is already carried by a separate mark. */
+  selectionStyle?: 'tone' | 'neutral';
+  /** A decorative diagnosis/category mark before the label, independent of selection. */
+  mark?: ChipTone;
   /** Selected colour from a series 1..8 (e.g. a category group). */
   series?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
   onRemove?: () => void;
@@ -21,6 +25,8 @@ export interface ChipProps extends Omit<ToggleButtonProps, 'className' | 'style'
 export function Chip({
   count,
   tone,
+  selectionStyle,
+  mark,
   series,
   onRemove,
   removeLabel,
@@ -34,10 +40,17 @@ export function Chip({
         className={styles.chip}
         data-tone={series ? undefined : tone}
         data-series={series}
+        data-selection={selectionStyle}
         {...rest}
       >
+        {mark ? <span className={styles.mark} data-chip-mark="" data-tone={mark} aria-hidden="true" /> : null}
         <span>{children}</span>
-        {typeof count === 'number' ? <span className={styles.count}>{count}</span> : null}
+        {typeof count === 'number' ? (
+          <>
+            {' '}
+            <span className={styles.count}>{count}</span>
+          </>
+        ) : null}
       </ToggleButton>
       {onRemove ? (
         <IconButton

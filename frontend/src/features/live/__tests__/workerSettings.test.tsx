@@ -21,10 +21,10 @@ it.each([
 ])('shows readable job days %s to %s', async (since_day, until_day, label) => {
   const job = liveWorkerRead.jobs[0]!;
   setup({ ...liveWorkerRead, jobs: [{ ...job, params: { ...job.params, since_day, until_day } }] });
-  expect(within(await screen.findByRole('grid', { name: 'Worker jobs' })).getByText(label)).toBeVisible();
+  expect(within(await screen.findByRole('treegrid', { name: 'Worker jobs' })).getByText(label)).toBeVisible();
 });
 it.each([
-  [liveWorkerPending, 'Pending'],
+  [liveWorkerPending, 'Saved as v4, the worker is still running v3'],
   [liveWorkerFailed, 'Failed'],
 ] as const)('shows verification state %#', async (read, status) => {
   setup(read);
@@ -163,6 +163,41 @@ it('confirms restoring version 2 and posts the restore endpoint', async () => {
   await waitFor(() => expect(writes(fetch)).toHaveLength(1));
   expect(writes(fetch)[0]![0]).toContain('/settings/2/restore?source=');
 });
+it('shows one settings status and marks only sections with unsaved edits', async () => {
+  const { container } = setup();
+  const user = userEvent.setup();
+  await screen.findByRole('button', { name: 'Save as v4' });
+  const settings = container.querySelector('[data-live-block="worker-settings"]')!;
+  expect(
+    within(settings as HTMLElement).getAllByText('The worker is running these settings (v3)'),
+  ).toHaveLength(1);
+  expect(settings.querySelectorAll('[data-kind="state"]')).toHaveLength(0);
+  await user.type(screen.getByRole('textbox', { name: 'Note' }), 'Operator note');
+  expect(screen.getByText('Unsaved changes since v3')).toBeVisible();
+  expect(settings.querySelectorAll('[data-kind="state"]')).toHaveLength(0);
+  await user.type(await openField('Langfuse', 'Langfuse secret key'), 'replacement');
+  expect(within(screen.getByRole('region', { name: 'Langfuse' })).getByText('Changed')).toBeVisible();
+  expect(settings.querySelectorAll('[data-kind="state"]')).toHaveLength(1);
+  expect(settings).not.toHaveTextContent('replacement');
+  await user.clear(screen.getByLabelText('Langfuse secret key'));
+  await user.clear(screen.getByRole('textbox', { name: 'Note' }));
+  expect(screen.getByText('The worker is running these settings (v3)')).toBeVisible();
+  expect(settings.querySelectorAll('[data-kind="state"]')).toHaveLength(0);
+});
+it('shows direction-aware version notes and section changes without adding missing notes', async () => {
+  const read = structuredClone(liveWorkerRead);
+  read.versions[0]!.note = 'تحديث إعدادات التقييم';
+  setup(read);
+  const history = await screen.findByRole('list', { name: 'Settings history' });
+  const current = within(history).getByText('v3').closest('li')!;
+  expect(within(current).getByText('تحديث إعدادات التقييم')).toHaveAttribute('dir', 'rtl');
+  expect(within(current).getByText('Changed: Models, Evaluation')).toBeVisible();
+  const first = within(history).getByText('v1').closest('li')!;
+  expect(within(first).getByText('Changed: All settings')).toBeVisible();
+  expect(first).not.toHaveTextContent('No note');
+  expect(within(current).queryByRole('button', { name: 'Restore' })).toBeNull();
+  expect(within(first).getByRole('button', { name: 'Restore' })).toBeVisible();
+});
 it('confirms pausing, then PUTs paused', async () => {
   const { fetch } = setup();
   const user = userEvent.setup();
@@ -255,8 +290,8 @@ it.each([false, true])('compares an old worker with evaluator traces enabled: %s
   const section = await screen.findByRole('region', { name: 'Evaluator traces' });
   const trigger = within(section).getByRole('button');
   expect(trigger).toHaveAttribute('aria-expanded', String(enabled));
-  if (enabled) expect(trigger).toHaveTextContent('differs from running v3');
-  else expect(trigger).not.toHaveTextContent('differs from running');
+  expect(trigger).not.toHaveTextContent('Changed');
+  expect(screen.getByText('The worker is running these settings (v3)')).toBeVisible();
   expect(screen.getByRole('button', { name: 'Save as v4' })).toBeDisabled();
 });
 

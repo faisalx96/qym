@@ -6,6 +6,7 @@ import { fullWidth } from '@/features/shell/layout';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
 import { ErrorState, PageHeader, Skeleton, Text } from '@/ui';
+import { ActivityLine } from './components/ActivityLine';
 import { LiveEmptyState } from './LiveEmptyState';
 import { LiveOverviewPage } from './LiveOverviewPage';
 import { LiveTurnPage } from './LiveTurnPage';
@@ -50,12 +51,15 @@ export function LiveOverviewRoute() {
   const sourceInfo = query.data?.sources.find((item) => item.key === source || item.id === source);
   if (query.data?.sources.length && source) {
     return (
-      <LiveOverviewPage
-        slug={slug}
-        source={source}
-        zone={sourceInfo?.day_key_timezone}
-        day={get('day') || sourceInfo?.today || zoneToday(sourceInfo?.day_key_timezone)}
-      />
+      <>
+        <ActivityLine slug={slug} source={source} />
+        <LiveOverviewPage
+          slug={slug}
+          source={source}
+          zone={sourceInfo?.day_key_timezone}
+          day={get('day') || sourceInfo?.today || zoneToday(sourceInfo?.day_key_timezone)}
+        />
+      </>
     );
   }
   return <LiveRoute title="Live evaluation" />;
@@ -66,7 +70,13 @@ export function LiveTurnsRoute() {
   const query = useLiveSources(slug);
   const { get } = useSearchParamsState();
   const source = get('source') || query.data?.default_source || query.data?.sources[0]?.key;
-  if (query.data?.sources.length && source) return <LiveTurnsPage slug={slug} source={source} />;
+  if (query.data?.sources.length && source)
+    return (
+      <>
+        <ActivityLine slug={slug} source={source} />
+        <LiveTurnsPage slug={slug} source={source} />
+      </>
+    );
   return <LiveRoute title="Turns" />;
 }
 
@@ -82,7 +92,12 @@ export function LiveTurnRoute() {
     .join('/');
   const source = get('source') || query.data?.default_source || query.data?.sources[0]?.key;
   if (query.data?.sources.length && source && turnId) {
-    return <LiveTurnPage slug={slug} source={source} turnId={turnId} />;
+    return (
+      <>
+        <ActivityLine slug={slug} source={source} turnId={turnId} />
+        <LiveTurnPage slug={slug} source={source} turnId={turnId} />
+      </>
+    );
   }
   return <LiveRoute title="Turn" />;
 }
@@ -92,6 +107,12 @@ export function LiveWorkerRoute() {
   const query = useLiveSources(slug);
   const { get } = useSearchParamsState();
   const source = get('source') || query.data?.default_source || query.data?.sources[0]?.key;
-  if (query.data?.sources.length && source) return <LiveWorkerPage slug={slug} source={source} />;
+  if (query.data?.sources.length && source)
+    return (
+      <>
+        <ActivityLine slug={slug} source={source} />
+        <LiveWorkerPage slug={slug} source={source} />
+      </>
+    );
   return <LiveRoute title="Worker" />;
 }

@@ -3,6 +3,7 @@ import type { LiveWorkerVersion } from '@/api/liveWorker';
 import { formatHeaderDate, formatTableDate } from '@/lib/dates';
 import { formatRelative } from '@/lib/format';
 import { errorSentence } from '@/lib/http';
+import { textDirAttrs } from '@/lib/text';
 import {
   Button,
   ConfirmDialog,
@@ -18,6 +19,15 @@ import {
 import { WorkerBlock } from './WorkerBlock';
 import type { WorkerCallbacks } from './types';
 import styles from '../../worker.module.css';
+
+const sectionNames: Record<string, string> = {
+  evaluation: 'Evaluation',
+  models: 'Models',
+  langfuse: 'Langfuse',
+  evaluator_traces: 'Evaluator traces',
+  dataiku: 'Dataiku',
+  database: 'Database',
+};
 
 export function HistoryBlock({
   versions,
@@ -59,11 +69,32 @@ export function HistoryBlock({
               meta: version.created_by ? (
                 <UserName id={version.created_by_user_id} name={version.created_by} />
               ) : undefined,
-              detail: version.note ? (
-                <span dir="auto" className={styles.wrap}>
-                  {version.note}
-                </span>
-              ) : undefined,
+              detail:
+                version.note || version.changed_sections ? (
+                  <span className={styles.versionDetails}>
+                    {version.note ? (
+                      <Text
+                        as="span"
+                        variant="base"
+                        tone="secondary"
+                        className={styles.wrap}
+                        {...textDirAttrs(version.note)}
+                      >
+                        {version.note}
+                      </Text>
+                    ) : null}
+                    {version.changed_sections ? (
+                      <Text as="span" variant="sm" tone="muted" className={styles.wrap}>
+                        Changed:{' '}
+                        {version.version === 1
+                          ? 'All settings'
+                          : version.changed_sections
+                              .map((section) => sectionNames[section] ?? section)
+                              .join(', ') || 'None'}
+                      </Text>
+                    ) : null}
+                  </span>
+                ) : undefined,
               actions: running ? undefined : (
                 <Button isDisabled={busy} onPress={() => setRestore(version.version)}>
                   Restore

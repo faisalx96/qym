@@ -24,7 +24,7 @@ export interface UserNameProps {
   email?: string | null;
   /** Shows the email after the name, muted (lists where the email tells two people apart). */
   showEmail?: boolean;
-  /** The name wraps at its words instead of an ellipsis (a card, where the name must read in full). */
+  /** Keep long names readable in a table with declared column widths. */
   wrap?: boolean;
   className?: string;
 }
@@ -33,7 +33,7 @@ export interface UserNameProps {
  * A person: an initials disc in the person's series colour, then the name (round 11: the runs table Owner cell, now
  * the one way to show a user, in admin users, project members and the add-member search).
  */
-export function UserName({ id, name, email, showEmail, wrap, className }: UserNameProps) {
+export function UserName({ id, name, email, showEmail, wrap = false, className }: UserNameProps) {
   const label = name || email || '—';
   return (
     <span

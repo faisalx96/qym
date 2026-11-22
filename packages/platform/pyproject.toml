@@ -43,6 +43,17 @@ dependencies = [
     "sqlglot>=23.0.0",
 ]
 
+[project.optional-dependencies]
+# Async database driver for the async request handlers (db/session.py
+# ``build_async_engine``): asyncpg for PostgreSQL, aiosqlite for a SQLite file.
+# SQLAlchemy 2.1 no longer installs greenlet by itself, and its asyncio
+# extension needs it: the ``sqlalchemy[asyncio]`` target brings it.
+async = [
+    "sqlalchemy[asyncio]>=2.0.0",
+    "asyncpg>=0.29.0",
+    "aiosqlite>=0.20.0",
+]
+
 [project.scripts]
 qym-platform = "qym_platform.cli:main"
 

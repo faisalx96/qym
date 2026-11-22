@@ -92,6 +92,30 @@ export function formatAgo(
   return days <= 30 ? `${days}d ago` : formatDay(d);
 }
 
+/** A span of whole seconds with its units: '8s', '2m 5s', '1h 4m' ('0s' for a negative or invalid value). */
+export function formatElapsed(seconds: number): string {
+  const s = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return s % 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 60)}m`;
+  const minutes = Math.floor((s % 3600) / 60);
+  return minutes ? `${Math.floor(s / 3600)}h ${minutes}m` : `${Math.floor(s / 3600)}h`;
+}
+
+/**
+ * Freshness to the second, for a line that shows a worker's last report (Live activity line), where formatAgo's
+ * minute is too coarse: 'just now' under 2 seconds, then '8s ago', '2m 5s ago'; an hour or more reads as formatAgo.
+ */
+export function formatAgoSeconds(
+  value: string | number | Date | null | undefined,
+  now: number | Date = Date.now(),
+): string {
+  const d = toDate(value);
+  if (!d) return '—';
+  const s = Math.max(0, Math.floor(((typeof now === 'number' ? now : now.getTime()) - d.getTime()) / 1000));
+  if (s < 2) return 'just now';
+  return s < 3600 ? `${formatElapsed(s)} ago` : formatAgo(d, now);
+}
+
 /** Calendar keys and diagnostic timestamps in an explicitly selected source zone. */
 
 export function safeZone(zone?: string | null): string {

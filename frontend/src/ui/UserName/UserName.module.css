@@ -32,10 +32,15 @@
   white-space: nowrap;
 }
 
+.user[data-wrap] {
+  max-inline-size: 100%;
+}
+
 .user[data-wrap] .name {
-  overflow: visible;
-  overflow-wrap: anywhere;
   white-space: normal;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .email {

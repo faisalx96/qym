@@ -61,6 +61,8 @@ export interface LiveWorkerControl {
   } | null;
 }
 export interface LiveWorkerVersion {
+  /** Section identifiers only; omitted by older servers or when history cannot be decrypted. */
+  changed_sections?: string[];
   version: number;
   created_at: string;
   created_by: string | null;
@@ -76,7 +78,8 @@ export interface LiveWorkerKey {
 }
 export interface LiveJob {
   id: string;
-  kind: 'backfill_preview' | 'backfill';
+  /** 'reevaluate' redoes one turn: its params name the turn in trace_ids and carry no day range. */
+  kind: 'backfill_preview' | 'backfill' | 'reevaluate';
   params: {
     since_day: string;
     until_day: string;
@@ -84,7 +87,10 @@ export interface LiveJob {
     until: string;
     limit: number;
     redo?: string[];
+    trace_ids?: string[];
   };
+  /** The turn of a re-evaluation, when the server names it on the job itself. */
+  trace_id?: string | null;
   status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
   progress: {
     found?: number;
@@ -107,6 +113,8 @@ export interface LiveJob {
     would_redo?: number;
     beyond_limit?: number;
     waiting?: string;
+    /** The worker stopped listing once it had enough turns, so no exact count of the rest exists. */
+    listing_stopped_early?: boolean;
     rejected?: {
       [key: string]: unknown;
       other_names?: number;
@@ -184,7 +192,7 @@ export interface SaveWorkerSettings {
   note?: string;
 }
 export interface CreateWorkerJob {
-  kind: LiveJob['kind'];
+  kind: 'backfill_preview' | 'backfill';
   since_day: string;
   until_day: string;
   limit: number;
@@ -284,6 +292,90 @@ export function useCreateWorkerJob(slug: string, source: string) {
   return useWorkerMutation(slug, source, (body: CreateWorkerJob) =>
     api.post<LiveJob>(livePath(slug, source, '/jobs'), body),
   );
+}
+/** The turn a re-evaluation job redoes (the turn id is the trace id), or null for a day-range job. */
+export function jobTurnId(job: Pick<LiveJob, 'kind' | 'trace_id'> & { params?: { trace_ids?: string[] } }) {
+  if (job.kind !== 'reevaluate') return null;
+  return job.trace_id || job.params?.trace_ids?.[0] || null;
+}
+
+/** One slot of the worker's own report: what the live loop or the job runner is doing now. */
+export interface LiveActivitySlot {
+  kind: string;
+  job_id?: string | null;
+  trace_id?: string | null;
+  /** A name from `steps`, or null between turns. */
+  step?: string | null;
+  step_index?: number | null;
+  step_count?: number | null;
+  done?: number | null;
+  total?: number | null;
+  started_at?: string | null;
+  reported_at?: string | null;
+}
+export interface LiveActivityJob {
+  id: string;
+  kind: LiveJob['kind'];
+  status: 'queued' | 'running';
+  trace_id?: string | null;
+  progress?: LiveJob['progress'];
+  params?: Partial<LiveJob['params']>;
+  requested_at?: string;
+  requested_by?: string | null;
+  updated_at?: string;
+}
+export interface LiveActivity {
+  server_time: string;
+  worker: {
+    state: 'running' | 'paused' | 'waiting';
+    reason: string | null;
+    /** When qym last heard from the worker (server clock). */
+    last_report_at: string | null;
+    stale: boolean;
+    last_poll_at: string | null;
+    poll_interval_s: number | null;
+  };
+  /** Null for a worker that does not report its activity (older than the activity line). */
+  activity: null | {
+    steps: string[];
+    live: LiveActivitySlot | null;
+    job: LiveActivitySlot | null;
+  };
+  /** The queued or running job, if any. */
+  job: LiveActivityJob | null;
+}
+export const liveActivityKey = (slug: string, source: string) => [...workerKey(slug, source), 'activity'];
+/**
+ * What the worker reports it is doing, for the activity line: polled every 5 seconds while the tab is visible.
+ * Nothing here is derived on the client: a worker that stops reporting shows as silence.
+ */
+export function useLiveActivity(slug: string, source: string, enabled = true) {
+  return useQuery({
+    queryKey: liveActivityKey(slug, source),
+    queryFn: async () => {
+      const data = await api.get<LiveActivity>(livePath(slug, source, '/activity'));
+      // The client clock when the answer arrived, to read server times without trusting both clocks to agree.
+      return { ...data, received_at: Date.now() };
+    },
+    enabled,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: false,
+  });
+}
+export type LiveActivityRead = LiveActivity & { received_at: number };
+/** Queue a re-evaluation of one turn (the turn id is its trace id). */
+export function useReevaluateTurn(slug: string, source: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (trace_id: string) =>
+      api.post<LiveJob>(livePath(slug, source, '/jobs'), { kind: 'reevaluate', trace_id }),
+    onSuccess: async (_job, trace_id) => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: workerKey(slug, source) }),
+        client.invalidateQueries({ queryKey: ['project', slug, 'live', 'turn', source, trace_id] }),
+      ]);
+    },
+  });
 }
 export function useCancelWorkerJob(slug: string, source: string) {
   return useWorkerMutation(slug, source, (id: string) =>

@@ -16,6 +16,8 @@ export interface StatusMarkProps extends HTMLAttributes<HTMLSpanElement> {
   shape: StatusShape;
   /** The status word; shown in sentence case. */
   label: string;
+  /** Allow a sentence describing the status to wrap within its container. */
+  wrap?: boolean;
 }
 
 const ON: Record<StatusShape, readonly number[]> = {
@@ -45,7 +47,7 @@ function sentenceCase(label: string): string {
  * Lifecycle status: a 3 x 3 pixel figure and the word, no pill, no fill (DESIGN_LANGUAGE §3.3 "Status mark").
  * The figure is decorative (shape and colour are both cues); the word carries the meaning.
  */
-export function StatusMark({ tone, shape, label, className, ...rest }: StatusMarkProps) {
+export function StatusMark({ tone, shape, label, wrap, className, ...rest }: StatusMarkProps) {
   const on = new Set(ON[shape]);
   const ringed = shape === 'orbit' || shape === 'ring';
   return (
@@ -53,6 +55,7 @@ export function StatusMark({ tone, shape, label, className, ...rest }: StatusMar
       className={[styles.mark, className].filter(Boolean).join(' ')}
       data-tone={tone}
       data-shape={shape}
+      data-wrap={wrap ? '' : undefined}
       {...rest}
     >
       <svg

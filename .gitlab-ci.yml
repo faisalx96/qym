@@ -18,6 +18,11 @@ workflow:
     - if: '$CI_COMMIT_BRANCH == "preprod"'
       variables:
         ENV: "preprod"
+    # main and master both build the production image (tags prod-latest and
+    # prod-<sha>); without a rule here main fell through to the default ENV, dev.
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      variables:
+        ENV: "prod"
     - if: '$CI_COMMIT_BRANCH == "master"'
       variables:
         ENV: "prod"

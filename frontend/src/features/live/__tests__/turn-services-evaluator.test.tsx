@@ -2,8 +2,8 @@ import { formatTableDate } from '@/lib/dates';
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { MemoryRouter, useLocation } from 'react-router-dom';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { LiveTurnDetail } from '@/api/live';
 import { liveEvidenceTurns, liveTurnDetail, liveOverview } from '@/features/dev/liveFixtures';
 import { ServicesTab } from '../components/turn/ServicesTab';
@@ -12,27 +12,41 @@ import { ConversationTab } from '../components/turn/ConversationTab';
 import { evaluationProblems, evaluationTiming } from '../lib/evaluatorRecord';
 import { serviceEvidence, servicesTabBadge, matchToolFailures } from '../lib/serviceEvidence';
 import { servicesOf, toolsOf } from '../lib/summary';
+import {
+  explanationLanguageKey,
+  ExplanationLanguageProvider,
+  useExplanationLanguage,
+} from '../ExplanationLanguage';
 
 const withSummary = (summary: Record<string, unknown>): LiveTurnDetail => ({ ...liveTurnDetail, summary });
+
+afterEach(() => localStorage.removeItem(explanationLanguageKey));
 
 describe('Services and tools', () => {
   it('omits the lead for healthy services and does not invent a failure count without tools evidence', () => {
     const { container } = render(
       <ServicesTab
-        data={withSummary({ services: { guardrail: { status: 'ok', fault: 'policy', score: 1 } } })}
+        data={withSummary({
+          services: {
+            guardrail: { status: 'ok', fault: 'policy', score: 1 },
+            sql_api_url_id: { status: 'ok' },
+          },
+        })}
       />,
     );
     expect(container.querySelector('p[data-tone="danger"], p[data-tone="warning"]')).not.toBeInTheDocument();
     expect(screen.getByText('privacy guard')).toBeInTheDocument();
+    expect(screen.getByText('Guardrail')).toBeInTheDocument();
+    expect(screen.getByText('SQL API URL ID')).toBeInTheDocument();
     expect(screen.queryByText(/0 of .* calls failed/)).not.toBeInTheDocument();
   });
 
-  it('shows the sql-mismatch failure reason in the lead and table, in severity order', () => {
+  it('shows the sql-mismatch finding once in the services table, in severity order', () => {
     const data = liveEvidenceTurns['sql-mismatch'];
     const { container } = render(<ServicesTab data={data} />);
     const services = servicesOf(data.summary, data.specs);
     const failed = services.find((service) => service.status === 'failed')!;
-    expect(container.querySelector('[data-tone="danger"]')).toHaveTextContent(failed.reason!);
+    expect(screen.getAllByText(failed.reason!)).toHaveLength(1);
     expect(screen.getByLabelText('Services')).toHaveTextContent(failed.reason!);
     expect(
       [...container.querySelectorAll('[data-live-turn-service]')].map((row) =>
@@ -96,7 +110,7 @@ describe('Services and tools', () => {
         })}
       />,
     );
-    expect(container.querySelector('[data-tone="warning"]')).toHaveTextContent('Recovered on retry');
+    expect(container.querySelector('[data-shape][data-tone="warning"]')).toHaveTextContent('Degraded');
     expect(screen.queryByText('Keep this evidence')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Expand row' }));
     expect(screen.getByText('Keep this evidence')).toBeInTheDocument();
@@ -129,6 +143,92 @@ describe('Services and tools', () => {
     expect(screen.getByLabelText('Services')).toHaveTextContent('Selected 2');
   });
 
+  it('omits service columns with no recorded values and uses evidence when the reason is absent', () => {
+    const { rerender } = render(
+      <ServicesTab
+        data={withSummary({
+          services: {
+            router: { status: 'ok', signals: { total_calls: 2 } },
+            custom: { status: 'skipped' },
+          },
+        })}
+      />,
+    );
+    const table = screen.getByRole('treegrid', { name: 'Services' });
+    expect(within(table).queryByRole('columnheader', { name: 'Fault of' })).toBeNull();
+    expect(within(table).queryByRole('columnheader', { name: 'Score' })).toBeNull();
+    expect(within(table).getByText('2 calls')).toBeInTheDocument();
+    expect(within(table).getByText('No finding was recorded.')).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Service glance' })).toBeNull();
+    rerender(
+      <ServicesTab
+        data={withSummary({
+          services: {
+            router: {
+              status: 'failed',
+              score: 0,
+              fault: 'agent',
+              reason: 'The router chose the wrong route.',
+            },
+          },
+        })}
+      />,
+    );
+    expect(screen.getByRole('columnheader', { name: 'Fault of' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Score' })).toHaveAttribute('data-align', 'end');
+  });
+
+  it('renders readable signal keys, data lists, booleans and nested evidence without a toolbar', async () => {
+    const user = userEvent.setup();
+    render(
+      <ServicesTab
+        data={withSummary({
+          services: {
+            retrieval: {
+              status: 'ok',
+              signals: {
+                turn_type: 'Data answer',
+                router_intent: 'agent',
+                selected_tables: ['sales', 'customers'],
+                missing_tables: [],
+                both_reviews_wrong: false,
+                recovered: true,
+                counts: { matched: 2, failed: 0 },
+                nested: { trace: { details: { kept: true } } },
+              },
+            },
+          },
+        })}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Expand row' }));
+    const signals = screen.getByLabelText('Signals');
+    expect(signals).toHaveAttribute('data-columns', '3');
+    for (const label of [
+      'Turn type',
+      'Router decision',
+      'Tables selected',
+      'Missing tables',
+      'Both reviews wrong',
+      'Counts · Matched',
+    ])
+      expect(within(signals).getByText(label)).toBeVisible();
+    expect(within(signals).getByText('customers').closest('[data-kind]')).toHaveAttribute(
+      'data-kind',
+      'data',
+    );
+    expect(within(signals).getByText('Missing tables').closest('dt')?.nextElementSibling).toHaveTextContent(
+      'None',
+    );
+    expect(
+      within(signals).getByText('Both reviews wrong').closest('dt')?.nextElementSibling,
+    ).toHaveTextContent('No');
+    expect(within(signals).getByText('Recovered').closest('dt')?.nextElementSibling).toHaveTextContent('Yes');
+    for (const label of ['Raw', 'Sections', 'Copy JSON', 'Expand all keys'])
+      expect(within(signals).queryByRole('button', { name: label })).toBeNull();
+    expect(within(signals).getByRole('button', { name: /trace/ })).toBeInTheDocument();
+  });
+
   it('matches repeated tool failures by order without losing unmatched evidence', () => {
     const tools = toolsOf({
       tools: {
@@ -149,10 +249,10 @@ describe('Services and tools', () => {
     expect(matched.unmatched[0]?.error).toBe('Unmatched');
   });
 
-  it('shows failures under calls and preserves the old absent-list sentence', () => {
+  it('shows failures in the calls table and preserves unmatched evidence', () => {
     const { rerender } = render(<ServicesTab data={liveTurnDetail} />);
     expect(
-      within(screen.getByRole('list', { name: 'Tool calls' })).getByText('Output validation failed'),
+      within(screen.getByRole('treegrid', { name: 'Tool calls' })).getByText('Output validation failed'),
     ).toBeInTheDocument();
     const summary = {
       tools: { calls: 3, failures: [{ name: 'query', error: 'Connection reset', fault: 'infra' }] },
@@ -161,6 +261,12 @@ describe('Services and tools', () => {
     expect(screen.getByText('Call list not available for this turn')).toBeInTheDocument();
     expect(screen.getByLabelText('Tool failures')).toHaveTextContent('Connection reset');
     expect(screen.queryByRole('columnheader', { name: 'Step' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the recorded turn total when only part of the tool-call list is available', () => {
+    const data = withSummary({ tools: { list: [{ name: 'run_sql', step: 2, ok: false }] } });
+    render(<ServicesTab data={{ ...data, turn: { ...data.turn, tool_calls: 6 } }} />);
+    expect(screen.getByText('1 of 6 calls failed')).toBeInTheDocument();
   });
 
   it('marks envelope differences and exposes the shell badge', () => {
@@ -180,7 +286,8 @@ describe('Services and tools', () => {
     expect(screen.getByText('expected, not called')).toBeInTheDocument();
     expect(screen.getByText('not expected')).toBeInTheDocument();
     expect(screen.getByText('Did not match')).toBeInTheDocument();
-    expect(screen.getByText('Intent: data question · Router: agent')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Intent' })).toHaveTextContent('data question');
+    expect(screen.getByRole('group', { name: 'Router' })).toHaveTextContent('agent');
     expect(
       servicesTabBadge({
         services: { a: { status: 'ok' }, b: { status: 'failed' }, c: { status: 'skipped' } },
@@ -255,6 +362,8 @@ describe('Evaluator record', () => {
         judge_a_model: 'judge-a',
         models: { a: 'judge-a', custom: 'new-model' },
         vision_judge_model: 'vision',
+        vision_extractor_model: 'extractor',
+        worker_version: 'worker-7',
         design_judge_model: 'design',
         design_rules_version: 'd2',
         attempt: 2,
@@ -265,15 +374,19 @@ describe('Evaluator record', () => {
       },
     });
     render(<EvaluatorTab data={data} zone="Asia/Riyadh" />);
-    expect(screen.getByText('What ran')).toBeInTheDocument();
-    expect(
-      screen.getByText((_, element) => element?.tagName === 'P' && element.textContent === 'Attempt 2 of 3'),
-    ).toHaveTextContent('Attempt 2 of 3');
+    expect(screen.getByText('How this turn was evaluated')).toBeInTheDocument();
+    expect(screen.getByText('Attempt').closest('dt')?.nextElementSibling).toHaveTextContent('2 of 3');
     expect(screen.getByText(formatTableDate('2026-11-09T12:00:00Z'))).toBeInTheDocument();
     expect(screen.getAllByText('judge-a')).toHaveLength(1);
     expect(screen.getByText('1234567890abcdef')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Copy manifest hash' })).toBeInTheDocument();
     expect(screen.getByText('keep me')).toBeInTheDocument();
+    for (const value of ['extractor', 'worker-7', 'rules-4', 'judge-a']) {
+      expect(screen.getByText(value).closest('[data-live-card]')).toHaveAttribute(
+        'data-live-card',
+        'evaluator-method',
+      );
+    }
     expect(screen.queryByText('eval_code_version')).not.toBeInTheDocument();
     expect(screen.getByText('No problems during evaluation')).toBeInTheDocument();
   });
@@ -392,13 +505,17 @@ describe('Evaluator record', () => {
     };
     const { container } = render(<EvaluatorTab data={data} />);
     expect(screen.getByLabelText('Evaluation scores')).toHaveTextContent('Other');
+    expect(
+      within(screen.getByLabelText('Evaluation scores')).getByText('Quality', { exact: true }),
+    ).toBeInTheDocument();
     expect(screen.getByText('Skipped: Not applicable')).toBeInTheDocument();
     const first = container.querySelector<HTMLElement>('[data-score-id="101"]')!;
     first.focus();
     await user.keyboard('{Enter}');
     const panel = screen.getByRole('region', { name: 'Details for Quality one' });
-    expect(within(panel).getByText('English')).toBeInTheDocument();
-    expect(panel.querySelector('[dir="rtl"]')).toBeInTheDocument();
+    expect(within(panel).queryByText('English')).not.toBeInTheDocument();
+    expect(panel.querySelector('[dir="ltr"]')).toBeInTheDocument();
+    expect(panel.querySelector('[dir="rtl"]')).not.toBeInTheDocument();
     expect(within(panel).getByText('confidence')).toBeInTheDocument();
     const metadata = within(panel).getByRole('group', { name: 'Judge metadata' });
     expect(metadata).toHaveTextContent('0.83');
@@ -438,6 +555,52 @@ describe('Evaluator record', () => {
     },
   );
 
+  it('keeps the entire score explanation in the chosen language and every evaluator block inside a card', async () => {
+    const user = userEvent.setup();
+    function Language() {
+      const { setLanguage } = useExplanationLanguage();
+      return (
+        <>
+          <button onClick={() => setLanguage('ar')}>Arabic</button>
+          <button onClick={() => setLanguage('both')}>Both</button>
+        </>
+      );
+    }
+    const data = {
+      ...liveTurnDetail,
+      scores: [
+        {
+          ...liveTurnDetail.scores[0]!,
+          metric_name: 'compliance_a',
+          explanation: 'First line.\nSecond line remains visible. / السطر الأول.\nالسطر الثاني يبقى ظاهراً.',
+        },
+      ],
+    };
+    const { container } = render(
+      <ExplanationLanguageProvider>
+        <Language />
+        <EvaluatorTab data={data} />
+      </ExplanationLanguageProvider>,
+    );
+    const grid = screen.getByRole('grid', { name: 'Evaluation scores' });
+    expect(
+      within(grid)
+        .getAllByRole('columnheader')
+        .map((cell) => cell.textContent),
+    ).toEqual(['Metric', 'Score', 'Judge / source', 'Explanation']);
+    expect(grid).toHaveTextContent('Second line remains visible.');
+    expect(grid).toHaveTextContent('Judge A');
+    expect(grid).not.toHaveTextContent('السطر الثاني');
+    await user.click(screen.getByRole('button', { name: 'Arabic' }));
+    expect(grid).not.toHaveTextContent('First line.');
+    expect(grid).toHaveTextContent('السطر الثاني يبقى ظاهراً.');
+    await user.click(screen.getByRole('button', { name: 'Both' }));
+    expect(grid).toHaveTextContent('Second line remains visible.');
+    expect(grid).toHaveTextContent('السطر الثاني يبقى ظاهراً.');
+    for (const heading of container.querySelectorAll('h2, h3'))
+      expect(heading.closest('[data-live-card]')).not.toBeNull();
+  });
+
   it('keeps raw detail in its existing disclosure', async () => {
     const user = userEvent.setup();
     render(<EvaluatorTab data={liveTurnDetail} />);
@@ -445,6 +608,24 @@ describe('Evaluator record', () => {
     expect(raw).toHaveAttribute('aria-expanded', 'false');
     await user.click(raw);
     expect(screen.getByRole('tree', { name: 'Raw evaluation detail' })).toHaveTextContent('verdict');
+  });
+
+  it.each([true, false])('uses categorical value labels from the metric spec (inline spec: %s)', (inline) => {
+    const diagnosis = liveTurnDetail.scores.find((score) => score.metric_name === 'diagnosis')!;
+    render(
+      <EvaluatorTab
+        data={{
+          ...liveTurnDetail,
+          scores: [{ ...diagnosis, spec: inline ? diagnosis.spec : null }],
+        }}
+      />,
+    );
+    const grid = screen.getByRole('grid', { name: 'Evaluation scores' });
+    expect(
+      within(grid).getByText('Diagnosis', { exact: true, selector: '[data-group-row] span' }),
+    ).toBeInTheDocument();
+    expect(within(grid).getByText('Agent problem', { exact: true })).toBeInTheDocument();
+    expect(grid).not.toHaveTextContent('agent_problem');
   });
 });
 
@@ -457,7 +638,7 @@ describe('Old turns and conversation context', () => {
       </>,
     );
     expect(container).not.toHaveTextContent('undefined');
-    expect(screen.getByText('What ran')).toBeInTheDocument();
+    expect(screen.getByText('How this turn was evaluated')).toBeInTheDocument();
     const data = withSummary({ services: { broken: null }, tools: false, eval_meta: false });
     rerender(
       <>
@@ -471,27 +652,75 @@ describe('Old turns and conversation context', () => {
     expect(screen.queryByText('Other evaluator keys')).not.toBeInTheDocument();
   });
 
-  it('shows rewritten follow-up context before the turn list, including old top-level fields', () => {
+  it('shows time-ordered conversation rows with a selected current turn, preserves list links, and navigates by keyboard', async () => {
+    const user = userEvent.setup();
     const data = withSummary({
-      question_context: {
-        enriched_question: 'Sales in Riyadh last year?',
-        previous_question: 'Show all sales',
-        previous_answer: 'Previous answer',
-      },
-      selected_excerpt: 'Selected chart',
-      question_prompt: 'Full follow-up prompt',
+      question_context: { enriched_question: 'Removed context' },
+      question_prompt: 'Removed prompt',
     });
+    data.conversation = [...data.conversation]
+      .reverse()
+      .map((turn, index) => (index === 1 ? { ...turn, question: 'How many orders were placed?' } : turn));
+    function Location() {
+      const location = useLocation();
+      return (
+        <output aria-label="Location">
+          {location.pathname}
+          {location.search}
+        </output>
+      );
+    }
     const { container } = render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/?list=day%3D2026-11-01']}>
         <ConversationTab data={data} slug="demo" source="source" />
+        <Location />
       </MemoryRouter>,
     );
-    expect(screen.getByText('Sales in Riyadh last year?')).toBeInTheDocument();
-    expect(screen.getByText('Selected chart')).toBeInTheDocument();
-    expect(screen.getByText('Full follow-up prompt')).toBeInTheDocument();
-    expect(container.firstElementChild).toHaveTextContent('Question context');
+    expect(screen.queryByText('Question context')).not.toBeInTheDocument();
+    expect(screen.queryByText('Removed context')).not.toBeInTheDocument();
+    expect(screen.queryByText('Removed prompt')).not.toBeInTheDocument();
+    const grid = screen.getByRole('grid', { name: 'Conversation turns' });
+    const rows = within(grid).getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(3);
+    expect(grid.querySelectorAll('[data-live-question]')).toHaveLength(3);
+    const expected = [...data.conversation].sort((a, b) => Date.parse(a.turn_at) - Date.parse(b.turn_at));
+    rows.forEach((row, index) => {
+      const question = row.querySelector('[data-live-question]');
+      expect(question).toHaveTextContent(expected[index]!.question);
+      expect(question).toHaveAttribute('dir', index === 1 ? 'auto' : 'rtl');
+      if (index !== 1) expect(question).toHaveAttribute('lang', 'ar');
+      expect(row.querySelector('[data-col="turn"]')).toHaveTextContent(
+        String(expected[index]!.turn_index! + 1),
+      );
+    });
+    expect(screen.getByText('3 turns. Click a turn to open its page.')).toBeInTheDocument();
+    expect(within(grid).getByRole('columnheader', { name: 'Open turn' }).textContent).toBe('');
+    expect(grid.querySelector('[aria-current="page"]')).toHaveAttribute('data-focused');
+    const link = within(grid).getAllByRole('link')[0]!;
+    expect(link).toHaveAttribute('href', expect.stringContaining('list=day%3D2026-11-01'));
+    const href = link.getAttribute('href')!;
+    act(() => link.closest('tr')!.focus());
+    await user.keyboard('{Enter}');
+    expect(screen.getByLabelText('Location')).toHaveTextContent(href);
+    expect(container.querySelectorAll('[data-live-card]')).toHaveLength(1);
+  });
+
+  it('describes a single conversation turn in the singular and preserves an unknown index', () => {
+    render(
+      <MemoryRouter>
+        <ConversationTab
+          data={{
+            ...liveTurnDetail,
+            conversation: [{ ...liveTurnDetail.conversation[0]!, turn_index: null }],
+          }}
+          slug="demo"
+          source="source"
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('1 turn. Click a turn to open its page.')).toBeInTheDocument();
     expect(
-      within(screen.getByRole('list', { name: 'Conversation turns' })).getAllByRole('link'),
-    ).toHaveLength(3);
+      screen.getByRole('grid', { name: 'Conversation turns' }).querySelector('tbody [data-col="turn"]'),
+    ).toHaveTextContent('—');
   });
 });

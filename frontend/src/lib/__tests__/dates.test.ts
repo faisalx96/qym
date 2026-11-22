@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { formatAgo, formatDay, formatHeaderDate, formatTableDate, formatTime, toDate } from '@/lib/dates';
+import {
+  formatAgo,
+  formatAgoSeconds,
+  formatDay,
+  formatElapsed,
+  formatHeaderDate,
+  formatTableDate,
+  formatTime,
+  toDate,
+} from '@/lib/dates';
 
 const at = new Date(2026, 8, 14, 19, 5); // Sep 14, 2026, 19:05 local
 
@@ -19,6 +28,24 @@ describe('dates (C048: one set of formats)', () => {
     expect(formatAgo(new Date(now - 3 * 3_600_000), now)).toBe('3h ago');
     expect(formatAgo(new Date(now - 2 * 86_400_000), now)).toBe('2d ago');
     expect(formatAgo(new Date(now - 40 * 86_400_000), now)).toBe(formatDay(new Date(now - 40 * 86_400_000)));
+  });
+
+  it('counts whole seconds for a live report, with no space before the unit', () => {
+    const now = at.getTime();
+    expect(formatElapsed(8)).toBe('8s');
+    expect(formatElapsed(60)).toBe('1m');
+    expect(formatElapsed(125.9)).toBe('2m 5s');
+    expect(formatElapsed(3840)).toBe('1h 4m');
+    expect(formatElapsed(-3)).toBe('0s');
+    expect(formatElapsed(Number.NaN)).toBe('0s');
+    expect(formatAgoSeconds(new Date(now - 1_900), now)).toBe('just now');
+    expect(formatAgoSeconds(new Date(now - 8_400), now)).toBe('8s ago');
+    expect(formatAgoSeconds(new Date(now - 125_000), now)).toBe('2m 5s ago');
+    // A report from the future (clock skew) is not a negative age.
+    expect(formatAgoSeconds(new Date(now + 5_000), now)).toBe('just now');
+    // An hour or more reads as every other age does.
+    expect(formatAgoSeconds(new Date(now - 3 * 3_600_000), now)).toBe('3h ago');
+    expect(formatAgoSeconds(null)).toBe('—');
   });
 
   it('reads a zone-less server timestamp as UTC and rejects junk', () => {

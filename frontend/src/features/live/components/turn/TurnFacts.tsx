@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { KeyValueGrid, StatusMark, Tag, Text, TextBlock } from '@/ui';
+import { EmptyState, FieldRow, StatusMark, Tag, Text, TextBlock } from '@/ui';
 import { deliveredOf, guardrailsOf, questionContextOf, recordOf, turnClassOf } from '../../lib/summary';
-import { EvidenceCard } from './Evidence';
+import { Bilingual, EvidenceCard } from './Evidence';
 import styles from './TurnFacts.module.css';
 
 const turnNames: Record<string, string> = {
@@ -76,7 +76,6 @@ export function TurnFacts({ summary }: { summary: Record<string, unknown> }) {
       });
     }
   }
-  const deliveredFacts: typeof facts = [];
   if (delivered) {
     // An empty supplied list is a known zero; a missing list is not a fact.
     const raw = recordOf(summary.delivered);
@@ -85,7 +84,7 @@ export function TurnFacts({ summary }: { summary: Record<string, unknown> }) {
       ['data_notes', 'Data notes beside the answer', delivered.dataNotes],
     ] as const) {
       if (Array.isArray(raw?.[key]))
-        deliveredFacts.push({
+        facts.push({
           key,
           label,
           value: (
@@ -96,7 +95,7 @@ export function TurnFacts({ summary }: { summary: Record<string, unknown> }) {
         });
     }
     if (delivered.textTrimmedForChart !== null)
-      deliveredFacts.push({
+      facts.push({
         key: 'trimmed',
         label: 'Answer text',
         value: delivered.textTrimmedForChart
@@ -109,93 +108,93 @@ export function TurnFacts({ summary }: { summary: Record<string, unknown> }) {
     ['previous', 'Previous question', context?.previousQuestion],
     ['excerpt', 'Selected excerpt', context?.selectedExcerpt],
   ] as const;
-  const fired =
-    guardrails?.fired.filter(
-      (item) => item.stage || item.kind || item.ruleId || item.textEn || item.source,
-    ) ?? [];
-  const charts =
-    delivered?.charts.filter(
-      (item) =>
-        item.kind ||
-        item.type ||
-        item.title ||
-        item.categories !== null ||
-        item.sourceRows !== null ||
-        item.shownInAnswer !== null,
-    ) ?? [];
-  if (
-    !facts.length &&
-    !deliveredFacts.length &&
-    !fired.length &&
-    !charts.length &&
-    !guardrails?.replayWithheld &&
-    !questions.some(([, , text]) => text)
-  )
-    return null;
+  for (const [index, item] of (guardrails?.fired ?? []).entries()) {
+    if (!item.kind && !item.stage && !item.ruleId && !item.textEn) continue;
+    facts.push({
+      key: `guardrail-${index}`,
+      label: 'Guardrail',
+      value: (
+        <div className={styles.stack}>
+          <div className={styles.inline}>
+            <StatusMark
+              tone="warning"
+              shape="pause"
+              label={`${item.kind ? (kinds[item.kind] ?? item.kind) : 'Guardrail'} fired`}
+            />
+            {item.stage ? <Text>{stages[item.stage] ?? item.stage}</Text> : null}
+            {item.ruleId ? <Tag kind="data">{item.ruleId}</Tag> : null}
+          </div>
+          <Bilingual en={item.textEn} ar={null} />
+        </div>
+      ),
+    });
+  }
+  if (guardrails?.replayWithheld)
+    facts.push({
+      key: 'replay',
+      label: 'SQL re-run',
+      value: 'For privacy the evaluator ran no SQL of its own on this turn and stored no rows.',
+    });
+  for (const [index, chart] of (delivered?.charts ?? []).entries()) {
+    if (
+      !chart.kind &&
+      !chart.type &&
+      !chart.title &&
+      chart.categories === null &&
+      chart.sourceRows === null &&
+      chart.shownInAnswer === null
+    )
+      continue;
+    const name =
+      chart.kind === 'chart' || !chart.kind
+        ? `${chart.type ? chart.type.charAt(0).toUpperCase() + chart.type.slice(1) + ' ' : ''}chart`
+        : chart.kind.charAt(0).toUpperCase() + chart.kind.slice(1);
+    facts.push({
+      key: `chart-${index}`,
+      label: 'Visualization',
+      value: (
+        <div className={styles.stack}>
+          <Text as="p">
+            {name}
+            {chart.categories !== null ? (
+              <>
+                , <span className={styles.number}>{chart.categories}</span> categories
+              </>
+            ) : null}
+            {chart.sourceRows !== null ? (
+              <>
+                , built from <span className={styles.number}>{chart.sourceRows}</span> rows
+              </>
+            ) : null}
+            {chart.shownInAnswer !== null
+              ? `, ${chart.shownInAnswer ? 'shown' : 'not shown'} in the answer`
+              : ''}
+          </Text>
+          {chart.title ? <TextBlock text={chart.title} dir="auto" code={false} /> : null}
+        </div>
+      ),
+    });
+  }
+  for (const [key, label, text] of questions) {
+    if (text) facts.push({ key, label, value: text });
+  }
   return (
     <EvidenceCard title="What Insightor did" block="turn-facts">
-      <div className={styles.stack}>
-        {facts.length ? <KeyValueGrid dense columns={1} items={facts} /> : null}
-        {fired.map((item, index) => (
-          <div key={index} className={styles.stack}>
-            <div className={styles.inline}>
-              <StatusMark
-                tone="warning"
-                shape="pause"
-                label={`${item.kind ? (kinds[item.kind] ?? item.kind) : 'Guardrail'} fired`}
-              />
-              {item.stage ? <Text>{stages[item.stage] ?? item.stage}</Text> : null}
-              {item.ruleId ? <Tag kind="data">{item.ruleId}</Tag> : null}
-            </div>
-            {item.textEn ? <TextBlock text={item.textEn} dir="ltr" code={false} /> : null}
-            {item.source ? (
-              <Text mono dir="ltr">
-                {item.source}
-              </Text>
-            ) : null}
-          </div>
-        ))}
-        {guardrails?.replayWithheld ? (
-          <Text as="p">For privacy the evaluator ran no SQL of its own on this turn and stored no rows.</Text>
-        ) : null}
-        {charts.map((chart, index) => {
-          const name =
-            chart.kind === 'chart' || !chart.kind
-              ? `${chart.type ? chart.type.charAt(0).toUpperCase() + chart.type.slice(1) + ' ' : ''}chart`
-              : chart.kind.charAt(0).toUpperCase() + chart.kind.slice(1);
-          return (
-            <div key={index} className={styles.stack}>
-              <Text as="p">
-                {name}
-                {chart.categories !== null ? (
-                  <>
-                    , <span className={styles.number}>{chart.categories}</span> categories
-                  </>
-                ) : null}
-                {chart.sourceRows !== null ? (
-                  <>
-                    , built from <span className={styles.number}>{chart.sourceRows}</span> rows
-                  </>
-                ) : null}
-                {chart.shownInAnswer !== null
-                  ? `, ${chart.shownInAnswer ? 'shown' : 'not shown'} in the answer`
-                  : ''}
-              </Text>
-              {chart.title ? <TextBlock text={chart.title} dir="auto" code={false} /> : null}
-            </div>
-          );
-        })}
-        {deliveredFacts.length ? <KeyValueGrid dense columns={1} items={deliveredFacts} /> : null}
-        {questions.some(([, , text]) => text) ? (
-          <KeyValueGrid
-            dense
-            columns={1}
-            items={questions.flatMap(([key, label, text]) =>
-              text ? [{ key, label, value: <TextBlock text={text} dir="auto" code={false} /> }] : [],
-            )}
-          />
-        ) : null}
-      </div>
+      {facts.length ? (
+        facts.map(({ key, label, value }) => (
+          <FieldRow
+            key={key}
+            label={label}
+            labelAnchor="start"
+            labelCase="sentence"
+            className={styles.factRow}
+          >
+            {typeof value === 'string' ? <TextBlock text={value} dir="auto" code={false} /> : value}
+          </FieldRow>
+        ))
+      ) : (
+        <EmptyState compact title="No turn facts recorded for this turn" />
+      )}
     </EvidenceCard>
   );
 }

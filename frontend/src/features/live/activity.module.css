@@ -1,0 +1,183 @@
+/* Live activity line (owner 2026-11-17, option A): one line under the topbar that restates the worker's last report.
+   Nothing here moves on its own: the mark flashes once when a report arrives and the bar follows reported numbers. */
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-lg);
+  min-block-size: var(--status-bar-height);
+  padding: var(--space-xs) var(--space-lg);
+  border-block-end: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  font-size: var(--font-md);
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.line > * {
+  min-inline-size: 0;
+}
+
+/* A silent worker: the warning wash and edge, the same recipe as an inline notice. */
+.line[data-state='stale'] {
+  border-block-end-color: color-mix(in srgb, var(--tone) var(--tint-strong), var(--border-subtle));
+  background: color-mix(in srgb, var(--tone) var(--tint-faint), var(--bg-surface));
+}
+
+.what {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--control-radius);
+}
+
+/* M5: one flash when a new report arrives. */
+.what[data-changed] {
+  animation: activity-beat var(--motion-flash) var(--ease-out);
+}
+
+@keyframes activity-beat {
+  from {
+    background: color-mix(in srgb, var(--accent-secondary) var(--tint-strong), transparent);
+  }
+}
+
+.count {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.track {
+  display: inline-block;
+  inline-size: 150px;
+  max-inline-size: 100%;
+  block-size: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-active);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  block-size: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--tone);
+  /* M3: a reported change morphs; there is no entrance and no idle motion. */
+  transition: inline-size var(--motion-fill) var(--ease-out);
+}
+
+.detail {
+  overflow-wrap: anywhere;
+}
+
+.fresh {
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.line[data-state='stale'] .fresh {
+  color: var(--tone-text);
+  font-weight: 600;
+}
+
+.hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Re-evaluation of one turn (option B's steps, on the turn page only). */
+.reevaluation {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.reevaluationHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-lg);
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+}
+
+.reevaluationHead > * {
+  min-inline-size: 0;
+}
+
+.reevaluationHead .fresh[data-tone] {
+  color: var(--tone-text);
+  font-weight: 600;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-md);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: grid;
+  align-content: start;
+  gap: var(--space-xs);
+  color: var(--text-muted);
+  font-size: var(--font-md);
+}
+
+.stepBar {
+  display: block;
+  block-size: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--border-default);
+}
+
+.step[data-state='done'] {
+  color: var(--text-secondary);
+}
+
+.step[data-state='done'] .stepBar {
+  background: color-mix(in srgb, var(--accent-secondary) 55%, var(--border-default));
+}
+
+.step[data-state='now'],
+.step[data-state='stopped'] {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.step[data-state='now'] .stepBar {
+  background: var(--accent-secondary);
+}
+
+.step[data-state='stopped'] .stepBar {
+  background: var(--warning);
+}
+
+.stepState {
+  color: var(--text-muted);
+  font-size: var(--font-base);
+  font-weight: 400;
+}
+
+.step[data-state='now'] .stepState {
+  color: var(--accent-secondary);
+}
+
+.step[data-state='stopped'] .stepState {
+  color: var(--warning);
+}
+
+.previous {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-base);
+}

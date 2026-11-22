@@ -3,16 +3,24 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
-from typing import Optional
+from typing import Any, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from sqlalchemy import case
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from qym_platform.datetime_utils import ensure_utc, to_api_timestamp, to_storage_utc
-from qym_platform.db.models import LiveJob, LiveSource
+from qym_platform.db.models import LiveJob, LiveSource, LiveTurn, User
 from qym_platform.settings import PlatformSettings
+
+REEVALUATE = "reevaluate"
+REEVALUATE_CONFLICT = "A re-evaluation is already queued or running"
+# A turn id is a String(200) column; a longer value can never name a turn.
+TRACE_ID_MAX_LENGTH = 200
+# Newest re-evaluation jobs of a source read for one turn's history.
+_REEVALUATION_HISTORY = 200
 
 
 class JobError(Exception):
@@ -82,8 +90,9 @@ def report_progress(
             type(progress[counter]) is not int or progress[counter] < 0
         ):
             raise JobError(422, f"{counter} must be a nonnegative integer")
-    if "limit_reached" in progress and type(progress["limit_reached"]) is not bool:
-        raise JobError(422, "limit_reached must be a boolean")
+    for flag in ("limit_reached", "listing_stopped_early"):
+        if flag in progress and type(progress[flag]) is not bool:
+            raise JobError(422, f"{flag} must be a boolean")
     if "waiting" in progress and not isinstance(progress["waiting"], str):
         raise JobError(422, "waiting must be a string")
     if "effective_until" in progress:
@@ -195,6 +204,154 @@ def create_job(
     except IntegrityError:
         raise JobError(409, f"a {kind} job is already queued or running") from None
     return job
+
+
+def create_reevaluate_job(
+    db: Session,
+    source: LiveSource,
+    trace_id: str,
+    actor_user_id: Optional[str],
+    now: datetime,
+) -> LiveJob:
+    """Queue the re-evaluation of one turn of this source; one at a time per source."""
+    if not isinstance(trace_id, str) or not trace_id.strip():
+        raise JobError(422, "trace_id must not be blank")
+    if len(trace_id) > TRACE_ID_MAX_LENGTH:
+        raise JobError(
+            422, f"trace_id must be at most {TRACE_ID_MAX_LENGTH} characters"
+        )
+    # The worker pushes a turn under its trace id, so the trace id is the turn id.
+    known = (
+        db.query(LiveTurn.id)
+        .filter(LiveTurn.source_id == source.id, LiveTurn.turn_id == trace_id)
+        .first()
+    )
+    if known is None:
+        raise JobError(404, "turn not found")
+    # Same parent lock as create_job: concurrent requests see each other's job.
+    db.query(LiveSource).filter_by(id=source.id).with_for_update().one()
+    existing = (
+        db.query(LiveJob.id)
+        .filter(
+            LiveJob.source_id == source.id,
+            LiveJob.kind == REEVALUATE,
+            LiveJob.status.in_(("queued", "running")),
+        )
+        .first()
+    )
+    if existing is not None:
+        raise JobError(409, REEVALUATE_CONFLICT)
+    now = to_storage_utc(now)
+    job = LiveJob(
+        source_id=source.id,
+        kind=REEVALUATE,
+        params={"trace_ids": [trace_id], "redo": ["all"], "limit": 1},
+        status="queued",
+        requested_by_user_id=actor_user_id,
+        requested_at=now,
+        updated_at=now,
+    )
+    try:
+        with db.begin_nested():
+            db.add(job)
+            db.flush()
+    except IntegrityError:
+        raise JobError(409, REEVALUATE_CONFLICT) from None
+    return job
+
+
+def job_trace_id(job: LiveJob) -> Optional[str]:
+    """The turn a re-evaluation job targets; None for other kinds or odd params."""
+    if job.kind != REEVALUATE or not isinstance(job.params, dict):
+        return None
+    trace_ids = job.params.get("trace_ids")
+    if isinstance(trace_ids, list) and trace_ids and isinstance(trace_ids[0], str):
+        return trace_ids[0]
+    return None
+
+
+def active_job(
+    db: Session, source: LiveSource, preferred_id: Optional[str] = None
+) -> Optional[LiveJob]:
+    """The source's job in progress: the one the worker names, else the running one,
+    else the oldest queued one."""
+    jobs = (
+        db.query(LiveJob)
+        .filter(
+            LiveJob.source_id == source.id, LiveJob.status.in_(("queued", "running"))
+        )
+        .order_by(
+            case((LiveJob.status == "running", 0), else_=1),
+            LiveJob.requested_at,
+            LiveJob.id,
+        )
+        .all()
+    )
+    if preferred_id is not None:
+        for job in jobs:
+            if job.id == preferred_id:
+                return job
+    return jobs[0] if jobs else None
+
+
+def reevaluation_state(
+    db: Session, source: LiveSource, trace_id: str
+) -> dict[str, Any]:
+    """The queued or running re-evaluation of one turn and its latest finished one.
+
+    Reads at most the newest ``_REEVALUATION_HISTORY`` re-evaluation jobs of the
+    source and matches the turn in Python: ``params`` is a plain JSON column, with
+    no containment operator shared by SQLite and PostgreSQL.
+    """
+    rows = (
+        db.query(LiveJob)
+        .filter(LiveJob.source_id == source.id, LiveJob.kind == REEVALUATE)
+        .order_by(LiveJob.requested_at.desc(), LiveJob.id.desc())
+        .limit(_REEVALUATION_HISTORY)
+        .all()
+    )
+    active = last = None
+    for job in rows:
+        trace_ids = (
+            job.params.get("trace_ids") if isinstance(job.params, dict) else None
+        )
+        if not isinstance(trace_ids, list) or trace_id not in trace_ids:
+            continue
+        if job.status in ("queued", "running"):
+            active = active or job
+        elif job.status in ("done", "failed", "cancelled"):
+            last = last or job
+        if active is not None and last is not None:
+            break
+
+    def requester(job: LiveJob) -> Optional[str]:
+        if job.requested_by_user_id is None:
+            return None
+        user = db.get(User, job.requested_by_user_id)
+        return user.display_name if user is not None else None
+
+    return {
+        "active": (
+            {
+                "id": active.id,
+                "status": active.status,
+                "requested_at": to_api_timestamp(active.requested_at),
+                "requested_by": requester(active),
+            }
+            if active is not None
+            else None
+        ),
+        "last": (
+            {
+                "id": last.id,
+                "status": last.status,
+                "finished_at": to_api_timestamp(last.finished_at),
+                "error": last.error,
+            }
+            if last is not None
+            else None
+        ),
+    }
 
 
 def cancel_job(db: Session, source: LiveSource, job_id: str, now: datetime) -> LiveJob:

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Card, SectionBoundary, SectionHeader } from '@/ui';
+import { Card, Pagination, SectionBoundary, SectionHeader } from '@/ui';
 import styles from '../../worker.module.css';
 
 export function WorkerBlock({
@@ -38,5 +38,43 @@ export function WorkerBlock({
         )}
       </SectionBoundary>
     </section>
+  );
+}
+
+/** The server can return a bounded jobs list without its complete total. */
+export function WorkerPagination({
+  total,
+  page,
+  pageSize,
+  noun,
+  hasMore = false,
+  totalIsLowerBound = hasMore,
+  onPageChange,
+}: {
+  total: number;
+  page: number;
+  pageSize: number;
+  noun: string;
+  hasMore?: boolean;
+  totalIsLowerBound?: boolean;
+  onPageChange: (page: number) => void;
+}) {
+  return (
+    <div className={styles.pagination}>
+      <span aria-live="polite">
+        Showing {total ? (page - 1) * pageSize + 1 : 0} to {Math.min(page * pageSize, total)} of{' '}
+        {totalIsLowerBound ? 'at least ' : ''}
+        {total} {noun}
+      </span>
+      <Pagination
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        pageCount={Math.max(1, Math.ceil(total / pageSize)) + Number(hasMore)}
+        noun={noun}
+        showSummary={false}
+        onPageChange={onPageChange}
+      />
+    </div>
   );
 }

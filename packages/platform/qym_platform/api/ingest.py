@@ -1572,8 +1572,13 @@ def _ingest_events_sync(
 
     # Fetch identities once per bounded chunk, including IDs absent from the DB.
     # Missing entries remain cached too, avoiding a SELECT for every new row.
-    def _chunks(values, size=400):
+    # The same size bounds the rows of one run_events or spans INSERT
+    # (QYM_INGEST_WRITE_BATCH_SIZE).
+    write_batch_size = ingest_settings().ingest_write_batch_size
+
+    def _chunks(values, size=None):
         values = list(values)
+        size = size or write_batch_size
         return (values[pos : pos + size] for pos in range(0, len(values), size))
 
     known_events = set()
@@ -2165,7 +2170,8 @@ def _ingest_events_sync(
         db.flush()
         try:
             with db.begin_nested():
-                db.execute(insert(Span), rows)
+                for chunk in _chunks(rows):
+                    db.execute(insert(Span), chunk)
             inserted = rows
         except Exception:
             # The common path uses one bulk write/savepoint. Isolate individual

@@ -38,7 +38,7 @@ export function DateRangeDialog({
     redo.every((label) => latest.params.redo?.includes(label))
       ? latest
       : null;
-  async function submit(kind: LiveJob['kind']) {
+  async function submit(kind: CreateWorkerJob['kind']) {
     const message = validateDateRange(since, until, limit, today);
     setValidation(message);
     setError(null);

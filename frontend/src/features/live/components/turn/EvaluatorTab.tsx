@@ -1,7 +1,7 @@
-import { modelSeriesOf } from '@/features/runs-list/model';
 import type { ReactNode } from 'react';
 import type { LiveTurnDetail } from '@/api/live';
 import {
+  Card,
   CopyButton,
   Disclosure,
   InlineNotice,
@@ -9,14 +9,10 @@ import {
   KeyValueGrid,
   EmptyState,
   StateTag,
-  Subsection,
-  ModelTag,
-  Tag,
-  Text,
 } from '@/ui';
-import { evalMetaOf, recordOf, stringOf, numberOf } from '../../lib/summary';
+import { evalMetaOf, judgeOf, recordOf, stringOf, numberOf } from '../../lib/summary';
 import { evaluationProblems } from '../../lib/evaluatorRecord';
-import { Facts } from './Evidence';
+import { EvidenceCard, Facts } from './Evidence';
 import { EvaluationScores } from './EvaluationScores';
 import { EvaluationTimings } from './EvaluationTimings';
 import { liveTime, statusWord } from './presentation';
@@ -24,7 +20,6 @@ import styles from './EvaluatorTab.module.css';
 
 export function EvaluatorTab({
   data,
-  modelIndex = null,
 }: {
   data: LiveTurnDetail;
   zone?: string;
@@ -37,17 +32,39 @@ export function EvaluatorTab({
     consumed.add(key);
     return stringOf(raw[key]);
   };
-  const suite = read('eval_suite');
-  const code = read('eval_code_version');
-  const rules = read('rules_version') ?? stringOf(data.summary.rules_version);
-  const mode = read('mode');
-  const backfill = read('backfill_job_id') ?? stringOf(recordOf(data.summary.provenance)?.backfill_job_id);
-  const reevaluated = read('reevaluated_from');
-  const manifest = stringOf(data.summary.manifest_hash);
-  const facts: { label: string; value: ReactNode; mono?: boolean }[] = [];
-  const fact = (label: string, value: ReactNode, mono = false) => {
-    if (value !== null && value !== undefined && value !== '') facts.push({ label, value, mono });
+  const models = recordOf(raw.models);
+  const facts: { key: string; label: string; value: ReactNode; mono: boolean }[] = [];
+  const fact = (label: string, value: ReactNode, mono = true) => {
+    if (value !== null && value !== undefined && value !== '') facts.push({ key: label, label, value, mono });
   };
+  fact('Judge A model', read('judge_a_model') ?? stringOf(models?.a) ?? judgeOf(data.summary, 'a')?.model);
+  fact('Judge B model', read('judge_b_model') ?? stringOf(models?.b) ?? judgeOf(data.summary, 'b')?.model);
+  fact('Vision model', read('vision_judge_model') ?? stringOf(models?.vision));
+  fact('Extractor model', read('vision_extractor_model') ?? stringOf(models?.extractor));
+  fact('Design model', read('design_judge_model') ?? stringOf(models?.design));
+  fact(
+    'Intent classifier',
+    stringOf(recordOf(recordOf(recordOf(data.summary.services)?.router)?.signals)?.classifier_used),
+  );
+  fact('Rules version', read('rules_version') ?? stringOf(data.summary.rules_version));
+  fact('Chart design rules', read('design_rules_version'));
+  const attempt = numberOf(raw.attempt);
+  if (attempt !== null)
+    fact('Attempt', `${attempt}${meta?.maxAttempts != null ? ` of ${meta.maxAttempts}` : ''}`);
+  fact('Worker version', read('worker_version'));
+  fact('Suite', read('eval_suite'));
+  fact('Code version', read('eval_code_version'));
+  const manifest = stringOf(data.summary.manifest_hash);
+  fact(
+    'Manifest',
+    manifest ? (
+      <span className={styles.inline}>
+        <span>{manifest}</span>
+        <CopyButton text={manifest} label="Copy manifest hash" />
+      </span>
+    ) : null,
+  );
+  fact('Mode', read('mode') ?? data.turn.mode);
   fact(
     'Status',
     <StateTag
@@ -57,46 +74,21 @@ export function EvaluatorTab({
     >
       {statusWord(data.turn.status)}
     </StateTag>,
+    false,
   );
   fact('Outcome', data.turn.outcome);
-  fact('Suite', suite);
-  fact('Code version', code ? <Tag kind="version">{code}</Tag> : null);
-  fact('Rules version', rules ? <Tag kind="version">{rules}</Tag> : null);
-  fact(
-    'Manifest',
-    manifest ? (
-      <span className={styles.inline}>
-        <span>{manifest}</span>
-        <CopyButton text={manifest} label="Copy manifest hash" />
-      </span>
-    ) : null,
-    true,
-  );
-  fact('Mode', mode ?? data.turn.mode);
   for (const [label, value] of [
     ['Turn asked at', data.turn.turn_at],
     ['Evaluated at', data.turn.evaluated_at],
     ['Received at', data.turn.received_at],
     ['Replaced at', stringOf(data.summary.replaced_at)],
-  ] as const) {
+  ] as const)
     fact(label, value ? liveTime(value) : null);
-  }
-  fact('Backfill job', backfill, true);
-  fact('Re-evaluated from', reevaluated, true);
-  const models = recordOf(raw.models);
-  const modelRows = [
-    ['Judge A', read('judge_a_model') ?? stringOf(models?.a)],
-    ['Judge B', read('judge_b_model') ?? stringOf(models?.b)],
-    ['Vision judge', read('vision_judge_model') ?? stringOf(models?.vision)],
-    ['Chart design judge', read('design_judge_model') ?? stringOf(models?.design)],
-    [
-      'Intent classifier',
-      stringOf(recordOf(recordOf(recordOf(data.summary.services)?.router)?.signals)?.classifier_used),
-    ],
-  ];
-  const designRules = read('design_rules_version');
-  const attempt = numberOf(raw.attempt);
-  const maxAttempts = meta?.maxAttempts;
+  fact(
+    'Backfill job',
+    read('backfill_job_id') ?? stringOf(recordOf(data.summary.provenance)?.backfill_job_id),
+  );
+  fact('Re-evaluated from', read('reevaluated_from'));
   const problems = evaluationProblems(data);
   for (const key of [
     'attempt',
@@ -107,10 +99,10 @@ export function EvaluatorTab({
     'viz_rows_dropped',
   ])
     consumed.add(key);
-  // Keep unrecognized nested keys too: normalized models and timings must not erase producer extensions.
+  // Preserve producer extensions after displaying known models and timings.
   const other = Object.fromEntries(Object.entries(raw).filter(([key]) => !consumed.has(key)));
   for (const [key, known] of Object.entries({
-    models: ['a', 'b', 'vision', 'design'],
+    models: ['a', 'b', 'vision', 'extractor', 'design'],
     durations: ['evaluation_ms'],
     durations_s: ['enrichment', 'metrics', 'manifest', 'judges', 'replay', 'other', 'total'],
     stage_durations_s: ['enrichment', 'metrics', 'manifest', 'judges', 'replay', 'other', 'total'],
@@ -123,55 +115,15 @@ export function EvaluatorTab({
   }
   return (
     <div className={styles.stack}>
-      <Subsection title="What ran">
-        <KeyValueGrid
-          columns={3}
-          dense
-          items={facts.map(({ label, value, mono }) => ({ key: label, label, value, mono }))}
-        />
-      </Subsection>
-      {modelRows.some(([, value]) => value) || designRules ? (
-        <Subsection title="Models">
-          <div className={styles.models}>
-            {modelRows.map(([label, value]) =>
-              value ? (
-                <div key={label} className={styles.inline}>
-                  <Text weight={600}>{label}</Text>
-                  <ModelTag name={value} series={modelSeriesOf(modelIndex, value, false)} />
-                  {label === 'Chart design judge' && designRules ? (
-                    <>
-                      <Text tone="muted">Rules</Text>
-                      <Tag kind="version">{designRules}</Tag>
-                    </>
-                  ) : null}
-                </div>
-              ) : null,
-            )}
-            {designRules && !modelRows[3]?.[1] ? (
-              <div className={styles.inline}>
-                <Text>Chart design rules</Text>
-                <Tag kind="version">{designRules}</Tag>
-              </div>
-            ) : null}
-          </div>
-        </Subsection>
-      ) : null}
-      <EvaluationTimings data={data} />
-      {attempt !== null ? (
-        <Subsection title="Attempts">
-          <Text>
-            Attempt <span className={styles.mono}>{attempt}</span>
-            {maxAttempts !== null && maxAttempts !== undefined ? (
-              <>
-                {' '}
-                of <span className={styles.mono}>{maxAttempts}</span>
-              </>
-            ) : null}
-          </Text>
-        </Subsection>
-      ) : null}
-      {problems.length ? (
-        <Subsection title="Problems during evaluation">
+      <EvidenceCard title="How this turn was evaluated" block="evaluator-method">
+        <div className={styles.metadata}>
+          <KeyValueGrid columns={3} items={facts} />
+          <EvaluationTimings data={data} />
+        </div>
+      </EvidenceCard>
+      <EvaluationScores data={data} />
+      <EvidenceCard title="Problems during evaluation" block="evaluator-problems">
+        {problems.length ? (
           <div className={styles.stack}>
             {problems.map((problem) => (
               <InlineNotice key={problem.text} tone={problem.tone}>
@@ -179,23 +131,28 @@ export function EvaluatorTab({
               </InlineNotice>
             ))}
           </div>
-        </Subsection>
-      ) : (
-        <Text tone="muted">No problems during evaluation</Text>
-      )}
-      <EvaluationScores data={data} />
-      {Object.keys(other).length ? (
-        <Subsection title="Other evaluator keys">
-          <Facts value={other} label="Other evaluator keys" />
-        </Subsection>
-      ) : null}
-      <Disclosure title="Raw evaluation detail" summary={data.detail ? 'JSON' : 'Not available'}>
-        {data.detail ? (
-          <JsonTree data={data.detail} label="Raw evaluation detail" />
         ) : (
-          <EmptyState compact title="No raw detail for this turn" />
+          <EmptyState compact title="No problems during evaluation" />
         )}
-      </Disclosure>
+      </EvidenceCard>
+      {Object.keys(other).length ? (
+        <EvidenceCard title="Other evaluator keys" block="evaluator-other">
+          <Facts value={other} label="Other evaluator keys" />
+        </EvidenceCard>
+      ) : null}
+      <Card data-live-card="evaluator-raw">
+        <Disclosure
+          title="Raw evaluation detail"
+          className={styles.raw}
+          summary={data.detail ? 'JSON' : 'Not available'}
+        >
+          {data.detail ? (
+            <JsonTree data={data.detail} label="Raw evaluation detail" />
+          ) : (
+            <EmptyState compact title="No raw detail for this turn" />
+          )}
+        </Disclosure>
+      </Card>
     </div>
   );
 }

@@ -10,6 +10,8 @@ import styles from './ChartCard.module.css';
 export interface ChartCardProps {
   /** Card title (also the section's accessible name). */
   title: string;
+  /** Use h2 when the card is directly under a page title. */
+  headingAs?: 'h2' | 'h3';
   /** Muted text right after the title (a date window). */
   titleMeta?: ReactNode;
   /** Accessible name of the card when it differs from the visible title (default: the title). */
@@ -41,6 +43,7 @@ export interface ChartCardProps {
 
 export function ChartCard({
   title,
+  headingAs,
   titleMeta,
   ariaLabel,
   titleHint,
@@ -70,6 +73,7 @@ export function ChartCard({
       {...rest}
     >
       <CardTitle
+        as={headingAs}
         className={styles.head}
         title={
           <>

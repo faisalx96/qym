@@ -559,6 +559,7 @@ class MaintenanceWorker:
             purge_live(
                 self.session_factory,
                 retention_days=settings.live_retention_days,
+                chart_image_retention_days=settings.live_chart_image_retention_days,
                 now=utc_now_naive(),
             )
         except Exception:  # noqa: BLE001
@@ -1775,10 +1776,19 @@ def _ensure_pg_trgm(ctx: JobContext, index: str) -> bool:
 
     A missing privilege or package must not fail the job or the deploy: the
     searches the index would serve still work without it, only slower.
+
+    The extension goes into ``public`` by name. Without ``SCHEMA`` it lands in
+    the first schema of the session's ``search_path``; a session scoped to a
+    schema of its own (a tenant, the test suite) then installs it there, drops
+    it with that schema, and every other session loses the operator classes
+    (``gin_trgm_ops does not exist``) between the two.
     """
     try:
         with ctx.autocommit() as conn:
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+            try:
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public"))
+            except Exception:  # noqa: BLE001 - no public schema: wherever the server puts it
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
     except Exception as exc:  # noqa: BLE001 - see above
         logger.warning("pg_trgm unavailable; %s skipped", index, exc_info=True)
         ctx.log(f"{index} skipped: pg_trgm is not available ({type(exc).__name__}); search still works without it")
