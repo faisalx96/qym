@@ -48,6 +48,7 @@ export const ROUTES = {
     compare: 'compare',
     reviews: 'reviews',
     bookmarks: 'bookmarks',
+    bookmarksSplat: 'bookmarks/*',
     factory: 'factory',
     factorySplat: 'factory/*',
     settings: 'settings',

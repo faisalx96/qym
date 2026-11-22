@@ -30,6 +30,8 @@ export interface DashboardFilters {
   since?: string;
   until?: string;
   q?: string;
+  /** A fixed set of runs (a bookmark group's page); an empty list matches none. */
+  run_ids?: string[];
 }
 
 export interface Freshness {

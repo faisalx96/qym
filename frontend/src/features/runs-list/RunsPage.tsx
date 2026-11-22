@@ -1,5 +1,9 @@
-/** /projects/:slug — the runs list (brief 03 J1–J6). Variant A "dense table" per UX_DECISION. */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+/**
+ * /projects/:slug — the runs list (brief 03 J1–J6). Variant A "dense table" per UX_DECISION.
+ * With `scope`, the same table over a fixed set of runs (a bookmark group's page): the same columns, sort, filters,
+ * selection, compare and row actions, under the host page's own header.
+ */
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button, EmptyState, StaleBanner, Text, useToast } from '@/ui';
 import { useAnalyzingRuns } from '@/api/analysis';
@@ -44,12 +48,19 @@ import {
 import { defaultDirection, sortString } from './urlState';
 import styles from './RunsPage.module.css';
 
-export function RunsPage() {
+export interface RunsScope {
+  /** The runs the table shows; an empty list shows the scope's empty state. */
+  runIds: readonly string[];
+  /** What the table says when the scope holds no run. */
+  empty: ReactNode;
+}
+
+export function RunsPage({ scope }: { scope?: RunsScope } = {}) {
   const { slug, project, readOnly, canManage, isAdmin } = useProjectContext();
   const { me } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
-  useDocumentTitle('Runs');
+  useDocumentTitle(scope ? null : 'Runs');
   const { view, setView, setPage } = useRunsView();
   const selection = useRunsSelection(slug);
   // Visibility lives in the table's saved layout (per user); the page mirrors it for the sort fallback.
@@ -78,7 +89,7 @@ export function RunsPage() {
     () => [...new Set([...selection.selected, ...selection.cohortA].map(passRefBase))],
     [selection.selected, selection.cohortA],
   );
-  const d = useRunsData(slug, view, legacyVisible, pinnedIds, pageSize, hiddenIds);
+  const d = useRunsData(slug, view, legacyVisible, pinnedIds, pageSize, hiddenIds, scope?.runIds);
   const { rows, columnSet } = d;
   // Open pass groups are kept for the tab, so Back from a pass returns to the same groups.
   useEffect(() => writeExpanded(slug, pruneExpanded(expanded, rows)), [slug, expanded, rows]);
@@ -321,7 +332,9 @@ export function RunsPage() {
   const cohortOverlap = refs.some((r) => selection.cohortA.some((l) => cohortRefsConflict(l, r)));
 
   const empty = () =>
-    d.projectTotal === 0 && !filtered ? (
+    scope && scope.runIds.length === 0 ? (
+      scope.empty
+    ) : d.projectTotal === 0 && !filtered ? (
       <EmptyState
         title={d.data?.freshness.unpublished_runs ? 'Run history is preparing' : 'No runs found'}
         guide={d.data?.freshness.unpublished_runs ? undefined : '/docs/get-started/first-run'}
@@ -412,7 +425,10 @@ export function RunsPage() {
         ),
       }}
       footer={{
-        filterNote: d.data && filtered ? `Filtered from ${d.projectTotal} runs` : undefined,
+        filterNote:
+          d.data && filtered
+            ? `Filtered from ${scope ? scope.runIds.length : d.projectTotal} runs`
+            : undefined,
         pagination: {
           total: d.total,
           page,
@@ -466,10 +482,12 @@ export function RunsPage() {
 
   return (
     <RunsCtx.Provider value={ctx}>
-      <div className={styles.runs} data-testid="runs-page" ref={pageRef}>
-        <Text variant="title" as="h1" className={styles.srOnly}>
-          Runs
-        </Text>
+      <div className={styles.runs} data-testid="runs-page" data-scoped={scope ? '' : undefined} ref={pageRef}>
+        {scope ? null : (
+          <Text variant="title" as="h1" className={styles.srOnly}>
+            Runs
+          </Text>
+        )}
         {stale && d.updatedAt ? (
           <StaleBanner
             since={d.updatedAt}

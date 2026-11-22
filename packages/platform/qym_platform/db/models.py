@@ -1361,14 +1361,45 @@ class BookmarkVisibility(str, enum.Enum):
     PUBLIC = "public"
 
 
+class BookmarkGroup(Base):
+    """A user's folder of run bookmarks in a project (api/bookmarks.py).
+
+    Every bookmark sits in one group of its author. The owner names the
+    group and may ``pin`` it: pinned groups lead the owner's list, newest pin
+    first. A group shows to other members when it holds a public bookmark;
+    they see its public bookmarks only. Rows go with the project's owner
+    (ON DELETE CASCADE); the bookmarks go with their group.
+    """
+
+    __tablename__ = "bookmark_groups"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    owner_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="", server_default="", nullable=False)
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
+    pinned_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "owner_user_id", "name", name="uq_bookmark_groups_owner_name"),
+    )
+
+
 class RunBookmark(Base):
-    """A user's bookmark of a run, with a markdown note (api/bookmarks.py).
+    """A user's bookmark of a run, with a markdown note, in one of their
+    bookmark groups (api/bookmarks.py).
 
     One per user and run. A ``public`` bookmark shows to every member of the
-    project, a ``private`` one to its author only; ``pinned`` bookmarks lead
-    the project's bookmark list, newest pin first. Rows go with the run
-    (ON DELETE CASCADE, so retention's purge needs no extra step) and with
-    the user. The unique key doubles as the run index.
+    project, a ``private`` one to its author only. Rows go with the run
+    (ON DELETE CASCADE, so retention's purge needs no extra step), with the
+    user and with the group. The unique key doubles as the run index.
     """
 
     __tablename__ = "run_bookmarks"
@@ -1377,6 +1408,9 @@ class RunBookmark(Base):
     run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), nullable=False)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    group_id: Mapped[str] = mapped_column(
+        ForeignKey("bookmark_groups.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     visibility: Mapped[BookmarkVisibility] = mapped_column(
         _string_enum(BookmarkVisibility, 10),
         default=BookmarkVisibility.PRIVATE,
@@ -1384,8 +1418,6 @@ class RunBookmark(Base):
         nullable=False,
     )
     note: Mapped[str] = mapped_column(Text, default="", server_default="", nullable=False)
-    pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
-    pinned_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False

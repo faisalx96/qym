@@ -93,3 +93,33 @@
   align-items: center;
   gap: var(--space-xs);
 }
+
+/* A group card: name, pin / shared flags, description, count, owner line and the owner's actions. */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.groupName {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.description {
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* The group page in its Runs view: the runs table fills the content area as the Runs page does. */
+.groupPage {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: var(--space-sm) var(--space-md) 0;
+  gap: var(--space-sm);
+}

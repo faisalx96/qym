@@ -288,6 +288,10 @@ def test_pagination_filters_and_projection_only_reads(dataset):
         ({"versions": ["main"]}, 6),
         ({"since": "2026-09-01T04:00:00Z", "until": "2026-09-01T08:00:00Z"}, 4),
         ({"since": "2026-09-01T07:00:00+03:00", "until": "2026-09-01T08:00:00Z"}, 4),
+        # A fixed set of runs (a bookmark group's page): unknown ids match nothing, an empty list none.
+        ({"run_ids": ["run-0000", "run-0003", "nope"]}, 2),
+        ({"run_ids": ["run-0000"], "tasks": ["__none__"]}, 0),
+        ({"run_ids": []}, 0),
     ],
 )
 def test_exact_filter_semantics(dataset, filters, expected):
@@ -325,7 +329,15 @@ def test_access_hidden_deleted_and_pinned_filters(dataset, monkeypatch):
 
 @pytest.mark.parametrize(
     "value",
-    ["[]", '{"tasks":"x"}', '{"unknown":[]}', '{"since":"bad"}', '{"models":[1]}'],
+    [
+        "[]",
+        '{"tasks":"x"}',
+        '{"unknown":[]}',
+        '{"since":"bad"}',
+        '{"models":[1]}',
+        '{"run_ids":"x"}',
+        '{"run_ids":[1]}',
+    ],
 )
 def test_invalid_filters_rejected(dataset, value):
     _, client, _ = dataset

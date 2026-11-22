@@ -12,6 +12,7 @@ Roles:
 - **review_rule**: the project's review rule decides (managers, or members too).
 - **owner_or_manager**: the owner of the run, experiment, key or factory, or a project manager.
 - **factory_approver**: a project manager, or a member the factory grants the approve level.
+- **group_owner**: the member who owns the bookmark group; managers and admins are not above it.
 - **manager**: a project manager.
 - **admin**: a platform admin.
 - **api_key**: an API key of the project (the SDK).
@@ -105,6 +106,9 @@ Roles:
 | POST | `/api/factories/{factory_id}/rules/{rule_id}:approve` | factory_approver |
 | POST | `/api/factories/{factory_id}/rules/{rule_id}:revoke` | factory_approver |
 | POST | `/api/projects/{project_slug}/factories` | member |
+| DELETE | `/api/bookmark-groups/{group_id}` | group_owner |
+| PATCH | `/api/bookmark-groups/{group_id}` | group_owner |
+| POST | `/api/projects/{project_slug}/bookmark-groups` | member |
 | DELETE | `/api/runs/{run_id}/bookmark` | member |
 | PUT | `/api/runs/{run_id}/bookmark` | member |
 | POST | `/api/runs/{run_id}/force-stop` | admin |

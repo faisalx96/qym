@@ -14,9 +14,15 @@ export function useRunsData(
   pinnedIds: string[],
   pageSize: number = PAGE_SIZE,
   hidden: Set<string> | null = null,
+  /** Restrict every request to these runs (a bookmark group's page); undefined is the whole project. */
+  runIds?: readonly string[],
 ) {
   const key = filterKey(view);
-  const filters = useMemo(() => viewToFilters({ ...DEFAULT_VIEW, ...JSON.parse(key) } as RunsView), [key]);
+  const runIdsKey = runIds ? JSON.stringify(runIds) : null;
+  const filters = useMemo(() => {
+    const base = viewToFilters({ ...DEFAULT_VIEW, ...JSON.parse(key) } as RunsView);
+    return runIdsKey ? { ...base, run_ids: JSON.parse(runIdsKey) as string[] } : base;
+  }, [key, runIdsKey]);
 
   const overviewQ = useOverview(slug, filters);
   const overview = overviewQ.data;
