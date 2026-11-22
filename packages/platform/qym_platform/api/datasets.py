@@ -645,6 +645,37 @@ def _dataset_permissions(
     }
 
 
+def _last_editors(db: Session, ids: list[str]) -> Dict[str, tuple[datetime, str]]:
+    """Who last changed each dataset, with when: the newest audit row (rename,
+    delete, publish, alias move), item edit, version created or published, or
+    alias move. One query per source, whatever the dataset count."""
+    sources = [
+        (AuditLog.entity_id, AuditLog.created_at, AuditLog.actor_user_id, None,
+         [AuditLog.entity_type == "dataset", AuditLog.entity_id.in_(ids)]),
+        (DatasetVersion.dataset_id, DatasetItemRevision.created_at, DatasetItemRevision.actor_user_id,
+         DatasetItemRevision, [DatasetVersion.dataset_id.in_(ids)]),
+        (DatasetVersion.dataset_id, DatasetVersion.created_at, DatasetVersion.created_by_user_id, None,
+         [DatasetVersion.dataset_id.in_(ids)]),
+        (DatasetVersion.dataset_id, DatasetVersion.published_at, DatasetVersion.published_by_user_id, None,
+         [DatasetVersion.dataset_id.in_(ids), DatasetVersion.published_at.isnot(None)]),
+        (DatasetAlias.dataset_id, DatasetAlias.updated_at, DatasetAlias.updated_by_user_id, None,
+         [DatasetAlias.dataset_id.in_(ids)]),
+    ]
+    newest: Dict[str, tuple[datetime, str]] = {}
+    for key, at, actor, base, filters in sources:
+        rank = func.row_number().over(partition_by=key, order_by=at.desc()).label("rank")
+        query = db.query(key.label("dataset_id"), at.label("at"), actor.label("actor"), rank)
+        if base is not None:
+            query = query.select_from(base).join(DatasetVersion, DatasetVersion.id == base.dataset_version_id)
+        ranked = query.filter(actor.isnot(None), *filters).subquery()
+        for dataset_id, when, actor_id in db.query(ranked.c.dataset_id, ranked.c.at, ranked.c.actor).filter(
+            ranked.c.rank == 1
+        ):
+            if when is not None and (dataset_id not in newest or when > newest[dataset_id][0]):
+                newest[dataset_id] = (when, actor_id)
+    return newest
+
+
 def _dataset_payloads(
     db: Session, datasets: Iterable[Dataset], principal: Optional[Principal] = None
 ) -> list[Dict[str, Any]]:
@@ -707,7 +738,13 @@ def _dataset_payloads(
         .group_by(RunDataset.dataset_id)
     ):
         run_counts[dataset_id] = run_counts.get(dataset_id, 0) + int(count)
-    users = _user_map(db, [dataset.created_by_user_id for dataset in datasets] + [dataset.deleted_by_user_id for dataset in datasets])
+    editors = _last_editors(db, ids)
+    users = _user_map(
+        db,
+        [dataset.created_by_user_id for dataset in datasets]
+        + [dataset.deleted_by_user_id for dataset in datasets]
+        + [actor for _, actor in editors.values()],
+    )
     manager = _can_manage_datasets(db, principal, datasets[0].project_id) if principal is not None else None
     levels = dataset_access_levels(db, principal, datasets) if principal is not None else {}
     restricted_ids = [dataset.id for dataset in datasets if dataset.access_mode == "restricted"]
@@ -740,7 +777,17 @@ def _dataset_payloads(
             "created_by_user_id": dataset.created_by_user_id,
             "created_by": _user_payload(users.get(dataset.created_by_user_id)),
             "created_at": to_api_timestamp(dataset.created_at),
-            "updated_at": to_api_timestamp(dataset.updated_at),
+            # The newest change of any kind (an item edit does not touch dataset.updated_at), so
+            # the date and the "updated by" person always describe the same change.
+            "updated_at": to_api_timestamp(
+                max(dataset.updated_at, editors[dataset.id][0])
+                if dataset.id in editors and dataset.updated_at is not None
+                else dataset.updated_at
+            ),
+            # The last person to change it; the creator until someone else does.
+            "updated_by": _user_payload(
+                users.get(editors[dataset.id][1] if dataset.id in editors else dataset.created_by_user_id)
+            ),
             "production_version": production,
             "latest_version": version_payloads.get(newest.id) if newest else None,
             "run_count": int(run_counts.get(dataset.id) or 0),

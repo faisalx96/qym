@@ -451,3 +451,125 @@ class TestCallSiteRollup:
         traces = summarize_step_latency(spans, rollup="site")["traces"]
         assert (traces["n"], traces["error_count"]) == (1, 1)
         assert traces["mean_ms"] == pytest.approx(9000.0)
+
+
+def at(span, start_ms):
+    """Set a span's start (and end, from its duration) in ms."""
+    span.start_time_ns = int(start_ms * 1e6)
+    span.end_time_ns = int((start_ms + (span.duration_ms or 0)) * 1e6)
+    return span
+
+
+def tree_trace(trace="t1", visualize=True, sql_calls=2, sql_error=False, model="m1"):
+    """root -> agent -> [classify (LLM), loop (CHAIN) -> [run_sql x sql_calls, visualize?], answer];
+    root -> eval_metrics -> judge. Starts follow the listed order, except answer, listed first."""
+    spans = [
+        at(FakeSpan(span_id="root", name="item", trace_id=trace, duration_ms=10000.0), 0),
+        at(agent("ag", "assistant", "root", 8000.0, trace=trace), 0),
+        at(named_llm("ans", "answer", "ag", 900.0, model=model, trace=trace), 7000),
+        at(named_llm("cls", "classify", "ag", 100.0, model=model, trace=trace), 10),
+        at(FakeSpan(span_id="loop", name="loop", parent_span_id="ag", trace_id=trace, duration_ms=5000.0,
+                    attributes={"openinference.span.kind": "CHAIN"}), 200),
+    ]
+    for i in range(sql_calls):
+        status = "ERROR" if sql_error and i == 0 else "OK"
+        spans.append(at(tool(f"sql{i}", "run_sql", "loop", 1000.0, status=status, trace=trace), 300 + i * 1100))
+    if visualize:
+        spans.append(at(tool("viz", "visualize", "loop", 500.0, trace=trace), 4000))
+    spans += [
+        at(FakeSpan(span_id="em", name="eval_metrics", parent_span_id="root", trace_id=trace,
+                    duration_ms=2000.0), 8000),
+        at(FakeSpan(span_id="j", name="judge", parent_span_id="em", trace_id=trace, duration_ms=1500.0,
+                    attributes={"openinference.span.kind": "EVALUATOR"}), 8100),
+    ]
+    return spans
+
+
+def names(node):
+    return [child["name"] for child in node["children"]]
+
+
+class TestAverageTrace:
+    def summary(self, spans):
+        return summarize_step_latency(spans, rollup="site", tree=True)
+
+    def test_only_on_request(self):
+        assert "tree" not in summarize_step_latency(tree_trace(), rollup="site")
+
+    def test_merges_traces_into_one_tree_in_trace_order(self):
+        spans = tree_trace("t1", model="m1") + tree_trace("t2", model="m2", visualize=False)
+        tree = self.summary(spans)["tree"]
+        # The single root is the whole trace; its children start the tree.
+        assert tree["name"] is None and tree["in_traces"] == 2
+        assert names(tree) == ["assistant", "eval_metrics"]
+        agent_node = tree["children"][0]
+        # answer is listed first but starts last: trace order is by start.
+        assert names(agent_node) == ["classify", "loop", "answer"]
+        assert agent_node["kind"] == "AGENT" and agent_node["phase"] == "task"
+        assert names(agent_node["children"][1]) == ["run_sql", "visualize"]
+        assert tree["children"][1]["phase"] == "eval"
+        assert names(tree["children"][1]) == ["judge"]
+
+    def test_one_row_per_step_whatever_the_model(self):
+        spans = tree_trace("t1", model="m1") + tree_trace("t2", model="m2")
+        answer = self.summary(spans)["tree"]["children"][0]["children"][2]
+        assert answer["models"] == ["m1", "m2"]
+        assert (answer["calls"], answer["in_traces"], answer["n"]) == (2, 2, 2)
+
+    def test_time_in_one_trace_sums_the_calls_of_that_trace(self):
+        spans = tree_trace("t1", sql_calls=3) + tree_trace("t2", sql_calls=1, visualize=False)
+        loop = self.summary(spans)["tree"]["children"][0]["children"][1]
+        sql, viz = loop["children"]
+        assert (sql["calls"], sql["in_traces"]) == (4, 2)
+        # One sample per trace: 3 x 1000 and 1 x 1000.
+        assert sql["n"] == 2 and sql["max_ms"] == 3000.0 and sql["min_ms"] == 1000.0
+        assert sql["time_per_trace_ms"] == pytest.approx(2000.0)
+        # visualize runs in one trace of two: its time per trace spreads over both.
+        assert (viz["in_traces"], viz["median_ms"], viz["time_per_trace_ms"]) == (1, 500.0, 250.0)
+        assert sql["step"] and not loop["step"]
+
+    def test_errors_are_counted_not_timed(self):
+        tree = self.summary(tree_trace(sql_calls=2, sql_error=True))["tree"]
+        sql = tree["children"][0]["children"][1]["children"][0]
+        assert (sql["error_count"], sql["calls"], sql["median_ms"]) == (1, 2, 1000.0)
+
+    def test_whole_trace_times_the_root(self):
+        tree = self.summary(tree_trace("t1") + tree_trace("t2"))["tree"]
+        assert (tree["n"], tree["median_ms"], tree["time_per_trace_ms"]) == (2, 10000.0, 10000.0)
+
+    def test_noise_spans_are_see_through(self):
+        spans = tree_trace()
+        seq = at(FakeSpan(span_id="seq", name="RunnableSequence", parent_span_id="ag", duration_ms=150.0), 5)
+        spans.append(seq)
+        next(s for s in spans if s.span_id == "cls").parent_span_id = "seq"
+        agent_node = self.summary(spans)["tree"]["children"][0]
+        assert names(agent_node) == ["classify", "loop", "answer"]
+
+    def test_several_roots_hang_under_the_whole_trace(self):
+        spans = [
+            at(tool("a", "first", None, 100.0), 0),
+            at(tool("b", "second", None, 200.0), 500),
+        ]
+        tree = self.summary(spans)["tree"]
+        assert names(tree) == ["first", "second"]
+        assert tree["median_ms"] == pytest.approx(700.0)  # the wall-clock extent of both roots
+
+    def test_too_many_nodes_leave_the_tree_out(self, monkeypatch):
+        import qym_platform.api.step_latency as module
+
+        monkeypatch.setattr(module, "MAX_TREE_NODES", 5)
+        assert self.summary(tree_trace())["tree"] is None
+
+    def test_kinds_time_per_trace_calls_and_average_call(self):
+        spans = tree_trace("t1", sql_calls=3) + tree_trace("t2", sql_calls=1, visualize=False)
+        kinds = {k["kind"]: k for k in self.summary(spans)["kinds"]}
+        tool_kind = kinds["TOOL"]
+        # t1: 3 x run_sql + visualize = 3500; t2: 1 x run_sql = 1000.
+        assert (tool_kind["calls"], tool_kind["in_traces"], tool_kind["n"]) == (5, 2, 2)
+        assert tool_kind["max_ms"] == 3500.0 and tool_kind["min_ms"] == 1000.0
+        assert tool_kind["time_per_trace_ms"] == pytest.approx(2250.0)
+        assert tool_kind["avg_call_ms"] == pytest.approx(900.0)
+        assert set(kinds) == {"TOOL", "LLM", "EVALUATOR"}
+        # Sorted by time per trace, the largest first.
+        times = [k["time_per_trace_ms"] for k in self.summary(spans)["kinds"]]
+        assert times == sorted(times, reverse=True)

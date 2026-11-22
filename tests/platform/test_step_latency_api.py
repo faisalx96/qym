@@ -490,6 +490,50 @@ def test_call_site_rollup_names_models_and_keeps_them_in_csv(client, session_fac
     assert plain.splitlines()[0].startswith("phase,step_type,kind,n,error_count")
 
 
+
+def test_run_page_summary_carries_the_average_trace_and_kinds(client, session_factory):
+    """Round 3 L2: the run page's call-site summary carries the average trace and each kind's time per trace;
+    compare's per-lane request and the other rollups do not."""
+    with session_factory() as session:
+        _seed(session)
+    headers = _headers("owner@example.com")
+    payload = client.get("/api/runs/step-latency?run_ids=run-1&rollup=site", headers=headers).json()
+    tree = payload["tree"]
+    assert tree["name"] is None and tree["in_traces"] == payload["trace_count"]
+    assert tree["children"], tree
+
+    def walk(node):
+        yield node
+        for child in node["children"]:
+            yield from walk(child)
+
+    step_calls = sum(node["calls"] for node in walk(tree) if node["step"])
+    group_calls = sum(g["n"] + g["error_count"] for g in payload["groups"])
+    assert step_calls == group_calls  # every step span sits in the tree once
+    assert {k["kind"] for k in payload["kinds"]} == {g["kind"] for g in payload["groups"]}
+    plain = client.get("/api/runs/step-latency?run_ids=run-1&rollup=name", headers=headers).json()
+    assert "tree" not in plain and "kinds" not in plain
+    lanes = client.get("/api/runs/step-latency?run_ids=run-1&rollup=site&group_by=ref", headers=headers).json()
+    assert "tree" not in lanes
+
+
+def test_a_stored_summary_of_an_older_shape_rebuilds(client, session_factory):
+    from qym_platform.db.models import RunStepLatencySummary
+
+    with session_factory() as session:
+        _seed(session)
+    headers = _headers("owner@example.com")
+    url = "/api/runs/step-latency?run_ids=run-1&rollup=site"
+    client.get(url, headers=headers)
+    with session_factory() as session:
+        row = session.query(RunStepLatencySummary).filter_by(run_id="run-1").one()
+        payload = dict(row.payload)
+        payload.pop("tree")
+        # A row written before the average trace: no tree, and the old fingerprint (no version prefix).
+        row.payload, row.fingerprint = payload, row.fingerprint.split("|", 1)[1]
+        session.commit()
+    assert "tree" in client.get(url, headers=headers).json()
+
 # C022: the run page's summary is stored on first read and served from the stored row while the span set holds.
 
 
