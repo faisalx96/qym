@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -679,7 +680,7 @@ def test_analysis_extracts_rules_per_group_and_drops_duplicates_in_any_wording(
                         "description": "A payment answer offers the delivery options.",
                         "categories": ["general"],
                         "kind": "bridge",
-                        "bridge_to": ["format"],
+                        "bridge_to": ["shipping", " shipping ", "billing"],
                         "evidence": ["i1"],
                     },
                     {
@@ -754,11 +755,16 @@ def test_analysis_extracts_rules_per_group_and_drops_duplicates_in_any_wording(
     assert [c["key"] for c in sar["categories"]] == ["general", "format"]
     assert sar["kind"] == "rule" and sar["bridge_to"] == []
     assert sar["evidence"] == ["i1"]  # unknown item ids are dropped
+    # A bridge opens other groups of the dataset (its own group is no target); the billing call was
+    # told which groups exist.
     bridge = by_title["Offer delivery"]
-    assert bridge["kind"] == "bridge" and [c["key"] for c in bridge["bridge_to"]] == [
-        "format"
-    ]
-    # A bridge without a known target is a plain rule in the first category.
+    assert bridge["kind"] == "bridge" and bridge["bridge_to"] == ["shipping"]
+    billing_call = next(c for c in extractions if "'topic' is 'billing'" in c["user"])
+    assert (
+        "Other groups of the dataset (values of metadata key 'topic'; the groups a bridge may open): "
+        '["shipping"]' in billing_call["user"]
+    )
+    # A bridge without a known target group is a plain rule in the first category.
     assert by_title["Mention the receipt"]["kind"] == "rule"
     assert [c["key"] for c in by_title["Mention the receipt"]["categories"]] == [
         "general"
@@ -796,7 +802,7 @@ def test_analysis_extracts_rules_per_group_and_drops_duplicates_in_any_wording(
     assert _rules(client)["total"] == 6
 
 
-def test_rule_categories_and_bridge_targets_are_checked(client):
+def test_rule_categories_and_bridge_groups_are_checked(client):
     added = client.post(
         "/api/factories/f1/categories",
         json={"key": "joins", "name": "Joins", "description": "How tables combine."},
@@ -805,7 +811,7 @@ def test_rule_categories_and_bridge_targets_are_checked(client):
     assert added.status_code == 201, added.text
     joins = added.json()["id"]
     base = {"category_id": "fc1", "title": "Join customers", "description": "x"}
-    # A bridge needs a target outside its own categories; unknown categories are refused.
+    # A bridge names at least one group other than its own; unknown categories are refused.
     assert (
         client.post(
             "/api/factories/f1/rules", json={**base, "kind": "bridge"}, headers=MEMBER
@@ -815,7 +821,12 @@ def test_rule_categories_and_bridge_targets_are_checked(client):
     assert (
         client.post(
             "/api/factories/f1/rules",
-            json={**base, "kind": "bridge", "bridge_to_category_ids": ["fc1"]},
+            json={
+                **base,
+                "group_value": "orders",
+                "kind": "bridge",
+                "bridge_to_groups": ["orders", " ", ""],
+            },
             headers=MEMBER,
         ).status_code
         == 422
@@ -832,40 +843,53 @@ def test_rule_categories_and_bridge_targets_are_checked(client):
         "/api/factories/f1/rules",
         json={
             **base,
-            "category_ids": ["fc1", "fc2", "fc2"],
+            "group_value": "orders",
+            "category_ids": ["fc1", "fc2", "fc2", joins],
             "kind": "bridge",
-            "bridge_to_category_ids": [joins, "fc2", joins],
+            "bridge_to_groups": [" customers ", "customers", "orders", "shipments"],
         },
         headers=MEMBER,
     )
     assert created.status_code == 201, created.text
     rule = created.json()
-    assert [c["id"] for c in rule["categories"]] == ["fc1", "fc2"]
-    assert rule["kind"] == "bridge" and [c["id"] for c in rule["bridge_to"]] == [joins]
-    # Edits keep the links unless given; turning the kind back to "rule" drops the targets.
+    assert rule["categories"][0]["id"] == "fc1"
+    assert {c["id"] for c in rule["categories"]} == {"fc1", "fc2", joins}
+    # Trimmed, distinct, the rule's own group left out, in the given order.
+    assert rule["kind"] == "bridge" and rule["bridge_to"] == ["customers", "shipments"]
+    # Edits keep the targets unless given; turning the kind back to "rule" drops them.
     patched = client.patch(
         f"/api/factories/f1/rules/{rule['id']}",
         json={"title": "Join the customers table"},
         headers=MEMBER,
     )
-    assert patched.status_code == 200 and [
-        c["id"] for c in patched.json()["bridge_to"]
-    ] == [joins]
+    assert patched.status_code == 200 and patched.json()["bridge_to"] == [
+        "customers",
+        "shipments",
+    ]
     patched = client.patch(
         f"/api/factories/f1/rules/{rule['id']}", json={"kind": "rule"}, headers=MEMBER
     )
     assert patched.status_code == 200
     assert patched.json()["kind"] == "rule" and patched.json()["bridge_to"] == []
-    assert [c["id"] for c in patched.json()["categories"]] == ["fc1", "fc2"]
+    assert {c["id"] for c in patched.json()["categories"]} == {"fc1", "fc2", joins}
     patched = client.patch(
         f"/api/factories/f1/rules/{rule['id']}",
-        json={"kind": "bridge", "bridge_to_category_ids": [joins], "category_ids": []},
+        json={"kind": "bridge", "bridge_to_groups": ["customers"], "category_ids": []},
         headers=MEMBER,
     )
     assert patched.status_code == 200
     assert [c["id"] for c in patched.json()["categories"]] == ["fc1"]
-    assert [c["id"] for c in patched.json()["bridge_to"]] == [joins]
-    # Removing the target category turns the bridge into a plain rule.
+    assert patched.json()["bridge_to"] == ["customers"]
+    # Moving the rule into the group it opens is refused: a bridge opens other groups.
+    assert (
+        client.patch(
+            f"/api/factories/f1/rules/{rule['id']}",
+            json={"group_value": "customers"},
+            headers=MEMBER,
+        ).status_code
+        == 422
+    )
+    # Removing a category touches the rules in it, never a bridge's groups.
     assert (
         client.delete(
             f"/api/factories/f1/categories/{joins}", headers=MEMBER
@@ -873,35 +897,47 @@ def test_rule_categories_and_bridge_targets_are_checked(client):
         == 200
     )
     listed = {r["id"]: r for r in _rules(client)["rules"]}
-    assert (
-        listed[rule["id"]]["kind"] == "rule" and listed[rule["id"]]["bridge_to"] == []
-    )
+    assert listed[rule["id"]]["kind"] == "bridge"
+    assert listed[rule["id"]]["bridge_to"] == ["customers"]
 
 
-def test_bridge_rules_open_other_categories_in_generation(
+def test_bridge_rules_open_other_groups_in_generation(
     client, session_factory, fake_llm
 ):
+    """A bridge extends an item into other groups: the item then takes their rules in the
+    layers after it, and its list-valued group key gains the groups it was extended into."""
     _seed_items(
         session_factory,
-        [("q1", "", "SELECT name FROM customers", "SELECT name FROM customers;")],
+        [
+            (
+                "q1",
+                {"tables": ["customers"]},
+                "SELECT name FROM customers",
+                "SELECT name FROM customers;",
+            )
+        ],
+    )
+    client.patch(
+        "/api/factories/f1", json={"group_metadata_key": "tables"}, headers=MEMBER
     )
     with session_factory() as db:
         db.get(FactoryJob, "fj1").status = "cancelled"
         db.delete(db.get(FactoryRule, "fr1"))
         db.commit()
-    for title, category, kind, bridge in (
-        ("Filter by date", "fc1", "rule", []),
-        ("Format as table", "fc2", "rule", []),
-        ("Join orders", "fc1", "bridge", ["fc2"]),
+    for title, group, kind, bridge in (
+        ("Filter by date", "customers", "rule", []),
+        ("Format as table", "orders", "rule", []),
+        ("Join orders", "customers", "bridge", ["orders"]),
     ):
         created = client.post(
             "/api/factories/f1/rules",
             json={
-                "category_id": category,
+                "category_id": "fc1",
+                "group_value": group,
                 "title": title,
                 "description": f"{title} rule",
                 "kind": kind,
-                "bridge_to_category_ids": bridge,
+                "bridge_to_groups": bridge,
             },
             headers=MEMBER,
         )
@@ -917,7 +953,7 @@ def test_bridge_rules_open_other_categories_in_generation(
         assert "When the new rule is a bridge" in system
         rule = user.split("New rule to apply")[1]
         if '"Join orders"' in rule:
-            assert "a bridge into: Format" in rule
+            assert "a bridge into tables: orders" in rule
         return {"input": "SELECT ...", "expected_output": "SELECT ...;", "note": "n"}
 
     fake_llm(script)
@@ -934,9 +970,9 @@ def test_bridge_rules_open_other_categories_in_generation(
     job = client.get(
         f"/api/factories/f1/jobs/{started.json()['id']}", headers=MEMBER
     ).json()
-    # Layer 1: the three rules. Layer 2: General stays General unless the bridge opened Format:
-    # Filter -> Join; Join -> Filter, Join -> Format; Format -> nothing. Layer 3: the third rule each.
-    assert job["status"] == "succeeded" and job["progress"]["generated"] == 9
+    # Layer 1: the two customers rules (Format is an orders rule). Layer 2: Filter -> Join;
+    # Join -> Filter, Join -> Format (the bridge opened orders). Layer 3: the third rule each.
+    assert job["status"] == "succeeded" and job["progress"]["generated"] == 8
     with session_factory() as db:
         version = (
             db.query(DatasetVersion)
@@ -952,20 +988,22 @@ def test_bridge_rules_open_other_categories_in_generation(
     by_layer = {}
     for item in items:
         meta = item.item_metadata["factory"]
-        by_layer.setdefault(meta["layer"], []).append(meta)
-    assert {n: len(v) for n, v in by_layer.items()} == {1: 3, 2: 3, 3: 3}
-    assert {tuple(m["rule_titles"]) for m in by_layer[2]} == {
+        by_layer.setdefault(meta["layer"], []).append((meta, item.item_metadata))
+    assert {n: len(v) for n, v in by_layer.items()} == {1: 2, 2: 3, 3: 3}
+    assert {tuple(m["rule_titles"]) for m, _ in by_layer[2]} == {
         ("Filter by date", "Join orders"),
         ("Join orders", "Filter by date"),
         ("Join orders", "Format as table"),
     }
-    assert all(m["bridges"] == ["Join orders"] for m in by_layer[2])
-    assert all(m["categories"] == ["format", "general"] for m in by_layer[2])
-    only_format = next(
-        m for m in by_layer[1] if m["rule_titles"] == ["Format as table"]
-    )
-    assert only_format["categories"] == ["format"] and only_format["bridges"] == []
-    assert all(len(m["rule_titles"]) == 3 for m in by_layer[3])
+    assert all(m["bridges"] == ["Join orders"] for m, _ in by_layer[2])
+    # The bridged items belong to both groups, in their metadata key too.
+    assert all(m["groups"] == ["customers", "orders"] for m, _ in by_layer[2])
+    assert all(md["tables"] == ["customers", "orders"] for _, md in by_layer[2])
+    only_filter = next(m for m, _ in by_layer[1] if m["rule_titles"] == ["Filter by date"])
+    assert only_filter["groups"] == ["customers"] and only_filter["bridges"] == []
+    filtered_item = next(md for m, md in by_layer[1] if m["rule_titles"] == ["Filter by date"])
+    assert filtered_item["tables"] == ["customers"]
+    assert all(len(m["rule_titles"]) == 3 for m, _ in by_layer[3])
 
 
 def test_analysis_without_items_fails_with_a_plain_reason(
@@ -1533,12 +1571,13 @@ def test_params_and_group_helpers():
     assert svc.body_problem([1], None) is not None
 
 
-def test_migration_0105_matches_the_models_and_downgrades(
+def test_migrations_0105_and_0107_match_the_models_and_downgrade(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from alembic.autogenerate import compare_metadata
 
     migration = _load_migration("0105_data_factory.py")
+    bridges = _load_migration("0107_bridge_groups.py")
     engine = sa.create_engine("sqlite://")
     Base.metadata.create_all(
         engine,
@@ -1572,6 +1611,37 @@ def test_migration_0105_matches_the_models_and_downgrades(
             fk["referred_table"]: fk["options"].get("ondelete")
             for fk in inspector.get_foreign_keys("factory_rule_links")
         } == {"factory_rules": "CASCADE", "factory_rule_categories": "CASCADE"}
+        # 0107: a bridge whose targets were categories loses them and becomes a plain rule.
+        connection.execute(
+            sa.text(
+                "INSERT INTO factory_rules (id, factory_id, category_id, group_value, title, "
+                "description, official, kind, source, evidence, created_at, updated_at) VALUES "
+                "('r1', 'f1', 'c1', 'orders', 'Join', '', 0, 'bridge', 'agent', '[]', "
+                "'2026-11-22 00:00:00', '2026-11-22 00:00:00'), "
+                "('r2', 'f1', 'c1', '', 'Plain', '', 0, 'rule', 'agent', '[]', "
+                "'2026-11-22 00:00:00', '2026-11-22 00:00:00')"
+            )
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO factory_rule_links (id, rule_id, category_id, role) VALUES "
+                "('l1', 'r1', 'c2', 'bridge'), ('l2', 'r1', 'c3', 'category')"
+            )
+        )
+        monkeypatch.setattr(
+            bridges, "op", Operations(MigrationContext.configure(connection))
+        )
+        bridges.upgrade()
+        rows = connection.execute(
+            sa.text("SELECT id, kind, bridge_to_groups FROM factory_rules ORDER BY id")
+        ).fetchall()
+        assert [(r[0], r[1], json.loads(r[2])) for r in rows] == [
+            ("r1", "rule", []),
+            ("r2", "rule", []),
+        ]
+        assert connection.execute(
+            sa.text("SELECT id, role FROM factory_rule_links ORDER BY id")
+        ).fetchall() == [("l2", "category")]
 
         def only_factory(obj, name, kind, reflected, compare_to):  # type: ignore[no-untyped-def]
             table = obj if kind == "table" else getattr(obj, "table", None)
@@ -1582,6 +1652,10 @@ def test_migration_0105_matches_the_models_and_downgrades(
         )
         diffs = compare_metadata(context, Base.metadata)
         assert diffs == [], diffs
+        bridges.downgrade()
+        assert "bridge_to_groups" not in {
+            c["name"] for c in sa.inspect(connection).get_columns("factory_rules")
+        }
         migration.downgrade()
         assert not (FACTORY_TABLES & set(sa.inspect(connection).get_table_names()))
     engine.dispose()

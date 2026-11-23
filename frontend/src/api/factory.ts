@@ -142,8 +142,8 @@ export interface FactoryRule {
   category_name: string | null;
   categories: FactoryCategoryRef[];
   kind: RuleKind;
-  /** The categories a bridge opens for the next generation layer; empty on a plain rule. */
-  bridge_to: FactoryCategoryRef[];
+  /** The groups (values of the grouping key) a bridge extends an item into; empty on a plain rule. */
+  bridge_to: string[];
   group_value: string;
   title: string;
   description: string;
@@ -230,7 +230,7 @@ export interface RuleWrite {
   category_id: string;
   category_ids: string[];
   kind: RuleKind;
-  bridge_to_category_ids: string[];
+  bridge_to_groups: string[];
   group_value: string;
   title: string;
   description: string;

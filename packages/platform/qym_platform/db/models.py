@@ -1602,9 +1602,13 @@ class FactoryRule(Base):
     official: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=false(), nullable=False
     )
-    # "rule" | "bridge" (FACTORY_RULE_KINDS); a bridge's target categories are its "bridge" links.
+    # "rule" | "bridge" (FACTORY_RULE_KINDS). A bridge extends an item into other groups of
+    # the grouping key (another table a query joins): ``bridge_to_groups`` lists their values.
     kind: Mapped[str] = mapped_column(
         String(16), default="rule", server_default="rule", nullable=False
+    )
+    bridge_to_groups: Mapped[list[str]] = mapped_column(
+        JSON, default=list, server_default="[]", nullable=False
     )
     source: Mapped[str] = mapped_column(
         String(16), default="agent", server_default="agent", nullable=False
@@ -1631,12 +1635,13 @@ class FactoryRule(Base):
 
 
 class FactoryRuleLink(Base):
-    """A rule's further categories, and a bridge rule's target categories.
+    """A rule's further categories.
 
     ``category_id`` on the rule is its primary category (the one whose JSON
     schema its body follows); ``role`` ``"category"`` links list the other
-    categories the rule belongs to, ``"bridge"`` links the categories a bridge
-    rule opens for the next generation layer.
+    categories the rule belongs to. (Until migration ``0107`` the role
+    ``"bridge"`` named the categories a bridge opened; a bridge now opens
+    groups, ``FactoryRule.bridge_to_groups``.)
     """
 
     __tablename__ = "factory_rule_links"
