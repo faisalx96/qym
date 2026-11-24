@@ -17,7 +17,7 @@ import {
 } from '@/ui';
 import { listedScoreColumns } from '../lib/filters';
 import { diagnosisSpec, mixSegments, verdictOf } from '../lib/mix';
-import { PassFailTag } from './turn/Evidence';
+import { DiagnosisLabel, PassFailTag } from './turn/Evidence';
 import styles from '../turns.module.css';
 
 interface TurnsTableProps {
@@ -43,6 +43,8 @@ function scoreText(row: LiveTurnRow, spec: LiveMetricSpec): string {
 
 function turnScore(row: LiveTurnRow, spec: LiveMetricSpec) {
   const score = row.scores[spec.metric_name];
+  if (spec.group === 'diagnosis' && spec.score_type === 'categorical' && score && !score.skipped)
+    return <DiagnosisLabel value={score.label} specs={[spec]} />;
   const value = score?.skipped ? null : score?.score_numeric;
   return spec.score_type === 'boolean' ? (
     <PassFailTag value={value ?? null} />
@@ -191,6 +193,7 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
           <div className={styles.diagnosisCell}>
             <StatusMark
               tone={v.tone}
+              data-series={label?.series}
               shape={v.tone === 'danger' ? 'cross' : v.tone === 'neutral' ? 'ring' : 'full'}
               label={label?.label ?? row.label ?? '—'}
             />

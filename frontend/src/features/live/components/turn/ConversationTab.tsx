@@ -80,6 +80,7 @@ export function ConversationTab({
                     className={styles.conversationResult}
                     label={label.label}
                     tone={tone}
+                    data-series={label.series}
                     shape={tone === 'success' ? 'check' : tone === 'danger' ? 'cross' : 'dot'}
                   />
                 );

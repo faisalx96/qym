@@ -4,7 +4,7 @@ import { isInternalMetaKey } from '@/lib/metrics';
 import { splitBilingual } from '@/lib/text';
 import { Button, Card, DataTable, EmptyState, Text, TextBlock, type Column } from '@/ui';
 import { FieldList } from '@/features/run-detail/components/items/pane/values';
-import { Bilingual, MetricValue, TurnCardTitle } from './Evidence';
+import { Bilingual, DiagnosisLabel, MetricValue, TurnCardTitle } from './Evidence';
 import { stringOf } from '../../lib/summary';
 import { sentenceLabel } from './presentation';
 import styles from './EvaluatorTab.module.css';
@@ -71,7 +71,14 @@ export function EvaluationScores({ data }: { data: LiveTurnDetail }) {
       cell: (row) => (
         <div className={styles.score}>
           {!row.skipped && row.score_numeric === null && (row.label || typeof row.score_raw === 'string') ? (
-            <TextBlock text={categoricalLabel(row)} code={false} />
+            row.spec?.group === 'diagnosis' ? (
+              <DiagnosisLabel
+                value={row.label ?? String(row.score_raw)}
+                specs={row.spec ? [row.spec] : data.specs}
+              />
+            ) : (
+              <TextBlock text={categoricalLabel(row)} code={false} />
+            )
           ) : (
             <MetricValue value={row.skipped ? null : row.score_numeric} spec={row.spec} />
           )}

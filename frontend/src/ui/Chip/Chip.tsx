@@ -13,6 +13,8 @@ export interface ChipProps extends Omit<ToggleButtonProps, 'className' | 'style'
   selectionStyle?: 'tone' | 'neutral';
   /** A decorative diagnosis/category mark before the label, independent of selection. */
   mark?: ChipTone;
+  /** Category series for the decorative mark, independent of the selected surface. */
+  markSeries?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
   /** Selected colour from a series 1..8 (e.g. a category group). */
   series?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
   onRemove?: () => void;
@@ -27,6 +29,7 @@ export function Chip({
   tone,
   selectionStyle,
   mark,
+  markSeries,
   series,
   onRemove,
   removeLabel,
@@ -43,7 +46,15 @@ export function Chip({
         data-selection={selectionStyle}
         {...rest}
       >
-        {mark ? <span className={styles.mark} data-chip-mark="" data-tone={mark} aria-hidden="true" /> : null}
+        {mark || markSeries ? (
+          <span
+            className={styles.mark}
+            data-chip-mark=""
+            data-tone={markSeries ? undefined : mark}
+            data-series={markSeries}
+            aria-hidden="true"
+          />
+        ) : null}
         <span>{children}</span>
         {typeof count === 'number' ? (
           <>

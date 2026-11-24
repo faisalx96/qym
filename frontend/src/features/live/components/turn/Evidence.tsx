@@ -62,7 +62,7 @@ export function DiagnosisLabel({ value, specs }: { value: string | null; specs: 
   const label = labelFor(value, specs);
   const v = verdictOf(label.specTone);
   return (
-    <StateTag tone={v.tone} dir="auto">
+    <StateTag tone={v.tone} data-tone={v.tone} data-series={label.series} dir="auto">
       {label.label}
     </StateTag>
   );

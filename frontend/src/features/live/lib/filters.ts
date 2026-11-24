@@ -1,6 +1,7 @@
 import type { LiveFilters, LiveMetricSpec, LiveTurnsPage } from '@/api/live';
 import { formatDayKey } from '@/lib/dates';
 import { diagnosisSpec } from './mix';
+import { diagnosisFor } from './diagnosis';
 
 interface FilterChip {
   key: string;
@@ -46,7 +47,10 @@ export function filterChips(
   ] as const;
   for (const [key, title] of groups) {
     for (const value of filters[key] ?? []) {
-      const plainLabel = key === 'labels' ? values?.find((item) => item.value === value)?.label : undefined;
+      const plainLabel =
+        key === 'labels'
+          ? (diagnosisFor(value)?.label ?? values?.find((item) => item.value === value)?.label)
+          : undefined;
       const label =
         typeof plainLabel === 'string'
           ? plainLabel

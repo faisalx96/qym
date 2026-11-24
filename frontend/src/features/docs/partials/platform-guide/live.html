@@ -14,6 +14,16 @@
 <p>Chart screenshots appear on the Charts tab when the evaluation worker uploaded them.</p>
 <p>Use Tab to reach day controls, stat links, diagnosis segments, trend columns and Days rows; Enter activates them. Left and right Arrow keys select turn-detail tabs. Arabic questions and answers read right to left within the left-to-right controls.</p>
 
+<h2>Diagnosis labels</h2>
+<p>The worker reports Agent OK, Agent problem, Agent suboptimal, Manifest problem, System problem, Inconclusive, Needs review, Not verified or Not judged. Every label has its own colour from qym's existing palette; only Inconclusive is gray. Names and colours stay consistent across filters, turn verdicts, conversation rows and distributions, including older worker metric definitions.</p>
+<ul>
+  <li><strong>Needs review — يحتاج مراجعة</strong> (<code>needs_review</code>): the judges' executed results differ from the agent's.</li>
+  <li><strong>Not verified — لم يتم التحقق</strong> (<code>not_verified</code>): comparison did not run, evaluation failed, the trace was incomplete, input was skipped, or an unknown upstream failure prevented checking.</li>
+  <li><strong>Not judged — لم يُقيَّم</strong> (<code>not_judged</code>): a non-data turn, report turn, or user cancellation.</li>
+  <li><strong>Inconclusive</strong> remains for one-judge-only matches and split or middling scores. Existing turns keep their labels until re-evaluated.</li>
+</ul>
+<p>The <strong>Not OK</strong> count includes Inconclusive and the three new labels, following its existing meaning; it does not mean every counted turn is a confirmed problem. Primary rates still average non-skipped numeric scores supplied by the worker. A label alone never creates a pass or fail score. All labels count in diagnosis distributions and can be filtered. CSV exports preserve the raw label keys.</p>
+
 <h2>Worker page</h2>
 <p>Open <strong>Live → Worker</strong> for the selected source. State pauses or resumes work; Worker key chooses which project API key may receive secrets; Settings saves versions of models, Langfuse, an optional evaluator traces destination (a separate Langfuse project for the worker’s own turn evaluations), Dataiku and database connections, with encrypted tokens and restore history. Verification shows dependency checks before the worker applies a version, while Running shows what is actually in use. Jobs tracks requested work and Problems collects errors. Project members with write access and administrators may change these controls; viewers may read them. Saving settings does not mean they are running: wait for successful verification and the applied version.</p>
 

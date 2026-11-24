@@ -77,7 +77,7 @@ export function DayNumbers({
       label: 'Not OK',
       value: notOk,
       meaning:
-        'Evaluated turns whose diagnosis tone is neither success nor accent. Both tones count as OK outcomes; inconclusive diagnoses count as Not OK.',
+        'Turns without an OK diagnosis, including Inconclusive, Needs review, Not verified and Not judged. This is not a count of confirmed problems.',
     },
     {
       key: 'latency',

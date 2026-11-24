@@ -708,3 +708,14 @@ def test_redone_turn_keeps_its_previous_verdict_for_the_turn_page(
     assert body["summary"]["eval_meta"] == eval_meta
     assert body["summary"]["replaced_at"].endswith("Z")
     assert body["reevaluation"] == {"active": None, "last": None}
+
+
+@pytest.mark.parametrize("label", ["needs_review", "not_verified", "not_judged"])
+def test_new_diagnoses_ingest_without_rewriting_old_turns(
+    client, session_factory, label
+):
+    _create_source(client)
+    _push(client, [_turn("old", label="inconclusive"), _turn("new", label=label)])
+    with session_factory() as db:
+        labels = dict(db.query(LiveTurn.turn_id, LiveTurn.label).all())
+    assert labels == {"old": "inconclusive", "new": label}
