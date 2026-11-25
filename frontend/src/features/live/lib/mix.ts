@@ -1,13 +1,15 @@
 import type { LiveMetricSpec } from '@/api/live';
-import type { CardTone } from '@/ui';
+import type { CardSeries, CardTone } from '@/ui';
+import { DIAGNOSES, diagnosisFor } from './diagnosis';
 
 interface MixSegment {
   value: string;
   label: string;
   tone: CardTone;
-  /** Fixed by value in spec order, independent of counts and rank. */
+  series?: CardSeries;
+  /** Fixed by worker label; custom values fall back to spec order. */
   color: string;
-  /** The tone the spec gives the value, retained for verdict callers. */
+  /** Semantic tone, independent of the category colour, retained for verdict/count callers. */
   specTone: unknown;
   /** Legacy verdict hint; distribution marks use color instead. */
   dark: boolean;
@@ -56,6 +58,12 @@ export function diagnosisColors(spec: LiveMetricSpec | null): Map<string, string
   const extra = ['var(--chart-5)', 'var(--chart-2)', 'var(--chart-3)'];
   for (const item of spec?.values ?? []) {
     if (typeof item.value !== 'string' || colors.has(item.value)) continue;
+    const known = diagnosisFor(item.value);
+    if (known) {
+      colors.set(item.value, known.color);
+      used.add(known.color);
+      continue;
+    }
     const base = (typeof item.tone === 'string' ? tones[item.tone] : undefined) ?? tones.neutral!;
     const color = used.has(base) ? (extra.find((candidate) => !used.has(candidate)) ?? base) : base;
     colors.set(item.value, color);
@@ -66,11 +74,30 @@ export function diagnosisColors(spec: LiveMetricSpec | null): Map<string, string
 
 export function diagnosisSpec(specs: LiveMetricSpec[]): LiveMetricSpec | null {
   const candidates = specs.filter((spec) => spec.score_type === 'categorical' && spec.group === 'diagnosis');
-  return (
+  const spec =
     candidates.find((spec) => spec.is_primary) ??
     candidates.sort((a, b) => a.position - b.position)[0] ??
-    null
-  );
+    null;
+  if (!spec) return null;
+  const values = spec.values ?? [];
+  // Older workers may advertise only the original six labels. Keep custom vocabularies intact.
+  if (values.length && !values.some((item) => typeof item.value === 'string' && diagnosisFor(item.value)))
+    return spec;
+  const present = new Set(values.map((item) => item.value));
+  return {
+    ...spec,
+    values: [
+      ...values.map((item) => {
+        const known = typeof item.value === 'string' ? diagnosisFor(item.value) : undefined;
+        return known ? { ...item, label: known.label, tone: known.tone } : item;
+      }),
+      ...DIAGNOSES.filter((item) => !present.has(item.value)).map(({ value, label, tone }) => ({
+        value,
+        label,
+        tone,
+      })),
+    ],
+  };
 }
 
 export function mixSegments(counts: Record<string, number>, spec: LiveMetricSpec | null): MixSegment[] {
@@ -91,11 +118,17 @@ export function mixSegments(counts: Record<string, number>, spec: LiveMetricSpec
     if (!labels.has(value))
       labels.set(value, { label: value, tone: 'neutral', dark: false, specTone: undefined });
   }
-  return [...labels].map(([value, label]) => ({
-    value,
-    ...label,
-    color: colors.get(value) ?? 'var(--text-muted)',
-    n: counts[value] ?? 0,
-    share: (counts[value] ?? 0) / total,
-  }));
+  return [...labels].map(([value, label]) => {
+    const known = diagnosisFor(value);
+    return {
+      value,
+      ...label,
+      ...(known
+        ? { label: known.label, tone: known.tone, series: known.series, specTone: known.tone, dark: false }
+        : {}),
+      color: known?.color ?? colors.get(value) ?? 'var(--text-muted)',
+      n: counts[value] ?? 0,
+      share: (counts[value] ?? 0) / total,
+    };
+  });
 }

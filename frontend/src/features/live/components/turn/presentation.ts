@@ -9,6 +9,7 @@ export function labelFor(value: string | null, specs: LiveMetricSpec[]) {
     mixSegments(value ? { [value]: 1 } : {}, diagnosisSpec(specs)).find((item) => item.value === value) ?? {
       label: value ?? '—',
       tone: 'neutral' as const,
+      series: undefined,
       specTone: undefined,
       dark: false,
     }

@@ -14,6 +14,7 @@ import {
 } from '@/ui';
 import { filterChips } from '../lib/filters';
 import { diagnosisSpec, mixSegments } from '../lib/mix';
+import { DIAGNOSES } from '../lib/diagnosis';
 import styles from '../turns.module.css';
 
 interface TurnFiltersProps {
@@ -45,7 +46,9 @@ export function TurnFilters({ filters, facets, specs, dayCount, days = [] }: Tur
   }
   const diagnosis = diagnosisSpec(specs);
   const labelValues = new Set([
-    ...(diagnosis?.values ?? []).flatMap((item) => (typeof item.value === 'string' ? [item.value] : [])),
+    ...(diagnosis?.values ?? DIAGNOSES).flatMap((item) =>
+      typeof item.value === 'string' ? [item.value] : [],
+    ),
     ...Object.keys(facets?.labels ?? {}),
     ...(filters.labels ?? []),
   ]);
@@ -311,6 +314,7 @@ export function TurnFilters({ filters, facets, specs, dayCount, days = [] }: Tur
             key={item.value}
             selectionStyle="neutral"
             mark={item.tone}
+            markSeries={item.series}
             count={facets?.labels[item.value] ?? 0}
             isSelected={filters.labels?.includes(item.value) ?? false}
             onChange={(selected) => {

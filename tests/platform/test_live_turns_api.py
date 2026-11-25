@@ -1344,3 +1344,34 @@ def test_turn_detail_reports_its_reevaluation(client, session_factory):
         db.get(LiveJob, "third").status = "running"
         db.commit()
     assert reevaluation()["active"]["status"] == "running"
+
+
+@pytest.mark.parametrize("label", ["needs_review", "not_verified", "not_judged"])
+def test_new_diagnoses_in_filters_facets_detail_and_csv(client, session_factory, label):
+    turn_id = f"turn-{DAY}-5"
+    with session_factory() as db:
+        turn = db.query(LiveTurn).filter_by(turn_id=turn_id).one()
+        turn.label = label
+        score = (
+            db.query(LiveTurnScore)
+            .filter_by(turn_pk=turn.id, metric_name="diagnosis")
+            .one()
+        )
+        score.label = score.score_raw = label
+        db.commit()
+    body = _turns(client, day=DAY, label=label)
+    assert _ids(body) == [turn_id]
+    assert body["rows"][0]["label"] == label
+    assert body["facets"]["labels"][label] == 1
+    detail = client.get(f"{BASE}/turns/{turn_id}", headers=ADMIN)
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["turn"]["label"] == label
+    assert any(row["label"] == label for row in detail.json()["conversation"])
+    response = client.get(
+        f"{BASE}/turns.csv", headers=ADMIN, params={"day": DAY, "label": label}
+    )
+    assert response.status_code == 200, response.text
+    rows = list(csv.DictReader(io.StringIO(response.content.decode("utf-8-sig"))))
+    assert len(rows) == 1
+    assert rows[0]["label"] == rows[0]["diagnosis"] == label
+    assert rows[0]["agent_success"] == ""  # A skipped score stays out of rates/exports.

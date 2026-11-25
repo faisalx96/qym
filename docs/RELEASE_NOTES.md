@@ -27,6 +27,8 @@ Projects gain a **Live** tab for real user turns reported by the evaluation work
 
 ### Live evaluation
 
+- **Three new diagnoses.** Live now names and filters `needs_review` (Needs review / يحتاج مراجعة), `not_verified` (Not verified / لم يتم التحقق), and `not_judged` (Not judged / لم يُقيَّم), including when older worker metric definitions omit them. Tags, turn verdicts, conversations, evaluator scores and day/trend distributions share nine fixed colours from the existing palette; Manifest problem and System problem are coloured too, and only Inconclusive is gray. Counts, filters and CSV exports retain all labels; old turns keep their diagnosis until re-evaluated. The existing Not OK count includes Inconclusive and the three new labels; primary rates still use non-skipped worker numeric scores. See the [diagnosis vocabulary and colour table](live-evaluation-ingest-v1.0.md#diagnosis-labels).
+
 - **Worker page.** Control state, choose the worker API key, save settings versions or restore an earlier version, manage encrypted tokens and the database connection, preview or run jobs, and investigate grouped problems.
 - **Ingest contract v1.2.** Adds the control document with conditional polling, job progress, worker events and the heartbeat `control` block; existing v1.1 producers keep working.
 - **Migration `0096`.** Adds worker settings versions, jobs, events and source control fields, including the selected worker key.

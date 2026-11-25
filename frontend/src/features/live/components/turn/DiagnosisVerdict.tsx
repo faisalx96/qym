@@ -59,11 +59,12 @@ export function DiagnosisVerdict({
   const label = labelFor(verdict?.label ?? data.turn.label, data.specs);
   const { tone } = verdictTone(label.specTone);
   return (
-    <Card compact tone={label.tone} data-live-block="why" data-live-card="why">
+    <Card compact tone={label.tone} series={label.series} data-live-block="why" data-live-card="why">
       <div className={turnStyles.verdictLine}>
         <StatusMark
           data-live-block="diagnosis-label"
           label={reevaluating ? 'Re-evaluating' : label.label}
+          data-series={reevaluating ? undefined : label.series}
           tone={reevaluating ? 'info' : tone}
           shape={
             reevaluating

@@ -246,7 +246,7 @@ describe('overview service and history blocks', () => {
     expect(screen.getByText('Problem', { exact: true })).toBeVisible();
   });
 
-  it('keeps distinct diagnosis tones in the trend legend and inconclusive stacks neutral', () => {
+  it('keeps distinct diagnosis colours in the trend legend and inconclusive stacks neutral', () => {
     const values = [
       { value: 'ok', label: 'OK', tone: 'accent' },
       { value: 'problem', label: 'Problem', tone: 'danger' },
@@ -267,16 +267,19 @@ describe('overview service and history blocks', () => {
     expect(container.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain(
       'var(--text-muted) 0% calc(75% - 1px)',
     );
-    const legendTones = values.map(({ label, tone }) => {
+    const colors = ['var(--success)', 'var(--error)', 'var(--chart-5)', 'var(--text-muted)'];
+    const legendColors = values.map(({ label, tone }, index) => {
       const entry = screen.getByText(label, { exact: true }).closest('[data-tone]');
       expect(entry).toHaveAttribute(
         'data-tone',
         tone === 'accent' ? 'success' : tone === 'meta' ? 'neutral' : tone,
       );
-      if (tone === 'meta') expect(entry).toHaveAttribute('data-dark');
-      return `${entry?.getAttribute('data-tone')}:${entry?.hasAttribute('data-dark')}`;
+      expect(entry).not.toHaveAttribute('data-dark');
+      const swatch = entry?.querySelector('[aria-hidden="true"]');
+      expect(swatch).toHaveStyle({ background: colors[index] });
+      return swatch?.getAttribute('style');
     });
-    expect(new Set(legendTones).size).toBe(values.length);
+    expect(new Set(legendColors).size).toBe(values.length);
     expect(screen.getByText('Undiagnosed').closest('[data-tone]')).toHaveAttribute('data-tone', 'neutral');
     expect(container.querySelector('[data-part="baseline"]')).toBeNull();
   });

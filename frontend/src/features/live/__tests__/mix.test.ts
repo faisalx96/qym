@@ -149,3 +149,30 @@ describe('diagnosisColors', () => {
     );
   });
 });
+
+describe('worker diagnosis vocabulary', () => {
+  const labels = [
+    ['agent_ok', 'Agent OK', 'var(--success)'],
+    ['agent_problem', 'Agent problem', 'var(--error)'],
+    ['agent_suboptimal', 'Agent suboptimal', 'var(--warning)'],
+    ['manifest_problem', 'Manifest problem', 'var(--chart-1)'],
+    ['system_problem', 'System problem', 'var(--chart-5)'],
+    ['inconclusive', 'Inconclusive', 'var(--text-muted)'],
+    ['needs_review', 'Needs review', 'var(--chart-2)'],
+    ['not_verified', 'Not verified', 'var(--chart-3)'],
+    ['not_judged', 'Not judged', 'var(--chart-6)'],
+  ];
+
+  it('uses fixed names and nine distinct existing tokens even without a spec', () => {
+    const segments = mixSegments(Object.fromEntries(labels.map(([value]) => [value!, 1])), null);
+    expect(segments.map(({ value, label, color }) => [value, label, color])).toEqual(labels);
+    expect(new Set(segments.map(({ color }) => color)).size).toBe(9);
+    expect(segments.reduce((sum, { share }) => sum + share, 0)).toBeCloseTo(1);
+  });
+
+  it('ignores stale tones and spec ordering for the worker labels', () => {
+    const stale = { ...spec, values: [...labels].reverse().map(([value]) => ({ value, tone: 'neutral' })) };
+    const colors = diagnosisColors(stale);
+    for (const [value, , color] of labels) expect(colors.get(value!)).toBe(color);
+  });
+});

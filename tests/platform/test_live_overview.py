@@ -549,3 +549,31 @@ def test_other_projects_user_is_403(client, session_factory):
     assert response.status_code == 403
     assert response.json()["detail"] == "Access denied"
     assert client.get(BASE, headers=headers).status_code == 403
+
+
+@pytest.mark.parametrize("label", ["needs_review", "not_verified", "not_judged"])
+def test_new_diagnoses_count_like_inconclusive_without_changing_rates(
+    client, session_factory, label
+):
+    before = _overview(client)
+    with session_factory() as db:
+        turn = db.query(LiveTurn).filter_by(turn_id="turn-2026-11-01-5").one()
+        assert turn.label == "inconclusive"
+        turn.label = label
+        db.commit()
+    after = _overview(client)
+    expected = {**before["day"]["label_mix"]}
+    expected[label] = expected.pop("inconclusive")
+    assert after["day"]["label_mix"] == expected
+    assert after["day"]["in_qym"] == before["day"]["in_qym"]
+    assert after["day"]["metric_means"] == before["day"]["metric_means"]
+    for key, rows_key, mix_key in (
+        ("trend", None, "counts_by_label"),
+        ("days", "rows", "label_mix"),
+    ):
+        old_rows = before[key][rows_key] if rows_key else before[key]
+        new_rows = after[key][rows_key] if rows_key else after[key]
+        old_day = next(row for row in old_rows if row["day"] == "2026-11-01")
+        new_day = next(row for row in new_rows if row["day"] == "2026-11-01")
+        assert new_day[mix_key] == expected
+        assert new_day["primary_rate"] == old_day["primary_rate"] == 0.5

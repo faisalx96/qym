@@ -742,6 +742,45 @@ the same turn and `ref`, and storing a PNG removes the snapshot.
 
 ## 4. Turn, summary, and Score schema
 
+### Diagnosis labels
+
+`label` remains an open string, so custom labels are accepted, grouped, filtered and
+exported without an allowlist. The evaluation worker uses these nine labels. qym
+supplies their display names and fixed colours even when an older metric spec omits
+the new values. Old turns keep their labels until re-evaluated; CSV exports retain
+the raw label keys.
+
+- `needs_review` — **Needs review** (يحتاج مراجعة): the judges' executed results differ from the agent's.
+- `not_verified` — **Not verified** (لم يتم التحقق): comparison did not run, evaluation failed, the trace was incomplete, input was skipped, or an unknown upstream failure prevented checking.
+- `not_judged` — **Not judged** (لم يُقيَّم): a non-data turn, report turn, or user cancellation.
+- `inconclusive` remains for one-judge-only matches and split or middling scores.
+
+Every worker label has a distinct existing palette colour; only `inconclusive` is
+gray. The named tones alone are insufficient for nine labels, so category series
+from the existing chart palette supply the remaining colours. No palette tokens
+are added. Text uses the same colour as the mark except danger's existing AA-safe
+`--error-text` mix (rounded to the nearest 8-bit hex below).
+
+| Label | Display name | Tone / token | Rendered hex |
+|---|---|---|---|
+| `agent_ok` | Agent OK | `success` / `--success` | `#10b981` |
+| `agent_problem` | Agent problem | `danger` / `--error` (`--error-text` for text) | `#ef4444` (text `#ef6e6f`) |
+| `agent_suboptimal` | Agent suboptimal | `warning` / `--warning` | `#f59e0b` |
+| `manifest_problem` | Manifest problem | series 1 / `--chart-1` | `#38bdf8` |
+| `system_problem` | System problem | series 5 / `--chart-5` | `#818cf8` |
+| `inconclusive` | Inconclusive | `neutral` / `--text-muted` | `#9a9ab2` |
+| `needs_review` | Needs review | series 2 / `--chart-2` | `#f472b6` |
+| `not_verified` | Not verified | series 3 / `--chart-3` | `#fb923c` |
+| `not_judged` | Not judged | series 6 / `--chart-6` | `#a3e635` |
+
+Counts preserve the existing semantics: the overview's **Not OK** includes
+`inconclusive` and the three new labels, as well as problem diagnoses. It is not a
+count of confirmed problems. `agent_ok` is OK; custom spec values with `success`
+or `accent` tones also remain OK. Chart shares include all labelled turns.
+Primary rates and metric means continue to average the worker's non-skipped
+numeric scores, independently of diagnosis: skipped or absent scores do not
+contribute, and qym does not invent a pass/fail score for any label.
+
 ### 4.1 Turn
 
 Only `turn_id`, `turn_at`, `status`, and `question` are required. Optional fields

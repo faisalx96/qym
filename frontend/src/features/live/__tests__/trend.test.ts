@@ -8,7 +8,7 @@ import {
   trendLabels,
   turnScale,
 } from '../lib/trend';
-import { mixSegments } from '../lib/mix';
+import { diagnosisSpec, mixSegments } from '../lib/mix';
 
 const diagnosis: LiveMetricSpec = {
   metric_name: 'diagnosis',
@@ -51,7 +51,7 @@ describe('trendColumns', () => {
     };
     const counts = { inconclusive: 3 };
     expect(trendColumns([{ ...trend[0]!, turns: 4, counts_by_label: counts }], [spec])[0]?.stacks).toEqual([
-      ...mixSegments(counts, spec).map(({ value, label, tone, dark, color, n }) => ({
+      ...mixSegments(counts, diagnosisSpec([spec])).map(({ value, label, tone, dark, color, n }) => ({
         value,
         label,
         tone,
