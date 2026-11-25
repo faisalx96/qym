@@ -112,7 +112,7 @@ describe('RuleDialog bridges', () => {
     await userEvent.click(save);
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     // Typed groups join the chips, distinct, the own group dropped; categories are untouched.
-    expect(onSave.mock.calls[0][0]).toMatchObject({
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({
       category_id: 'c1',
       category_ids: [],
       kind: 'bridge',
@@ -137,6 +137,6 @@ describe('RuleDialog bridges', () => {
     await userEvent.click(within(dialog).getByRole('radio', { name: 'Rule' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add rule' }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
-    expect(onSave.mock.calls[0][0]).toMatchObject({ kind: 'rule', bridge_to_groups: [] });
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({ kind: 'rule', bridge_to_groups: [] });
   });
 });
