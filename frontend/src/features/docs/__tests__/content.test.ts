@@ -11,15 +11,18 @@ import {
 } from '../content';
 
 describe('docs IA', () => {
-  it('flattens 28 pages in reading order, with Live after run detail', () => {
-    expect(PAGES).toHaveLength(28);
+  it('flattens 29 pages in reading order, with Live after run detail and Performance after Live', () => {
+    expect(PAGES).toHaveLength(29);
     expect(FIRST_PAGE.key).toBe('get-started/what-is-qym');
     expect(neighbours(FIRST_PAGE).prev).toBeNull();
     expect(neighbours(FIRST_PAGE).next?.key).toBe('get-started/install');
     const live = findPage('platform-guide', 'live')!;
     expect(live.title).toBe('Live evaluation');
     expect(neighbours(live).prev?.key).toBe('platform-guide/run-detail');
-    expect(neighbours(live).next?.key).toBe('platform-guide/projects-data-review');
+    expect(neighbours(live).next?.key).toBe('platform-guide/performance');
+    const performance = findPage('platform-guide', 'performance')!;
+    expect(performance.title).toBe('Performance testing');
+    expect(neighbours(performance).next?.key).toBe('platform-guide/projects-data-review');
   });
 
   it('maps legacy hashes to routes', () => {
@@ -47,10 +50,11 @@ describe('compiled content (frontend/plugins/docs-content.ts)', () => {
   it('returns null for an unknown page and builds a search index', async () => {
     expect(await loadPage('developer/missing')).toBeNull();
     const index = await loadSearchIndex();
-    expect(index.length).toBe(28);
+    expect(index.length).toBe(29);
     const hits = searchDocs(index, 'judge');
     expect(hits[0]?.ref.key).toBe('sdk-guide/judges');
     expect(searchDocs(index, 'metric_max_retries').map((h) => h.ref.key)).toContain('sdk-guide/config');
     expect(searchDocs(index, 'heartbeat').map((h) => h.ref.key)).toContain('platform-guide/live');
+    expect(searchDocs(index, 'breakpoint').map((h) => h.ref.key)).toContain('platform-guide/performance');
   });
 });

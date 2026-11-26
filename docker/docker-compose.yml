@@ -170,6 +170,31 @@ services:
     depends_on: [api]
     restart: unless-stopped
 
+  # Optional performance runner, shipped as a separate image. It asks this
+  # platform for a load-test run with a project API key, runs it against the
+  # target and reports back; qym never connects to it. Its env file supplies
+  # the project and the key. A private CA bundle is a host file named by
+  # QYM_PERFORMANCE_RUNNER_CA_BUNDLE, mounted read-only (/dev/null when unset,
+  # and the runner then trusts the public authorities only). On a stop it
+  # ends the test and sends what was measured, so it gets 60 s before a kill.
+  # Start with `docker compose --profile performance up -d`.
+  performance-runner:
+    profiles: ["performance"]
+    image: ${QYM_PERFORMANCE_RUNNER_IMAGE:-qym-performance-runner:unset}
+    env_file:
+      - path: ${QYM_PERFORMANCE_RUNNER_ENV_FILE:-./performance-runner.env}
+        required: false
+    environment:
+      QYM_URL: ${QYM_PERFORMANCE_RUNNER_QYM_URL:-http://api:8000}
+      RUNNER_CA_BUNDLE: ${QYM_PERFORMANCE_RUNNER_CA_BUNDLE:+/etc/performance-runner/ca-bundle.pem}
+    volumes:
+      - ${QYM_PERFORMANCE_RUNNER_CA_BUNDLE:-/dev/null}:/etc/performance-runner/ca-bundle.pem:ro
+    depends_on: [api]
+    # A stop in the runner's first moments must reach it: with init the stop signal is always delivered.
+    init: true
+    stop_grace_period: 60s
+    restart: unless-stopped
+
 volumes:
   pgdata:
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from itertools import takewhile
 from pathlib import Path
 
 from qym_platform.settings import PlatformSettings
@@ -70,6 +71,79 @@ def test_compose_offers_the_live_worker_behind_a_profile() -> None:
     environment = example.read_text(encoding="utf-8")
     assert "QYM_API_KEY=" in environment
     assert "QYM_LIVE_SOURCE_KEY=" in environment
+
+
+def test_compose_offers_the_performance_runner_behind_a_profile() -> None:
+    for filename, service in (
+        ("docker-compose.yml", "api"),
+        ("docker-compose.split.yml", "ingestion"),
+    ):
+        compose = (ROOT / "docker" / filename).read_text(encoding="utf-8")
+        assert compose.count("  performance-runner:\n") == 1
+        runner = compose.split("  performance-runner:\n", 1)[1].split("\n\n", 1)[0]
+        assert 'profiles: ["performance"]' in runner
+        assert (
+            "image: ${QYM_PERFORMANCE_RUNNER_IMAGE:-qym-performance-runner:unset}"
+        ) in runner
+        assert (
+            "path: ${QYM_PERFORMANCE_RUNNER_ENV_FILE:-./performance-runner.env}"
+        ) in runner
+        assert "required: false" in runner
+        assert (
+            f"QYM_URL: ${{QYM_PERFORMANCE_RUNNER_QYM_URL:-http://{service}:8000}}"
+        ) in runner
+        assert f"depends_on: [{service}]" in runner
+        assert "restart: unless-stopped" in runner
+        # On a stop the runner ends the test and sends what was measured first;
+        # OPERATIONS asks for 60 s before a kill.
+        assert "stop_grace_period: 60s" in runner
+        # The runner calls qym; nothing calls the runner, and it keeps no files.
+        # Its one mount is the optional CA bundle, read-only, at the path that
+        # RUNNER_CA_BUNDLE then names (empty, and /dev/null mounted, when unset).
+        assert "ports:" not in runner
+        assert runner.count("volumes:") == 1
+        volumes = runner.split("    volumes:\n", 1)[1].splitlines()
+        mounts = takewhile(lambda line: line.startswith("      - "), volumes)
+        assert [line.strip() for line in mounts] == [
+            "- ${QYM_PERFORMANCE_RUNNER_CA_BUNDLE:-/dev/null}"
+            ":/etc/performance-runner/ca-bundle.pem:ro"
+        ]
+        assert (
+            "RUNNER_CA_BUNDLE: ${QYM_PERFORMANCE_RUNNER_CA_BUNDLE:+"
+            "/etc/performance-runner/ca-bundle.pem}"
+        ) in runner
+
+    operations = (ROOT / "docs" / "internal" / "OPERATIONS.md").read_text(
+        encoding="utf-8"
+    )
+    assert "## Performance runner" in operations
+    assert "docker compose --profile performance up -d" in operations
+    assert "| `QYM_PERFORMANCE_RUNNER_CA_BUNDLE` |" in operations
+    assert "stop_grace_period: 60s" in operations
+    example = ROOT / "docker" / "performance-runner.env.example"
+    assert example.is_file()
+    environment = example.read_text(encoding="utf-8")
+    # The four settings the runner needs; tokens and plans come from qym.
+    for name in ("QYM_URL", "QYM_PROJECT_ID", "QYM_API_KEY", "RUNNER_CA_BUNDLE"):
+        assert f"\n{name}=" in environment, name
+    assert "TOKEN=" not in environment
+    assert "QYM_PERFORMANCE_RUNNER_CA_BUNDLE" in environment
+
+
+def test_operations_lists_every_performance_setting_with_its_default() -> None:
+    operations = (ROOT / "docs" / "internal" / "OPERATIONS.md").read_text(
+        encoding="utf-8"
+    )
+    rows = [line for line in operations.splitlines() if line.startswith("| `QYM_PERFORMANCE_")]
+    names = [name for name in PlatformSettings.model_fields if name.startswith("performance_")]
+    assert names
+    for name in names:
+        env = "QYM_" + name.upper()
+        (row,) = [line for line in rows if f"`{env}`" in line.split(" | ")[0]]
+        envs = [part.strip(" `|") for part in row.split(" | ")[0].split(" / ")]
+        defaults = [part.strip(" `") for part in row.split(" | ")[1].split(" / ")]
+        default = PlatformSettings.model_fields[name].default
+        assert defaults[envs.index(env)] == str(default).lower(), env
 
 
 def test_entrypoint_defaults_to_non_reload_uvicorn() -> None:

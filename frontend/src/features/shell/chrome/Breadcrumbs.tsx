@@ -1,6 +1,6 @@
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import type { Project } from '@/api/types';
-import { projectPath } from '@/app/routes';
+import { performancePath, projectPath } from '@/app/routes';
 import { useCurrentCrumbLabel, useCurrentItemCrumbLabel } from '@/lib/crumb-label';
 import { LIST_PARAM, normalizeContext } from '@/lib/runs-order';
 import { Icon } from '@/ui';
@@ -46,6 +46,12 @@ export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
         { label: 'Turns', to: projectPath(project.slug, 'live/turns') },
       );
       if (route.page === 'live-turn') crumbs.push({ label: route.turnId ?? 'Turn', mono: true });
+    } else if (route.page.startsWith('performance-')) {
+      // The run's crumb is its running number ("Run 24"), which the run page publishes once it has loaded.
+      crumbs.push(
+        { label: 'Performance', to: performancePath(project.slug) },
+        { label: route.page === 'performance-run' ? pageLabel || route.label : route.label },
+      );
     } else if (route.page === 'experiments-queue') {
       crumbs.push({ label: 'Experiments', to: projectPath(project.slug, 'experiments') }, { label: 'Queue' });
     } else if (route.page === 'experiments' && /\/experiments\/[^/]+$/.test(pathname)) {

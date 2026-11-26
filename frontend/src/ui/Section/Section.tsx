@@ -14,6 +14,8 @@ export interface SectionProps extends Omit<HTMLAttributes<HTMLElement>, 'title'>
   titleId?: string;
   /** Class of the body that holds the children. */
   bodyClassName?: string;
+  /** Passed to the SectionHeader: the description wraps instead of ending in an ellipsis (default off). */
+  wrap?: boolean;
   children?: ReactNode;
 }
 
@@ -23,7 +25,19 @@ export interface SectionProps extends Omit<HTMLAttributes<HTMLElement>, 'title'>
  * the line under the tabs or the page header. Parents stack sections with no gap of their own.
  */
 export const Section = forwardRef<HTMLElement, SectionProps>(function Section(
-  { title, description, actions, level = 'xl', id, titleId, className, bodyClassName, children, ...rest },
+  {
+    title,
+    description,
+    actions,
+    level = 'xl',
+    id,
+    titleId,
+    className,
+    bodyClassName,
+    wrap,
+    children,
+    ...rest
+  },
   ref,
 ) {
   const headingId = titleId ?? (id ? `${id}-title` : undefined);
@@ -36,7 +50,14 @@ export const Section = forwardRef<HTMLElement, SectionProps>(function Section(
       data-section=""
       {...rest}
     >
-      <SectionHeader id={headingId} level={level} title={title} description={description} aside={actions} />
+      <SectionHeader
+        id={headingId}
+        level={level}
+        title={title}
+        description={description}
+        aside={actions}
+        wrap={wrap}
+      />
       <div className={[styles.body, bodyClassName].filter(Boolean).join(' ')}>{children}</div>
     </section>
   );

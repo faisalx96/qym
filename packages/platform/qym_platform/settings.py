@@ -274,6 +274,57 @@ class PlatformSettings(BaseSettings):
     live_job_max_limit: int = Field(default=2000, ge=1)
     live_events_batch_max: int = Field(default=100, ge=1)
 
+    # Performance: load tests run by a separate runner (docs/performance-runner-protocol-v1.0.md).
+    # False switches the area off: every page and runner route answers 404 "Performance is switched off";
+    # stored runs are kept and become readable again when it is switched back on.
+    performance_enabled: bool = Field(default=True)
+    # Runs one person may start per hour (0 disables the limit).
+    performance_starts_per_hour: int = Field(default=20, ge=0)
+    # Platform limits of a plan; a target's own limits cannot exceed them.
+    performance_max_users: int = Field(default=200, ge=1)
+    performance_max_duration_seconds: int = Field(default=28800, ge=60)
+    # A runner is ready for a new run while its last heartbeat is at most this old.
+    # The runner sends one every 10 seconds, so the floor is two heartbeats.
+    performance_runner_fresh_seconds: int = Field(default=30, ge=20)
+    # A claimed run without a sign of life for this long ends as interrupted.
+    performance_stale_after_seconds: int = Field(default=120, ge=30)
+    # A queued run nobody claimed for this long ends as expired.
+    performance_queue_timeout_seconds: int = Field(default=600, ge=30)
+    # After the end of a run its questions, log, summary and report are still accepted for this long.
+    performance_late_window_seconds: int = Field(default=600, ge=0)
+    # Retention, counted from the end of a run: questions and log lines, the report
+    # file, the run itself; events from their own time.
+    performance_detail_retention_days: int = Field(default=90, ge=1)
+    performance_report_retention_days: int = Field(default=180, ge=1)
+    performance_retention_days: int = Field(default=730, ge=1)
+    performance_events_retention_days: int = Field(default=30, ge=1)
+    # Request caps of the runner routes (bytes of the body, records per request) and
+    # per-run caps; the control document repeats them to the runner as ``limits``.
+    performance_info_max_bytes: int = Field(default=8192, ge=256)
+    performance_progress_max_bytes: int = Field(default=65536, ge=4096)
+    performance_questions_batch_max: int = Field(default=200, ge=1, le=1000)
+    performance_questions_max_bytes: int = Field(default=1_048_576, ge=65536)
+    performance_questions_per_run_max: int = Field(default=50_000, ge=1)
+    performance_log_batch_max: int = Field(default=500, ge=1, le=5000)
+    performance_log_max_bytes: int = Field(default=262_144, ge=16384)
+    performance_log_lines_per_run_max: int = Field(default=50_000, ge=1)
+    performance_events_batch_max: int = Field(default=100, ge=1, le=1000)
+    performance_events_max_bytes: int = Field(default=262_144, ge=16384)
+    performance_summary_max_bytes: int = Field(default=262_144, ge=16384)
+    performance_platform_progress_max_bytes: int = Field(default=262144, ge=1, le=262144)
+    performance_platform_summary_max_bytes: int = Field(default=16777216, ge=1, le=16777216)
+    performance_platform_discovery_max_bytes: int = Field(default=16777216, ge=1, le=16777216)
+    performance_platform_max_dashboards: int = Field(default=10000, ge=1, le=10000)
+    performance_platform_max_chart_associations: int = Field(default=100000, ge=1, le=100000)
+    performance_platform_steps_per_run_max: int = Field(default=50000, ge=1, le=50000)
+
+    # The report file, uncompressed UTF-8 bytes.
+    performance_report_max_bytes: int = Field(default=5 * 1024 * 1024, ge=65536)
+    # Characters qym keeps of a question, an answer, and a log message or error text.
+    performance_question_chars_max: int = Field(default=2000, ge=100)
+    performance_answer_chars_max: int = Field(default=1000, ge=100)
+    performance_log_message_chars_max: int = Field(default=2000, ge=100)
+
     # Evaluation Service experiments: launches per user per window (0 disables).
     # Dry-run previews are not counted.
     eval_experiment_create_rate_limit: int = Field(default=30, ge=0)

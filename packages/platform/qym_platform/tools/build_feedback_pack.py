@@ -34,19 +34,23 @@ DOCS_PARTIALS = "frontend/src/features/docs/partials"
 USER_GUIDE = "docs/USER_GUIDE.md"
 IA = "frontend/src/features/docs/ia.json"
 CODE_BLOCK_MAX = 400
+LAST_SOURCES = [f"{DOCS_PARTIALS}/platform-guide/performance.html"]
 
 
 def source_files(root: Path) -> list[str]:
     """Input paths relative to ``root`` in priority order."""
+    # The newest page goes last, so the cap trims its cards before the older pages'.
+    last = LAST_SOURCES
     guide = sorted(
         str(p.relative_to(root))
         for p in (root / DOCS_PARTIALS / "platform-guide").glob("*.html")
+        if str(p.relative_to(root)) not in last
     )
     started = [
         f"{DOCS_PARTIALS}/get-started/what-is-qym.html",
         f"{DOCS_PARTIALS}/get-started/datasets.html",
     ]
-    return [USER_GUIDE, *guide, *started]
+    return [USER_GUIDE, *guide, *started, *(rel for rel in last if (root / rel).is_file())]
 
 
 def source_sha256(root: Path) -> str:
@@ -249,11 +253,14 @@ def build_pack(root: Path = REPO) -> dict[str, Any]:
         sections = _md_sections(raw) if rel.endswith(".md") else _html_sections(raw)
         cards.extend(_cards(rel, sections))
     ia = json.loads((root / IA).read_text(encoding="utf-8"))
-    titles = [
-        {"section": s.get("title", ""), "page": p.get("title", "")}
-        for s in ia.get("sections", [])
-        for p in s.get("pages", [])
-    ]
+    titles, last_titles = [], []
+    for section in ia.get("sections", []):
+        for page in section.get("pages", []):
+            source = f"{DOCS_PARTIALS}/{section['id']}/{page['id']}.html"
+            target = last_titles if source in LAST_SOURCES else titles
+            target.append(
+                {"section": section.get("title", ""), "page": page.get("title", "")}
+            )
     pack: dict[str, Any] = {
         "version": PACK_VERSION,
         "subject": "platform",
@@ -261,11 +268,17 @@ def build_pack(root: Path = REPO) -> dict[str, Any]:
         "doc_titles": titles,
         "cards": [],
     }
-    # Priority order; cards beyond the cap are dropped so the whole file stays within it.
-    for card in cards:
-        pack["cards"].append(card)
-        if len(render(pack)) > PACK_MAX_CHARS:
-            pack["cards"].pop()
+    # New pages' titles also consume space: neither titles nor cards may evict
+    # an older page's cards when the pack is already close to its cap.
+    for key, entries in (
+        ("cards", [c for c in cards if c["source"] not in LAST_SOURCES]),
+        ("doc_titles", last_titles),
+        ("cards", [c for c in cards if c["source"] in LAST_SOURCES]),
+    ):
+        for entry in entries:
+            pack[key].append(entry)
+            if len(render(pack)) > PACK_MAX_CHARS:
+                pack[key].pop()
     return pack
 
 

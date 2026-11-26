@@ -19,6 +19,11 @@ export interface TabsProps {
   children?: ReactNode;
   className?: string;
   orientation?: 'horizontal' | 'vertical';
+  /**
+   * The tab strip answers to its own width (a container query): under 400px a tab takes the small side padding
+   * (`--space-sm`), so five tabs fit a phone column without scrolling. Horizontal tabs only. Default off.
+   */
+  fitNarrow?: boolean;
 }
 
 /** Section navigation: roving focus, Left/Right/Home/End, automatic activation. */
@@ -30,6 +35,7 @@ export function Tabs({
   children,
   className,
   orientation = 'horizontal',
+  fitNarrow = false,
 }: TabsProps) {
   const listRef = useRef<HTMLDivElement>(null);
   // A strip wider than its column (five dataset tabs at 279 px) scrolls: the selected tab is kept in view. Counts and the
@@ -62,7 +68,11 @@ export function Tabs({
       orientation={orientation}
       className={[styles.tabs, className].filter(Boolean).join(' ')}
     >
-      <TabList ref={listRef} aria-label={label} className={styles.list}>
+      <TabList
+        ref={listRef}
+        aria-label={label}
+        className={fitNarrow && orientation === 'horizontal' ? `${styles.list} ${styles.fitNarrow}` : styles.list}
+      >
         {items.map((item) => (
           <Tab key={item.id} id={item.id} className={styles.tab} data-tone={item.tone}>
             <span>{item.label}</span>

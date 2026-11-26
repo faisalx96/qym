@@ -2797,3 +2797,411 @@ class LiveCanaryResult(Base):
         UniqueConstraint("source_id", "canary", "checked_at", name="uq_live_canary_result"),
         Index("ix_live_canary_results_source_canary_checked", "source_id", "canary", "checked_at"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Performance: load tests of a target system, executed by a separate runner
+# (docs/performance-runner-protocol-v1.0.md). Migration 0108.
+# ---------------------------------------------------------------------------
+
+PERFORMANCE_TEST_TYPES = ("breakpoint", "smoke", "soak")
+# A status says where the process is or how it ended; the result of the test is the
+# verdict. Nothing returns to ``queued``; the last five are final.
+PERFORMANCE_RUN_STATUSES = (
+    "queued",
+    "starting",
+    "running",
+    "stopping",
+    "finished",
+    "stopped",
+    "failed",
+    "interrupted",
+    "expired",
+)
+PERFORMANCE_ACTIVE_RUN_STATUSES = ("queued", "starting", "running", "stopping")
+PERFORMANCE_FINAL_RUN_STATUSES = ("finished", "stopped", "failed", "interrupted", "expired")
+# Why a run ended other than by running to its end (``PerformanceRun.status_reason``).
+PERFORMANCE_STATUS_REASONS = (
+    "stopped_before_claim",
+    "stopped_by_person",
+    "preflight_failed",
+    "k6_failed",
+    "runner_restarted",
+    "runner_silent",
+    "runner_shutdown",
+    "stopped_while_runner_silent",
+    "not_claimed",
+)
+PERFORMANCE_TOKEN_NAMES = ("refresh_token", "access_token")
+# The suite's own paths and cookie name: a new target gets them unless a Manager says otherwise.
+PERFORMANCE_DEFAULT_CHAT_PATH = "/change/api/chat"
+PERFORMANCE_DEFAULT_AUTH_PATH = "/auth/token"
+PERFORMANCE_DEFAULT_REFRESH_COOKIE_NAME = "estishraf_rt"
+
+# The partial unique indexes below repeat this condition as SQL text.
+_PERFORMANCE_ACTIVE_RUN = "status IN ('queued','starting','running','stopping')"
+_PERFORMANCE_TARGET_LISTED = "archived_at IS NULL"
+
+
+def _performance_target_settings() -> dict[str, Any]:
+    return {
+        "auth_server": None,
+        "refresh_cookie_name": PERFORMANCE_DEFAULT_REFRESH_COOKIE_NAME,
+    }
+
+
+class PerformanceRunner(Base):
+    """The runner process of a project, as it registered itself.
+
+    ``instance_id`` is new at every process start; only a registration replaces it.
+    ``last_heartbeat_at`` is qym's receive time. ``runner_key_id`` is the API key a
+    Manager chose: token values are disclosed to that key alone. ``registered_key_id``
+    is the key the runner last registered with.
+    """
+
+    __tablename__ = "performance_runners"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"))
+    key: Mapped[str] = mapped_column(String(100))
+    name: Mapped[str] = mapped_column(String(200))
+    info: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict)
+    instance_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    registered_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    registered_key_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("api_keys.id", ondelete="SET NULL"), nullable=True
+    )
+    # idle, preflight, running, stopping or finishing: the runner's own word in its last heartbeat.
+    reported_state: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    # The run the runner says it works on; not a foreign key (the run may be purged).
+    current_run_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    last_heartbeat_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    runner_key_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("api_keys.id", ondelete="SET NULL"), nullable=True
+    )
+    runner_key_changed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    runner_key_changed_by_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("project_id", "key", name="uq_performance_runner_key"),)
+
+
+class PerformanceTarget(Base):
+    """A system under test, added by a Manager. Archived, never deleted, once it has runs.
+
+    ``base_url`` is the origin (scheme and host, no path). Among the targets of a
+    project that are not archived, ``name`` and ``base_url`` are each unique.
+    ``settings`` holds ``auth_server`` (null = ``base_url``) and ``refresh_cookie_name``.
+    """
+
+    __tablename__ = "performance_targets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"))
+    kind: Mapped[str] = mapped_column(String(30), default="chat", server_default="chat")
+    name: Mapped[str] = mapped_column(String(200))
+    base_url: Mapped[str] = mapped_column(String(500))
+    chat_path: Mapped[str] = mapped_column(String(500), default=PERFORMANCE_DEFAULT_CHAT_PATH)
+    # Path of the sign-in renewal route (``token_refresh_path`` in the API).
+    auth_path: Mapped[str] = mapped_column(String(500), default=PERFORMANCE_DEFAULT_AUTH_PATH)
+    is_production: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # The target's own limits; NULL means only the platform limit applies.
+    max_users: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    max_duration_s: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    settings: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=_performance_target_settings)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    tokens: Mapped[list["PerformanceTargetToken"]] = relationship(
+        cascade="all, delete-orphan", order_by="PerformanceTargetToken.name"
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_performance_target_name",
+            "project_id",
+            "name",
+            unique=True,
+            postgresql_where=text(_PERFORMANCE_TARGET_LISTED),
+            sqlite_where=text(_PERFORMANCE_TARGET_LISTED),
+        ),
+        Index(
+            "uq_performance_target_base_url",
+            "project_id",
+            "kind",
+            "base_url",
+            unique=True,
+            postgresql_where=text(_PERFORMANCE_TARGET_LISTED),
+            sqlite_where=text(_PERFORMANCE_TARGET_LISTED),
+        ),
+    )
+
+
+class PerformanceTargetToken(Base):
+    """One saved sign-in token of a target, encrypted at rest (``secrets.encrypt_llm_api_key``).
+
+    ``token_hint`` is the last 4 characters; ``version`` rises by 1 with every
+    replacement. ``updated_by_user_id`` is NULL when the runner reported a rotated token.
+    """
+
+    __tablename__ = "performance_target_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    target_id: Mapped[str] = mapped_column(ForeignKey("performance_targets.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(100))
+    token_encrypted: Mapped[str] = mapped_column(Text)
+    token_hint: Mapped[str] = mapped_column(String(200))
+    history_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    generation: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    updated_by_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("target_id", "name", name="uq_performance_target_token"),)
+
+
+class PerformanceRun(Base):
+    """One load test: started by a person, claimed once by the runner, never resumed.
+
+    ``number`` counts the runs of a project ("Run 24"). ``config`` is the frozen
+    snapshot written at the start (target, token names with hints and versions,
+    plan, mix, dataset facts, options, note) and never changes. ``progress`` is the
+    runner's last report, ``progress_seq`` its sequence number. ``last_seen_at`` is
+    qym's receive time of the last sign of life from the claiming instance (the
+    claim, a heartbeat, a progress report). The headline columns are copied from the
+    summary for the history table. ``report_received_at`` stays after retention has
+    deleted the report file. At most one run per runner and one per target is active.
+    """
+
+    __tablename__ = "performance_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"))
+    number: Mapped[int] = mapped_column(Integer)
+    runner_id: Mapped[str] = mapped_column(ForeignKey("performance_runners.id"))
+    target_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("performance_targets.id", ondelete="SET NULL"), nullable=True
+    )
+    # The dataset as it was at the start is in ``config``; the ids are for reading the items.
+    target_kind: Mapped[str] = mapped_column(String(30), default="chat", server_default="chat")
+    credential_generation: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    dataset_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    dataset_version_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("dataset_versions.id", ondelete="SET NULL"), nullable=True
+    )
+    test_type: Mapped[str] = mapped_column(String(30))
+    status: Mapped[str] = mapped_column(String(20), default="queued")
+    # The suite's own word, stored as it came.
+    verdict: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    config: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict)
+    progress: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    progress_seq: Mapped[int] = mapped_column(Integer, default=0)
+    requested_by_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    requested_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    claim_instance_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_report_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    stop_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    stop_requested_by_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    stop_reason: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    # One of PERFORMANCE_STATUS_REASONS, written with the final status; NULL while all is normal.
+    status_reason: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    token_needed: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    exit_code: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    safe_load_users: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    breaking_level_users: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    breaking_reason: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    recommended_max_users: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    p95_at_safe_load_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    answers_measured: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    answers_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    errors_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    error_rate_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    p95_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    ttfb_p95_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    max_users: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    duration_s: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    quality_mean: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    discovery: Mapped[Optional[dict[str, Any]]] = mapped_column(BIG_JSON, nullable=True)
+    steps_received: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    steps_dropped: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    p95_at_break_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    open_p95_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    filter_p95_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    highest_tested_users: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    opens_measured: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    opens_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    filters_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    charts_drawn: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    charts_failed: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    questions_received: Mapped[int] = mapped_column(Integer, default=0)
+    questions_dropped: Mapped[int] = mapped_column(Integer, default=0)
+    log_lines_received: Mapped[int] = mapped_column(Integer, default=0)
+    log_lines_dropped: Mapped[int] = mapped_column(Integer, default=0)
+    summary: Mapped[Optional[dict[str, Any]]] = mapped_column(BIG_JSON, nullable=True)
+    report_received_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "number", name="uq_performance_run_number"),
+        Index("ix_performance_runs_project_requested", "project_id", "requested_at"),
+        Index("ix_performance_runs_target", "target_id", "requested_at"),
+        Index(
+            "uq_performance_runs_active_runner",
+            "runner_id",
+            unique=True,
+            postgresql_where=text(_PERFORMANCE_ACTIVE_RUN),
+            sqlite_where=text(_PERFORMANCE_ACTIVE_RUN),
+        ),
+        Index(
+            "uq_performance_runs_active_target",
+            "target_id",
+            unique=True,
+            postgresql_where=text(_PERFORMANCE_ACTIVE_RUN),
+            sqlite_where=text(_PERFORMANCE_ACTIVE_RUN),
+        ),
+    )
+
+
+class PerformanceQuestion(Base):
+    """One asked question of a run; ``(run_id, seq)`` is its identity.
+
+    ``level`` is NULL for an answer no level counts. ``user_number`` is the
+    simulated user (``user`` in the API). qym keeps the first 2,000 characters of
+    the question and the first 1,000 of the answer.
+    """
+
+    __tablename__ = "performance_questions"
+
+    id: Mapped[int] = mapped_column(BIG_ID, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("performance_runs.id", ondelete="CASCADE"))
+    seq: Mapped[int] = mapped_column(Integer)
+    asked_at: Mapped[datetime] = mapped_column(DateTime)
+    elapsed_s: Mapped[float] = mapped_column(Float)
+    stage: Mapped[str] = mapped_column(String(20))
+    level: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    user_number: Mapped[int] = mapped_column(Integer)
+    tier: Mapped[str] = mapped_column(String(50))
+    question_id: Mapped[str] = mapped_column(String(200))
+    is_followup: Mapped[bool] = mapped_column(Boolean, default=False)
+    question: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20))
+    http_status: Mapped[int] = mapped_column(Integer)
+    error_kind: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    duration_ms: Mapped[float] = mapped_column(Float)
+    ttfb_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    quality: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    no_data: Mapped[bool] = mapped_column(Boolean, default=False)
+    warmup: Mapped[bool] = mapped_column(Boolean, default=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=1)
+    answer: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    answer_truncated: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "seq", name="uq_performance_question"),
+        Index("ix_performance_questions_run_status", "run_id", "status"),
+        Index("ix_performance_questions_run_level", "run_id", "level"),
+        Index("ix_performance_questions_run_tier", "run_id", "tier"),
+    )
+
+
+class PerformanceDashboardStep(Base):
+    """One dashboard operation; canonical IDs preserve JSON type and comparisons."""
+
+    __tablename__ = "performance_dashboard_steps"
+    id: Mapped[int] = mapped_column(BIG_ID, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("performance_runs.id", ondelete="CASCADE"))
+    seq: Mapped[int] = mapped_column(Integer)
+    at: Mapped[datetime] = mapped_column(DateTime)
+    elapsed_s: Mapped[float] = mapped_column(Float)
+    stage: Mapped[str] = mapped_column(String(20))
+    level: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    user_number: Mapped[int] = mapped_column(Integer)
+    type: Mapped[str] = mapped_column(String(10))
+    dashboard_id: Mapped[Any] = mapped_column(JSON, nullable=False)
+    dashboard_key: Mapped[str] = mapped_column(String(1024))
+    title: Mapped[str] = mapped_column(String(500))
+    insight_id: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    control: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    step: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    http_status: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    error_class: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    duration_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    charts: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    charts_ok: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    errors: Mapped[dict[str, Any]] = mapped_column(JSON)
+    __table_args__ = (
+        UniqueConstraint("run_id", "seq", name="uq_performance_dashboard_step"),
+        Index("ix_performance_steps_run_type", "run_id", "type"),
+        Index("ix_performance_steps_run_dashboard", "run_id", "dashboard_key"),
+        Index("ix_performance_steps_run_level", "run_id", "level"),
+    )
+
+
+class PerformanceLogLine(Base):
+    """One line of a run's log; ``(run_id, seq)`` is its identity and its order."""
+
+    __tablename__ = "performance_log_lines"
+
+    id: Mapped[int] = mapped_column(BIG_ID, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("performance_runs.id", ondelete="CASCADE"))
+    seq: Mapped[int] = mapped_column(Integer)
+    at: Mapped[datetime] = mapped_column(DateTime)
+    level: Mapped[str] = mapped_column(String(10))
+    message: Mapped[str] = mapped_column(Text)
+
+    __table_args__ = (UniqueConstraint("run_id", "seq", name="uq_performance_log_line"),)
+
+
+class PerformanceReport(Base):
+    """The report file of a run, kept apart so that reading a run never loads it."""
+
+    __tablename__ = "performance_reports"
+
+    run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("performance_runs.id", ondelete="CASCADE"), primary_key=True
+    )
+    content_type: Mapped[str] = mapped_column(String(64))
+    # zlib-compressed UTF-8 markup; html_size and byte_size are both the size of the file as a
+    # person downloads it (before compression).
+    html: Mapped[bytes] = mapped_column(LargeBinary)
+    html_size: Mapped[int] = mapped_column(Integer)
+    byte_size: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class PerformanceEvent(Base):
+    """One entry of a runner's timeline: reported by the runner or written by qym itself.
+
+    ``run_id`` puts the event on that run's timeline; it is not a foreign key.
+    A repeat (same runner, ``run_id``, ``at`` and ``code``) is ignored by the writer.
+    """
+
+    __tablename__ = "performance_events"
+
+    id: Mapped[int] = mapped_column(BIG_ID, primary_key=True, autoincrement=True)
+    runner_id: Mapped[str] = mapped_column(ForeignKey("performance_runners.id", ondelete="CASCADE"))
+    run_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    at: Mapped[datetime] = mapped_column(DateTime)
+    level: Mapped[str] = mapped_column(String(10))
+    code: Mapped[str] = mapped_column(String(60))
+    message: Mapped[str] = mapped_column(Text)
+    details: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # ``runner`` or ``qym``.
+    source: Mapped[str] = mapped_column(String(10), default="runner")
+
+    __table_args__ = (
+        Index("ix_performance_events_runner_at", "runner_id", "at"),
+        Index("ix_performance_events_run", "run_id", "id"),
+    )

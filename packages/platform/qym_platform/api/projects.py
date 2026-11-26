@@ -35,6 +35,15 @@ from qym_platform.db.models import (
     LiveTurnScore,
     LiveWorkerEvent,
     LiveWorkerSettings,
+    PerformanceEvent,
+    PerformanceLogLine,
+    PerformanceQuestion,
+    PerformanceDashboardStep,
+    PerformanceReport,
+    PerformanceRun,
+    PerformanceRunner,
+    PerformanceTarget,
+    PerformanceTargetToken,
     Project,
     ProjectAnalysisCategoryCatalogVersion,
     ProjectAnalysisPromptSettings,
@@ -1827,6 +1836,21 @@ def _project_deletion_counts(db: Session, project_id: str) -> Dict[str, int]:
             .join(LiveSource, LiveSource.id == LiveTurn.source_id)
             .filter(LiveSource.project_id == project_id)
         ),
+        "performance_runners": count(
+            db.query(func.count(PerformanceRunner.id)).filter(
+                PerformanceRunner.project_id == project_id
+            )
+        ),
+        "performance_targets": count(
+            db.query(func.count(PerformanceTarget.id)).filter(
+                PerformanceTarget.project_id == project_id
+            )
+        ),
+        "performance_runs": count(
+            db.query(func.count(PerformanceRun.id)).filter(
+                PerformanceRun.project_id == project_id
+            )
+        ),
     }
 
 
@@ -1933,6 +1957,69 @@ def _delete_project_rows(db: Session, project_id: str) -> None:
     db.query(LiveSource).filter(LiveSource.project_id == project_id).delete(
         synchronize_session=False
     )
+
+    # Performance deletion order: lock runs -> questions, log lines, reports ->
+    # runs -> tokens -> targets -> events -> runners. Children are deleted by
+    # name: SQLite does not run the ON DELETE rules. A run holds up to 50,000
+    # questions and as many log lines, so those go run by run, in batches.
+    performance_run_ids = [
+        row[0]
+        for row in db.execute(
+            select(PerformanceRun.id)
+            .where(PerformanceRun.project_id == project_id)
+            .order_by(PerformanceRun.id)
+            .with_for_update()
+        ).all()
+    ]
+    for run_id in performance_run_ids:
+        for model in (PerformanceQuestion, PerformanceDashboardStep, PerformanceLogLine):
+            while True:
+                ids = (
+                    select(model.id)
+                    .where(model.run_id == run_id)
+                    .order_by(model.id)
+                    .limit(batch_size)
+                )
+                deleted = db.query(model).filter(model.id.in_(ids)).delete(
+                    synchronize_session=False
+                )
+                if deleted < batch_size:
+                    break
+    for offset in range(0, len(performance_run_ids), batch_size):
+        ids = performance_run_ids[offset : offset + batch_size]
+        db.query(PerformanceReport).filter(PerformanceReport.run_id.in_(ids)).delete(
+            synchronize_session=False
+        )
+        db.query(PerformanceRun).filter(PerformanceRun.id.in_(ids)).delete(
+            synchronize_session=False
+        )
+    performance_target_ids = select(PerformanceTarget.id).where(
+        PerformanceTarget.project_id == project_id
+    )
+    db.query(PerformanceTargetToken).filter(
+        PerformanceTargetToken.target_id.in_(performance_target_ids)
+    ).delete(synchronize_session=False)
+    db.query(PerformanceTarget).filter(
+        PerformanceTarget.project_id == project_id
+    ).delete(synchronize_session=False)
+    performance_runner_ids = select(PerformanceRunner.id).where(
+        PerformanceRunner.project_id == project_id
+    )
+    while True:
+        ids = (
+            select(PerformanceEvent.id)
+            .where(PerformanceEvent.runner_id.in_(performance_runner_ids))
+            .order_by(PerformanceEvent.id)
+            .limit(batch_size)
+        )
+        deleted = db.query(PerformanceEvent).filter(PerformanceEvent.id.in_(ids)).delete(
+            synchronize_session=False
+        )
+        if deleted < batch_size:
+            break
+    db.query(PerformanceRunner).filter(
+        PerformanceRunner.project_id == project_id
+    ).delete(synchronize_session=False)
 
     # Datasets: revisions and changes point at items/versions, versions at one
     # another, so detach the lineage before deleting versions.
@@ -2237,9 +2324,11 @@ def delete_project(
     """Permanently delete a project that has no runs.
 
     Removes its datasets, API keys, members, LLM connections, analysis rules,
-    catalogs, prompts, reference documents and Live evaluation data. Runs are
-    never deleted here: a project that still has runs (including runs in Trash)
-    returns 409; archive it instead.
+    catalogs, prompts, reference documents, Live evaluation data and
+    performance data (the runner, the targets with their saved tokens, and the
+    performance tests with their questions, logs and reports). Evaluation runs
+    are never deleted here: a project that still has runs (including runs in
+    Trash) returns 409; archive it instead.
     """
     _require_admin(principal)
     project = _get_project(db, project_id)

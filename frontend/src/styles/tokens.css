@@ -140,6 +140,7 @@
   --dropdown-width: 240px;
   --dropdown-max-height: 320px;
   --example-filter-range-width: 88px;
+  --radius-xs: 2px; /* the smallest corner: a legend swatch, a thin bar or meter inside a line (C5) */
   --radius-md: 8px;
   --radius-pill: 999px;
   --transition-fast: 150ms ease;
@@ -368,6 +369,7 @@
   --rail-width: 3px;
   --field-label-width: 7.5rem; /* FieldRow label column */
   --field-measure: 76ch; /* reading measure of prose bodies */
+  --section-text-min: 38ch; /* SectionHeader `wrap`: the narrowest text column before the controls drop under it */
   --card-padding: var(--space-md) var(--space-lg);
   --card-padding-compact: var(--space-sm) var(--space-md);
   --card-bg: var(--bg-surface); /* a card's fill; ReportSection bodies make it --bg-elevated (inset cards) */

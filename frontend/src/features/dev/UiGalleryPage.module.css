@@ -34,3 +34,12 @@
 .caseBody {
   min-width: 0;
 }
+
+/* A frame the reader can narrow by its corner, to see a primitive's narrow layout (container queries). */
+.narrowFrame {
+  inline-size: 360px;
+  min-inline-size: 200px;
+  max-inline-size: 100%;
+  overflow: auto;
+  resize: horizontal;
+}

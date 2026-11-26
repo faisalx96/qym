@@ -17,6 +17,8 @@ import { AiFeedbackMocks } from './AiFeedbackMocks';
 import { Round9Mocks } from './Round9Mocks';
 import { Round10Mocks } from './Round10Mocks';
 import { LiveMocks } from './LiveMocks';
+import { PerformanceMocks } from './PerformanceMocks';
+import { Quantity } from '@/features/performance/components/shared';
 import type { Key } from 'react-aria-components';
 import {
   Badge,
@@ -202,6 +204,23 @@ export default function UiGalleryPage() {
               run_2026-10-11T08:00:00Z
             </Text>
           </Stack>
+        </Case>
+        <Case label="SectionHeader: default (one line) and wrap (the description wraps; the controls drop under it)">
+          <div className={styles.narrowFrame}>
+            <Stack gap="md">
+              <SectionHeader
+                title="Capacity"
+                description="The safe load and the breaking level of the last finished breakpoint run on this target."
+                aside={<Button>New run</Button>}
+              />
+              <SectionHeader
+                wrap
+                title="Capacity"
+                description="The safe load and the breaking level of the last finished breakpoint run on this target."
+                aside={<Button>New run</Button>}
+              />
+            </Stack>
+          </div>
         </Case>
         <Case label="Typeface specimen (Plex Sans / Arabic / Mono)" wide>
           <Stack gap="xs" data-testid="gallery-specimen">
@@ -495,6 +514,29 @@ export default function UiGalleryPage() {
             <TabPanel id="b">english-qa items</TabPanel>
           </Tabs>
         </Case>
+        <Case label="Tabs fitNarrow (small side padding under 400px of the strip)">
+          <div className={styles.narrowFrame}>
+            <Tabs
+              label="Run sections"
+              selected="progress"
+              onSelect={() => {}}
+              fitNarrow
+              items={[
+                { id: 'progress', label: 'Progress' },
+                { id: 'questions', label: 'Questions' },
+                { id: 'log', label: 'Log' },
+                { id: 'setup', label: 'Setup' },
+                { id: 'report', label: 'Report' },
+              ]}
+            >
+              <TabPanel id="progress">Progress panel</TabPanel>
+              <TabPanel id="questions">Questions panel</TabPanel>
+              <TabPanel id="log">Log panel</TabPanel>
+              <TabPanel id="setup">Setup panel</TabPanel>
+              <TabPanel id="report">Report panel</TabPanel>
+            </Tabs>
+          </div>
+        </Case>
         <Case label="Pagination">
           <div ref={scrollRef}>
             <Pagination
@@ -607,6 +649,21 @@ export default function UiGalleryPage() {
             ]}
           />
         </Case>
+        <Case label="StatStrip compact pairs (2 x 2 under 600px of its own width; Quantity tight units)">
+          <div className={styles.narrowFrame}>
+            <StatStrip
+              variant="compact"
+              pairs
+              aria-label="Run in progress, in numbers"
+              items={[
+                { key: 'level', label: 'Level now', value: <Quantity value={20} unit="of 50 users" /> },
+                { key: 'p95', label: 'p95 so far', value: <Quantity value="2.9" unit="s" tight />, sub: 'limit 3s' },
+                { key: 'answered', label: 'Answered', value: '98.0%', sub: '196 of 200 questions' },
+                { key: 'left', label: 'Time left', value: '12m 30s' },
+              ]}
+            />
+          </div>
+        </Case>
         <Case label="StatStrip compact-header">
           <StatStrip
             variant="compact-header"
@@ -673,6 +730,19 @@ export default function UiGalleryPage() {
             rows={[]}
             rowKey={(r) => r.id}
             empty="No runs match these filters."
+          />
+        </Case>
+        <Case label="Column headerCase 'as-written' (units and percentiles keep their case)">
+          <DataTable
+            aria-label="Latency by level"
+            columns={[
+              { id: 'name', header: 'Level', flex: true, minWidth: 120 },
+              { id: 'p50', header: 'p50', headerCase: 'as-written', width: 80, cell: () => '1.2s' },
+              { id: 'p95', header: 'p95', headerCase: 'as-written', width: 80, cell: () => '2.9s' },
+              { id: 'ms', header: 'Limit ms', headerCase: 'as-written', width: 100, cell: () => '3000' },
+            ]}
+            rows={ROWS}
+            rowKey={(r) => r.id}
           />
         </Case>
         <Case label="Dimmed (stale)">
@@ -971,6 +1041,9 @@ export default function UiGalleryPage() {
       <Round10Mocks Section={Section} Case={Case} />
       <Section id="live" title="Live evaluation (round 2026-11)">
         <LiveMocks />
+      </Section>
+      <Section id="performance" title="Performance (design stage, 2026-11)">
+        <PerformanceMocks />
       </Section>
     </div>
   );

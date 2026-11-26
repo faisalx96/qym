@@ -26,3 +26,5 @@ export function registerMock(route: MockRoute): void {
 // import '@/features/runs/__mocks__/register';
 import '@/features/dev/round9Register';
 import '@/features/dev/round10Register';
+import '@/features/dev/performanceRegister';
+import '@/features/dev/platformRegister';

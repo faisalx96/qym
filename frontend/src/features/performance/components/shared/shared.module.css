@@ -1,0 +1,168 @@
+/* Performance area: the pieces every page of the area shares (marks, legends, charts). Layout only, tokens only. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-inline-size: 0;
+}
+
+.unit {
+  font-family: var(--font-sans);
+  font-size: var(--font-base);
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.swatch {
+  inline-size: var(--space-sm);
+  block-size: var(--space-sm);
+  border-radius: var(--radius-xs);
+  background: var(--tone);
+}
+
+.swatch[data-shape='line'] {
+  inline-size: var(--space-md);
+  block-size: 0;
+  border-block-start: 2px dashed var(--tone);
+  border-radius: 0;
+  background: none;
+}
+
+/* Charts drawn with the chart kit: the picture fills its box. */
+.chart {
+  position: relative;
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.chart svg {
+  display: block;
+  overflow: visible;
+}
+
+.tick {
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  fill: var(--text-muted);
+}
+
+.gridLine {
+  stroke: var(--border-subtle);
+  stroke-width: 1;
+}
+
+.planLine {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.doneLine {
+  fill: none;
+  stroke: var(--text-primary);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.nowLine {
+  stroke: var(--text-primary);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.nowDot {
+  fill: var(--text-primary);
+  stroke: var(--card-bg);
+  stroke-width: 2;
+}
+
+.nowText {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  fill: var(--text-primary);
+}
+
+.hold {
+  fill: color-mix(in srgb, var(--tone) var(--tint-strong), transparent);
+  stroke: none;
+}
+
+.hold[data-tone='neutral'] {
+  fill: color-mix(in srgb, var(--tone) var(--tint-faint), transparent);
+}
+
+/* A hold that ran in part and was never judged: the neutral tone, darker than a hold that was not reached. */
+.hold[data-outcome='not_finished'] {
+  fill: color-mix(in srgb, var(--tone) var(--tint-strong), transparent);
+}
+
+.holdLabel {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  fill: var(--tone-text);
+}
+
+.holdLabel[data-tone='neutral'] {
+  fill: var(--text-secondary);
+}
+
+.limitLine {
+  stroke: var(--error);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+.limitText {
+  font-size: var(--font-sm);
+  fill: var(--error-text);
+}
+
+.seriesLine {
+  fill: none;
+  stroke: var(--tone);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.seriesLine[data-dash] {
+  stroke-dasharray: 5 4;
+}
+
+.seriesDot {
+  fill: var(--tone);
+  stroke: var(--card-bg);
+  stroke-width: 1.5;
+}
+
+.bar {
+  fill: var(--tone);
+}
+
+/* The 24px hit area of a small mark: painted transparent, so it takes the pointer and shows nothing. */
+.hit {
+  fill: transparent;
+  stroke: none;
+}
+
+/* An empty chart: the plot's height, a compact EmptyState centred in it. */
+.emptyPlot {
+  display: grid;
+  place-items: center;
+}

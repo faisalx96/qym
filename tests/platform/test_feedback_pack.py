@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 
 from qym_platform.feedback_agent import knowledge
 from qym_platform.feedback_agent.constants import (DOCS_CARD_CHARS,
@@ -40,3 +41,25 @@ def test_index_and_lookup():
         knowledge.lookup_platform_docs(card_id=first["id"])[0]["card_id"] == first["id"]
     )
     assert knowledge.lookup_platform_docs("") == []
+
+
+def test_performance_page_does_not_displace_existing_cards(tmp_path):
+    for rel in [*builder.source_files(builder.REPO), builder.IA]:
+        target = tmp_path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(builder.REPO / rel, target)
+    with_performance = builder.build_pack(tmp_path)
+    (tmp_path / builder.DOCS_PARTIALS / "platform-guide/performance.html").unlink()
+    ia_file = tmp_path / builder.IA
+    ia = json.loads(ia_file.read_text(encoding="utf-8"))
+    for section in ia["sections"]:
+        if section["id"] == "platform-guide":
+            section["pages"] = [
+                page for page in section["pages"] if page["id"] != "performance"
+            ]
+    ia_file.write_text(json.dumps(ia), encoding="utf-8")
+    without_performance = builder.build_pack(tmp_path)
+
+    assert len(builder.render(with_performance)) <= PACK_MAX_CHARS
+    for card in without_performance["cards"]:
+        assert card in with_performance["cards"]

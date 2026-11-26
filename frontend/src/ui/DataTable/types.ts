@@ -80,6 +80,11 @@ export interface Column<R> {
   /** Icon/actions column: header text is visually hidden. */
   hideLabel?: boolean;
   /**
+   * 'as-written' keeps the header in the case it is written, for a unit or a percentile (p50, p95, p99, ms), which the
+   * stat rule writes in lower case (§3.3); the header keeps the rest of the header type. Default 'upper'.
+   */
+  headerCase?: 'upper' | 'as-written';
+  /**
    * Fold a pinned-end column (an actions column) while the scroller still has columns past its end edge: each row
    * shows one small button with this accessible name that opens the cell in place, and the rest of the cell is
    * see-through. Scrolled to the end, or with no overflow, the column renders as usual. Return '' for a row with

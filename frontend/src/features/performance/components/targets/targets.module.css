@@ -1,0 +1,58 @@
+/* Targets list: layout only; every block is built from primitives. */
+.page {
+  container-type: inline-size;
+  min-inline-size: 0;
+  font-size: var(--font-base);
+}
+
+/* The blocks under the header, one gap apart. PageHeader keeps its own margin below it, as on qym's other pages. */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-inline-size: 0;
+}
+
+.body > * {
+  min-inline-size: 0;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  min-inline-size: 0;
+}
+
+.lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.figures {
+  font-variant-numeric: tabular-nums;
+}
+
+.host {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+/* A loading frame adds no box of its own: its blocks sit in the page exactly as the loaded ones do. */
+.frame {
+  display: contents;
+}

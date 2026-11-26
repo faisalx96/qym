@@ -1,0 +1,70 @@
+<p class="docs-eyebrow">PLATFORM GUIDE</p>
+<h1>Performance testing</h1>
+<p class="docs-lead">Open <strong>Performance</strong> in a project to load-test chat answers or Estishraf platform dashboards: set up a run, start it, follow it live, stop it, and read its result and the history of earlier runs, all from the browser.</p>
+
+<h2>What the tests find out</h2>
+<ul>
+  <li><strong>Breakpoint</strong> raises the number of users in steps (levels) and holds each level for a while, until a level breaks a limit: too many answers slower than the time limit, or too many errors. It finds the <strong>safe load</strong> (the highest level that kept every limit), where the system <strong>breaks at</strong>, and a <strong>recommended maximum</strong> of 80% of the safe load.</li>
+  <li><strong>Smoke</strong> sends questions as one user for a few minutes. It tells you whether the target answers correctly and in time at all, before a longer test.</li>
+  <li><strong>Soak</strong> keeps a steady number of users for hours. It finds slow decline over time: answers that get slower, errors that build up.</li>
+</ul>
+<p><strong>Estishraf platform</strong> targets offer Smoke and Breakpoint. Smoke opens each runnable dashboard once as one user. Breakpoint adds users in levels and compares dashboard open time and request errors with the limits. Filter time is a reference and does not decide the verdict. Soak is available for chat targets only.</p>
+
+<h2>The runner</h2>
+<p>The questions are sent by the project's <strong>runner</strong>, a separate program that your operators install (see "Performance runner" in <code>docs/internal/OPERATIONS.md</code>). qym never contacts the target itself, so the load comes from where the runner sits. <strong>Performance → Runner</strong> shows whether it is <strong>Connected</strong> (it reported in the last 30 seconds), what it is doing, the project id it needs, and its problems. A run can start only while the runner is connected. A Manager chooses there which project API key is the runner key: only the runner that uses this key receives the sign-in tokens.</p>
+
+<h2>Targets and their sign-in</h2>
+<p>A target is the system the questions go to: a name, an address (scheme and host), the chat path and the sign-in renewal path (both have defaults), an optional highest number of users, and a <strong>This is production</strong> switch. A Manager adds a target with <strong>Add a target</strong> in step 1 of a new run, and edits it with <strong>Edit target</strong>. Two targets cannot share a name or an address. Changing the address clears the saved sign-in. A target that has runs is archived, never deleted, and every run keeps the address it ran against. <strong>Performance → Targets</strong> lists the targets; a Manager archives and restores them there.</p>
+<p>All users of a run share one sign-in: a refresh token (required) and, optionally, an access token, copied from your own signed-in session on the target. Anyone who may start a run may paste or replace a target's tokens. qym stores them encrypted and shows only their last 4 characters. A new sign-in in the browser by the same person ends the old refresh token, so paste the tokens again after you sign in anew.</p>
+
+<h2>Platform targets</h2>
+<p><strong>Add a target</strong> first asks whether it is Insightor chat or Estishraf platform. The kind stays fixed when edited. For a platform target, enter a name and address origin, production status and highest number of users. Advanced contains the routes, client id, request timeout and longest run in minutes. A platform target and a chat target may use the same address.</p>
+<p>Platform sign-in uses a session cookie. After signing in, open the browser’s Network tab and select the <code>/api/auth/session</code> request. Copy the value of its <strong>Cookie request header</strong>. Paste it in the masked Cookie header field. After saving, only the hint returned by qym is shown. During a run, <strong>Save a new sign-in</strong> supplies a replacement; the page shows how much time is left.</p>
+<h2>Set up a run</h2>
+<p><strong>New run</strong> walks through five steps; <strong>Your run so far</strong> beside them sums up your choices, draws the plan and lists its checks.</p>
+<ul>
+  <li><strong>Target and sign-in</strong>: choose the target; save its tokens if none are saved.</li>
+  <li><strong>Test</strong>: Breakpoint, Smoke or Soak.</li>
+  <li><strong>Load</strong>: for Breakpoint, the highest number of users, the step between levels and the hold per level; then the time limit for 95% of answers, the highest error rate, the follow-up questions, the answer timeout, and whether to stop at the first level that breaks. The plan follows the same rules as the test itself, and a plan above the target's highest number of users, or above the platform's limits, cannot start.</li>
+  <li><strong>Questions</strong>: a dataset and the mix of kinds (see below).</li>
+  <li><strong>Review and start</strong>: the plan picture, its length and the number of answers, every setting with a <strong>Change</strong> button, and the checks. A check marked <strong>Problem</strong> keeps <strong>Start run</strong> disabled and says why.</li>
+</ul>
+
+<p>For platform targets, <strong>Dashboards</strong> replaces Questions: set a dashboard limit, the number of filters, how the next dashboard is chosen and the pause between dashboards. The list is found when the run starts, using the signed-in account. Review shows the plan, limits and sign-in state. No dataset is needed.</p>
+<h2>Choose or upload the questions</h2>
+<p>The questions come from a dataset of the project's <strong>Datasets</strong> tab. A run uses one published version, so a draft cannot be chosen until it is published. Each question has a kind, <strong>simple</strong>, <strong>medium</strong> or <strong>complex</strong> (<code>metadata.tier</code>), and may carry a follow-up question (<code>metadata.follow_up</code>) and words the answer must not contain. The mix says how many questions of each kind the users ask; a mix that asks for a kind the dataset does not have is refused before anything runs. A dataset without kinds counts every question as medium, and asks follow-ups only where an item has one.</p>
+<p><strong>Upload a file</strong> reads a question file in the browser, whatever its shape: a list of records or of texts, one record per line, a table, or a few named lists. In the <strong>Fields</strong> step you check which field is the question, the kind, the follow-up, the words to avoid and the id, say what each kind value means (or leave it out), and see the counts and the first questions. The file is then saved as a new published dataset in the Datasets tab, ready for this and later runs.</p>
+
+<h2>Start a run</h2>
+<p><strong>Start run</strong> asks you to confirm. A run on a production target needs a Manager, and the target's name typed in the confirmation. qym refuses a start, with the reason, while the runner is not connected, the target has no sign-in, the plan is over a limit, or another run is queued or running on the same runner or the same target; one person may start a limited number of runs per hour. On a production target the answers are not stored by default.</p>
+
+<h2>Follow and read a run</h2>
+<p>The run page shows its state and, while it runs, what happens now and next, the time elapsed and left, and when the runner last reported. Its numbers are the users now, the answers (with how many are in flight and how long the oldest has waited, because one answer may take minutes), the share answered without error, the p95 time (95% of the answers arrived within it) of the current level and of the whole run, and the errors by kind: server, timeout, sign-in and rate limit. The tabs are:</p>
+<ul>
+  <li><strong>Progress</strong>: users over time, every level coloured by its outcome, and for Breakpoint one row per level with its answers, answers per minute, errors, answer times and the p95 per kind. When answers per minute stop rising while users rise, the target is saturated.</li>
+  <li><strong>Questions</strong>: every question asked, with its level, kind, duration, result and answer; search, filter and export as CSV.</li>
+  <li><strong>Log</strong>: the events that matter, or all log lines, with a search and a download.</li>
+  <li><strong>Charts</strong>: answer time against users, errors by level and the p95 per kind, each against its limit.</li>
+  <li><strong>Setup</strong>: every setting the run was started with.</li>
+</ul>
+
+<h2>Read the result</h2>
+<p>The state says how the run ended: <strong>Finished</strong>, <strong>Stopped</strong>, <strong>Failed</strong> (it could not start, or the input was wrong; the reason is shown), <strong>Interrupted</strong> or <strong>Expired</strong>. The result is the test's own verdict and is a separate thing. For Breakpoint it is "breaks at N users" (by time or by errors), "no break up to N users", "not valid: sign-in" or "no measurement", with the safe load, breaks at and recommended maximum. For Smoke and Soak it is passed or failed. The result starts with why the run ended, then one row per limit: the limit, the measured value, and whether it was kept or broken. <strong>Download report</strong> saves the test's own report file. Home shows the latest capacity result per target, the safe load over time, and every run.</p>
+
+<h2>Read a platform run</h2>
+<p>Preparation shows sign-in checks and live discovery counts. Progress shows users, limits and levels. Running times are marked <strong>so far</strong>; the verdict arrives when the test ends. <strong>Dashboards</strong> lists open and filter times per dashboard; expand a row for its paged steps or download CSV. Charts shows dashboard open time, filter time and errors. Setup keeps the plan as started and after discovery, discovery facts, charts that could not be loaded and frozen target settings.</p>
+<p><strong>Coverage incomplete</strong> is separate from the verdict: some charts or dashboards were not measured. <strong>See charts</strong> opens the reasons. Safe load on Home uses dashboard open p95 for platform targets and answer p95 for chat targets.</p>
+<h2>Stop a run</h2>
+<p><strong>Stop run</strong> asks for confirmation and an optional reason. The stop reaches the runner within seconds; what was measured is kept and the run ends as <strong>Stopped</strong>. A level whose hold the stop cut short is judged as the test judged it and says how much of its hold ran. A run that has not been picked up yet ends at once.</p>
+
+<h2>When the sign-in runs out</h2>
+<p>If the target refuses the saved sign-in during a run, the run waits and its page asks for a new refresh token: <strong>Send a new token</strong>. The run carries on a few seconds after it arrives. The level in which sign-in errors happened is shown but not counted.</p>
+
+<h2>Interrupted and expired runs</h2>
+<p><strong>Interrupted</strong> means the runner stopped reporting for 120 seconds, or was restarted, while the run was going. The run never starts again by itself. What the runner measured up to then is still accepted for 10 minutes and shown on the run page. Start a new run when the runner is connected again. <strong>Expired</strong> means no runner picked the run up within 10 minutes of its start.</p>
+
+<h2>Who can do what</h2>
+<p>Every project member, Viewers included, reads every Performance page. Members start and stop runs and save sign-in tokens. Managers add, edit and archive targets, choose the runner key, and start runs on production targets. An archived project keeps its runs readable and accepts no changes.</p>
+
+<h2>Keeping data</h2>
+<p>By default the questions and log lines of a run are kept for 90 days after it ended, the report file for 180 days, the run with its result for two years, and the runner's events for 30 days. For the runner's calls, limits and timings, see the Performance runner protocol guide v1.0 (<code>docs/performance-runner-protocol-v1.0.md</code> in the qym repository, shipped with the release).</p>
