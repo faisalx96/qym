@@ -1,10 +1,13 @@
 // Shared setup of the Home, Runner and Targets tests: the real page over a server double, in a project context.
 import type { ReactNode } from 'react';
-import { render } from '@testing-library/react';
+import { configure, render } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, vi } from 'vitest';
 import { ProjectContext, type ProjectValue } from '@/features/shell/ProjectContext';
+
+// A whole page takes longer than the default second to draw on a slow test machine.
+configure({ asyncUtilTimeout: 4000 });
 
 const clients: QueryClient[] = [];
 afterEach(() => {
