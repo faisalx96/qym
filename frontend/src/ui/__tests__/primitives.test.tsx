@@ -22,6 +22,9 @@ import {
   JsonTree,
   LinkButton,
   ScoreValue,
+  Section,
+  SectionHeader,
+  StatStrip,
 } from '@/ui';
 import { ApiError } from '@/lib/http';
 
@@ -60,6 +63,82 @@ describe('Tabs', () => {
     await user.keyboard('{End}');
     expect(tabs[2]).toHaveAttribute('aria-selected', 'true');
     expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+describe('Tabs fitNarrow', () => {
+  const items = [
+    { id: 'a', label: 'Progress' },
+    { id: 'b', label: 'Questions' },
+  ];
+  it('makes the horizontal tab strip its own container only when asked (B18)', () => {
+    const { rerender } = render(
+      <Tabs label="Run" selected="a" onSelect={() => {}} items={items}>
+        <TabPanel id="a">A</TabPanel>
+        <TabPanel id="b">B</TabPanel>
+      </Tabs>,
+    );
+    const plain = screen.getByRole('tablist').className;
+    rerender(
+      <Tabs label="Run" selected="a" onSelect={() => {}} items={items} fitNarrow>
+        <TabPanel id="a">A</TabPanel>
+        <TabPanel id="b">B</TabPanel>
+      </Tabs>,
+    );
+    const fit = screen.getByRole('tablist').className;
+    expect(fit).not.toBe(plain);
+    expect(fit.startsWith(plain)).toBe(true);
+    rerender(
+      <Tabs label="Run" selected="a" onSelect={() => {}} items={items} fitNarrow orientation="vertical">
+        <TabPanel id="a">A</TabPanel>
+        <TabPanel id="b">B</TabPanel>
+      </Tabs>,
+    );
+    expect(screen.getByRole('tablist').className).toBe(plain);
+  });
+});
+
+describe('SectionHeader wrap', () => {
+  it('cuts the description by default and lets it wrap with `wrap` (D3, C6)', () => {
+    const text = 'Every run of this project, newest first; p95 is the time 95 of 100 answers stayed under.';
+    const { container, rerender } = render(
+      <SectionHeader title="Runs" description={text} aside={<Button>New run</Button>} />,
+    );
+    const head = () => container.firstElementChild as HTMLElement;
+    expect(head()).not.toHaveAttribute('data-wrap');
+    expect(screen.getByText(text)).toHaveAttribute('data-truncate');
+    rerender(<SectionHeader title="Runs" description={text} aside={<Button>New run</Button>} wrap />);
+    expect(head()).toHaveAttribute('data-wrap', '');
+    expect(screen.getByText(text)).not.toHaveAttribute('data-truncate');
+    expect(screen.getByRole('button', { name: 'New run' })).toBeInTheDocument();
+  });
+
+  it('is forwarded by Section, off by default', () => {
+    const text = 'What the last Breakpoint run that gave a result says about one target.';
+    const { container, rerender } = render(<Section title="Capacity" description={text} />);
+    const head = () => container.querySelector('section > [data-level]') as HTMLElement;
+    expect(head()).not.toHaveAttribute('data-wrap');
+    rerender(<Section title="Capacity" description={text} wrap />);
+    expect(head()).toHaveAttribute('data-wrap', '');
+    expect(screen.getByText(text)).not.toHaveAttribute('data-truncate');
+  });
+});
+
+describe('StatStrip pairs', () => {
+  const items = ['Level now', 'p95 so far', 'Answered', 'Time left'].map((label, i) => ({
+    key: String(i),
+    label,
+    value: String(i),
+  }));
+  it('wraps the strip in its own container only with `pairs` (B18)', () => {
+    const { container, rerender } = render(<StatStrip variant="compact" aria-label="Run" items={items} />);
+    expect(container.firstElementChild).toHaveAttribute('role', 'group');
+    expect(container.firstElementChild).not.toHaveAttribute('data-pairs');
+    rerender(<StatStrip variant="compact" aria-label="Run" items={items} pairs />);
+    const strip = screen.getByRole('group', { name: 'Run' });
+    expect(strip).toHaveAttribute('data-pairs', '');
+    expect(strip.parentElement).toBe(container.firstElementChild);
+    expect(strip.children).toHaveLength(4);
   });
 });
 

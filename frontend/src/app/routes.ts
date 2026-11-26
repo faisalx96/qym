@@ -36,6 +36,13 @@ export const ROUTES = {
     liveTurns: 'live/turns',
     liveWorker: 'live/worker',
     liveTurn: 'live/turns/*',
+    performance: 'performance',
+    performanceNew: 'performance/new',
+    /** A run URL trimmed to `performance/runs`: redirects to the area's home. */
+    performanceRunsTrimmed: 'performance/runs',
+    performanceRun: 'performance/runs/:runId',
+    performanceRunner: 'performance/runner',
+    performanceTargets: 'performance/targets',
     charts: 'charts',
     models: 'models',
     experiments: 'experiments',
@@ -67,4 +74,14 @@ export function projectPath(slug: string, sub = ''): string {
 /** Run ids contain slashes ({run_id:path}); encode each segment. */
 export function runPath(slug: string, runId: string): string {
   return projectPath(slug, `runs/${runId.split('/').map(encodeURIComponent).join('/')}`);
+}
+
+/** The Performance area: performancePath('slug') is its home, performancePath('slug', 'new') the New run page. */
+export function performancePath(slug: string, sub: '' | 'new' | 'runner' | 'targets' = ''): string {
+  return projectPath(slug, sub ? `performance/${sub}` : 'performance');
+}
+
+/** One performance run's page. The id is the run's id, not its running number. */
+export function performanceRunPath(slug: string, runId: string): string {
+  return projectPath(slug, `performance/runs/${encodeURIComponent(runId)}`);
 }

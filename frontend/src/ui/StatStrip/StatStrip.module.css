@@ -329,12 +329,13 @@
   }
 }
 
+/* The viewport rules skip a `pairs` strip (`:where` adds no specificity): its own width decides, below. */
 @media (max-width: 800px) {
-  .strip[data-variant='compact'] {
+  .strip[data-variant='compact']:not(:where([data-pairs])) {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .strip {
+  .strip:not(:where([data-pairs])) {
     grid-auto-flow: row;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -342,16 +343,57 @@
 
 /* The last tile fills its row when the count does not divide the columns (no empty grey cell). */
 @media (max-width: 800px) {
-  .strip:not([data-grouped]):not([data-variant='compact']):not([data-variant='mini'])
+  .strip:not([data-grouped]):not([data-variant='compact']):not([data-variant='mini']):not(
+      :where([data-pairs])
+    )
     > .item:last-child:nth-child(odd) {
     grid-column: 1 / -1;
   }
 
-  .strip[data-variant='compact'] > .item:last-child:nth-child(3n + 1) {
+  .strip[data-variant='compact']:not(:where([data-pairs])) > .item:last-child:nth-child(3n + 1) {
     grid-column: 1 / -1;
   }
 
-  .strip[data-variant='compact'] > .item:last-child:nth-child(3n + 2) {
+  .strip[data-variant='compact']:not(:where([data-pairs])) > .item:last-child:nth-child(3n + 2) {
     grid-column: span 2;
+  }
+}
+
+/* `pairs` (B18): one row while four cells of about 150px fit, then two cells to a row; four cells read 2 x 2. */
+.pairsHost {
+  container: qym-stat-pairs / inline-size;
+}
+
+@container qym-stat-pairs (max-width: 600px) {
+  .strip[data-pairs] {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .strip[data-pairs] > .item:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Platform run facts: the note has its own row, never a third inline column. */
+.strip[data-inline-labels] .stack {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  column-gap: var(--space-sm);
+  row-gap: var(--space-xs);
+}
+.strip[data-inline-labels] .label,
+.strip[data-inline-labels] .value {
+  white-space: nowrap;
+}
+.strip[data-inline-labels] .sub {
+  grid-column: 1 / -1;
+  padding-block-end: var(--space-xs);
+}
+
+@media (max-width: 800px) {
+  .strip[data-inline-labels] {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

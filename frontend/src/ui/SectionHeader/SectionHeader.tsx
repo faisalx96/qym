@@ -13,6 +13,11 @@ export interface SectionHeaderProps {
   id?: string;
   /** A count Tag right after the title (B-27: '2 people', '1 in the last hour'). */
   count?: ReactNode;
+  /**
+   * The description is read in full: it wraps instead of ending in an ellipsis, and the controls drop under the text
+   * when the header's own width leaves no room for both (the text keeps `--section-text-min`). Default off: one line.
+   */
+  wrap?: boolean;
 }
 
 /** Sentence-case section title + muted description (DESIGN_LANGUAGE §1). */
@@ -24,6 +29,7 @@ export function SectionHeader({
   as,
   id,
   count,
+  wrap = false,
 }: SectionHeaderProps) {
   const heading = (
     <Text variant={level} as={as} id={id} className={styles.title}>
@@ -31,7 +37,7 @@ export function SectionHeader({
     </Text>
   );
   return (
-    <div className={styles.head} data-level={level}>
+    <div className={styles.head} data-level={level} data-wrap={wrap ? '' : undefined}>
       <div className={styles.text}>
         {count ? (
           <div className={styles.titleRow}>
@@ -47,7 +53,7 @@ export function SectionHeader({
             tone="muted"
             as="p"
             className={styles.description}
-            truncate
+            truncate={!wrap}
           >
             {description}
           </Text>

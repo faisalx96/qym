@@ -134,6 +134,11 @@
   user-select: none;
 }
 
+/* `Column.headerCase: 'as-written'`: a unit or a percentile keeps its case (p95, ms; §3.3 stat rule, A3). */
+.thead th[data-header-case='as-written'] {
+  text-transform: none;
+}
+
 .table[data-sticky] .thead {
   /* one sticky element for the whole header (it held a sticky layer per cell: 60+ on a wide table);
      only the frozen cells stay sticky, and only horizontally */

@@ -44,6 +44,14 @@ export interface StatStripProps {
   variant?: 'band' | 'compact-header' | 'compact' | 'mini';
   /** Flash a faint tint on a cell whose value changed (live runs). */
   live?: boolean;
+  /** Keep each label/value on one line; put supporting text below. */
+  inlineLabels?: boolean;
+  /**
+   * The strip answers to its own width (a container query), not the viewport: one row of cells, and under 600px of
+   * width two cells to a row, so four cells read 2 x 2, never 3 + 1 (an odd last cell fills its row). For a `band` or
+   * `compact` strip without groups. Default off: the narrow-screen layout follows the viewport (800px).
+   */
+  pairs?: boolean;
   'aria-label'?: string;
 }
 
@@ -156,7 +164,14 @@ function Cell({ item, live, variant }: { item: StatStripItem; live: boolean; var
 }
 
 /** Connected statistics band (DESIGN_LANGUAGE §3 "Connected statistics"). */
-export function StatStrip({ items, variant = 'band', live = false, ...rest }: StatStripProps) {
+export function StatStrip({
+  items,
+  variant = 'band',
+  live = false,
+  pairs = false,
+  inlineLabels = false,
+  ...rest
+}: StatStripProps) {
   if (items.some((i) => i.group)) {
     const groups: { name: string; items: StatStripItem[] }[] = [];
     for (const item of items) {
@@ -186,11 +201,20 @@ export function StatStrip({ items, variant = 'band', live = false, ...rest }: St
       </div>
     );
   }
-  return (
-    <div className={styles.strip} data-variant={variant} role="group" {...rest}>
+  const strip = (
+    <div
+      className={styles.strip}
+      data-variant={variant}
+      data-inline-labels={inlineLabels ? '' : undefined}
+      data-pairs={pairs ? '' : undefined}
+      role="group"
+      {...rest}
+    >
       {items.map((item, i) => (
         <Cell key={item.key ?? i} item={item} live={live} variant={variant} />
       ))}
     </div>
   );
+  // A container query needs an element around the grid: the host only exists with `pairs`.
+  return pairs ? <div className={styles.pairsHost}>{strip}</div> : strip;
 }

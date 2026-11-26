@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -26,6 +27,8 @@ from qym_platform.db.models import (
     EvalExperiment,
     LiveSource,
     LiveWorkerSettings,
+    PerformanceTarget,
+    PerformanceTargetToken,
     Project,
     ProjectLlmConnection,
     User,
@@ -52,6 +55,11 @@ CONN_KEY = "sk-conn-secret-AAAA1111"
 ENV_KEY = "env-service-secret-BBBB2222"
 TEMP_KEY = "sk-temp-secret-CCCC3333"
 WORKER_SECRETS = {"langfuse_secret_key": "lf-secret", "database_password": "db-secret"}
+TARGET_TOKENS = {
+    "refresh_token": "rt-sign-in-secret-DDDD4444",
+    "access_token": "at-sign-in-secret-EEEE5555",
+}
+TOKEN_SAVED_AT = datetime(2026, 11, 20, 11, 0)
 
 
 def _key() -> str:
@@ -137,7 +145,9 @@ def test_launch_token_picks_the_previous_key_matching_the_stored_hash():
     assert launch_token_for_job(job_id, rotated) != old_token
     assert launch_token_for_job(job_id, rotated, expected_hash=stored_hash) == old_token
     body = body_with_launch_token({}, job_id, rotated, expected_hash=stored_hash)
-    assert body["evaluator"]["config"]["run_metadata"]["qym_launch"]["token"] == old_token
+    assert (
+        body["evaluator"]["config"]["run_metadata"]["qym_launch"]["token"] == old_token
+    )
     # A current-key hash keeps using the current key.
     current_token = launch_token_for_job(job_id, rotated)
     assert (
@@ -182,7 +192,11 @@ def _seed(sessions, settings: PlatformSettings, *, connections: int = 3) -> dict
                 )
             )
         # A connection without a key is skipped.
-        db.add(ProjectLlmConnection(project_id=project.id, name="empty", llm_api_key_encrypted=""))
+        db.add(
+            ProjectLlmConnection(
+                project_id=project.id, name="empty", llm_api_key_encrypted=""
+            )
+        )
         db.add(
             EvalEnvironment(
                 project_id=project.id,
@@ -221,6 +235,25 @@ def _seed(sessions, settings: PlatformSettings, *, connections: int = 3) -> dict
                 },
             )
         )
+        target = PerformanceTarget(
+            project_id=project.id,
+            name="QA - Preprod",
+            base_url="https://target.example.test",
+        )
+        db.add(target)
+        db.flush()
+        for name, value in TARGET_TOKENS.items():
+            db.add(
+                PerformanceTargetToken(
+                    target_id=target.id,
+                    name=name,
+                    token_encrypted=encrypt_llm_api_key(value, settings),
+                    token_hint=value[-4:],
+                    updated_by_user_id=user.id,
+                    created_at=TOKEN_SAVED_AT,
+                    updated_at=TOKEN_SAVED_AT,
+                )
+            )
         db.commit()
     return {}
 
@@ -236,6 +269,7 @@ def _stored(sessions) -> list[str]:
                 for row in db.query(LiveWorkerSettings).all()
                 for token in row.secrets_encrypted.values()
             ),
+            *(t.token_encrypted for t in db.query(PerformanceTargetToken).all()),
         ]
 
 
@@ -246,7 +280,14 @@ def _run_tool(sessions, settings, argv, capsys):
 
 
 def _assert_no_secrets(text: str, *keys: str) -> None:
-    for secret in (CONN_KEY, ENV_KEY, TEMP_KEY, *WORKER_SECRETS.values(), *keys):
+    for secret in (
+        CONN_KEY,
+        ENV_KEY,
+        TEMP_KEY,
+        *WORKER_SECRETS.values(),
+        *TARGET_TOKENS.values(),
+        *keys,
+    ):
         assert secret not in text
 
 
@@ -256,16 +297,27 @@ def test_tool_dry_run_counts_and_writes_nothing(sessions, capsys):
     before = _stored(sessions)
     rotated = _settings(current, old)
 
-    code, stats, text = _run_tool(sessions, rotated, ["--dry-run", "--batch-size", "2"], capsys)
+    code, stats, text = _run_tool(
+        sessions, rotated, ["--dry-run", "--batch-size", "2"], capsys
+    )
 
     assert code == 0
     assert stats["dry_run"] is True
-    assert stats["totals"]["reencrypted"] == 6
-    assert stats["totals"]["scanned"] == 6
-    assert stats["columns"]["project_llm_connections.llm_api_key_encrypted"]["reencrypted"] == 3
+    assert stats["totals"]["reencrypted"] == 8
+    assert stats["totals"]["scanned"] == 8
+    assert (
+        stats["columns"]["project_llm_connections.llm_api_key_encrypted"]["reencrypted"]
+        == 3
+    )
     assert stats["columns"]["eval_environments.api_key_encrypted"]["reencrypted"] == 1
     assert stats["columns"]["eval_experiments.secrets_encrypted"]["reencrypted"] == 1
-    assert stats["columns"]["live_worker_settings.secrets_encrypted"]["reencrypted"] == 1
+    assert (
+        stats["columns"]["live_worker_settings.secrets_encrypted"]["reencrypted"] == 1
+    )
+    assert (
+        stats["columns"]["performance_target_tokens.token_encrypted"]["reencrypted"]
+        == 2
+    )
     assert _stored(sessions) == before
     _assert_no_secrets(text, old, current)
     for value in before:
@@ -280,7 +332,7 @@ def test_tool_rotates_everything_and_is_idempotent(sessions, capsys, monkeypatch
 
     code, stats, text = _run_tool(sessions, rotated, ["--batch-size", "2"], capsys)
     assert code == 0
-    assert stats["totals"]["reencrypted"] == 6
+    assert stats["totals"]["reencrypted"] == 8
     assert stats["totals"]["failed"] == 0
     _assert_no_secrets(text, old, current)
 
@@ -289,12 +341,19 @@ def test_tool_rotates_everything_and_is_idempotent(sessions, capsys, monkeypatch
     monkeypatch.setenv("QYM_LLM_CONFIG_ENCRYPTION_KEY", current)
     monkeypatch.setenv("QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS", "")
     with sessions() as db:
-        for conn in db.query(ProjectLlmConnection).filter(ProjectLlmConnection.name != "empty"):
-            assert decrypt_llm_api_key(conn.llm_api_key_encrypted, only_current) == CONN_KEY
+        for conn in db.query(ProjectLlmConnection).filter(
+            ProjectLlmConnection.name != "empty"
+        ):
+            assert (
+                decrypt_llm_api_key(conn.llm_api_key_encrypted, only_current)
+                == CONN_KEY
+            )
         (env,) = db.query(EvalEnvironment).all()
         assert decrypt_llm_api_key(env.api_key_encrypted, only_current) == ENV_KEY
         exp = db.query(EvalExperiment).filter_by(name="exp").one()
-        assert decrypt_secrets(exp.secrets_encrypted, only_current) == {"ref-1": TEMP_KEY}
+        assert decrypt_secrets(exp.secrets_encrypted, only_current) == {
+            "ref-1": TEMP_KEY
+        }
         row = db.query(LiveWorkerSettings).one()
         source = db.get(LiveSource, row.source_id)
         resolved, errors = resolved_secrets(db, source, row)
@@ -304,12 +363,26 @@ def test_tool_rotates_everything_and_is_idempotent(sessions, capsys, monkeypatch
             "gateway_base_url": "https://api.example.com/v1",
             "gateway_api_key": CONN_KEY,
         }
+        tokens = db.query(PerformanceTargetToken).all()
+        assert {
+            token.name: decrypt_llm_api_key(token.token_encrypted, only_current)
+            for token in tokens
+        } == TARGET_TOKENS
+        # The rewrite is not a new token: the runner compares versions, and the
+        # page shows when a person saved it.
+        assert [(token.version, token.updated_at) for token in tokens] == [
+            (1, TOKEN_SAVED_AT),
+            (1, TOKEN_SAVED_AT),
+        ]
+        assert {token.name: token.token_hint for token in tokens} == {
+            name: value[-4:] for name, value in TARGET_TOKENS.items()
+        }
 
     after_first = _stored(sessions)
     code, stats, _ = _run_tool(sessions, rotated, [], capsys)
     assert code == 0
     assert stats["totals"]["reencrypted"] == 0
-    assert stats["totals"]["already_current"] == 6
+    assert stats["totals"]["already_current"] == 8
     assert _stored(sessions) == after_first
 
 
@@ -320,9 +393,16 @@ def test_tool_reports_unreadable_values_without_secrets(sessions, capsys):
     code, stats, text = _run_tool(sessions, _settings(current), [], capsys)
 
     assert code == 1
-    assert stats["totals"]["failed"] == 4
+    assert stats["totals"]["failed"] == 6
     assert stats["totals"]["reencrypted"] == 0
-    assert len(stats["columns"]["project_llm_connections.llm_api_key_encrypted"]["failed_ids"]) == 1
+    assert (
+        len(
+            stats["columns"]["project_llm_connections.llm_api_key_encrypted"][
+                "failed_ids"
+            ]
+        )
+        == 1
+    )
     _assert_no_secrets(text, lost, current)
 
 
@@ -330,3 +410,31 @@ def test_tool_without_a_key_exits_2(sessions, capsys):
     code, stats, _ = _run_tool(sessions, _settings(""), [], capsys)
     assert code == 2
     assert "QYM_LLM_CONFIG_ENCRYPTION_KEY" in stats["error"]
+
+
+def test_platform_cookie_history_rotates_with_current_credentials(sessions, capsys):
+    import json
+
+    old, current = _key(), _key()
+    _seed(sessions, _settings(old))
+    history = json.dumps(
+        [{"value": "session=old-private-value", "replaced_at": "2026-11-25T16:00:00"}]
+    )
+    with sessions() as db:
+        row = db.query(PerformanceTargetToken).first()
+        row.history_encrypted = encrypt_llm_api_key(history, _settings(old))
+        db.commit()
+    code, stats, output = _run_tool(sessions, _settings(current, old), [], capsys)
+    assert code == 0
+    assert (
+        stats["columns"]["performance_target_tokens.history_encrypted"]["reencrypted"]
+        == 1
+    )
+    assert "old-private-value" not in output
+    with sessions() as db:
+        row = (
+            db.query(PerformanceTargetToken)
+            .filter(PerformanceTargetToken.history_encrypted.isnot(None))
+            .one()
+        )
+        assert decrypt_llm_api_key(row.history_encrypted, _settings(current)) == history

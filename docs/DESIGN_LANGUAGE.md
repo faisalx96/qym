@@ -154,6 +154,8 @@ removed on purpose; one token name means one value everywhere.
 - Surfaces (dark → light): `--bg-void` page ground, `--bg-base` content area,
   `--bg-surface` cards/panels, `--bg-elevated` table headers/inputs/nested
   surfaces, `--bg-hover`/`--bg-active` interaction states.
+- Radii: `--radius-xs` (2px: a legend swatch, a thin bar or meter inside a line; never a spacing token as a radius),
+  `--control-radius` (5px), `--dropdown-radius` (7px), `--radius-md` (8px: cards, strips, tiles), `--radius-pill`.
 - Borders: `--border-subtle` (default hairlines), `--border-default`
   (popovers), `--border-strong` (emphasis/dividers). A field-like control's edge is `--control-edge`
   (`--border-subtle`) at rest and `--control-edge-hover` (`--border-default`) on hover (round 10).
@@ -406,7 +408,9 @@ preselected.
   Left/Right/Home/End from React Aria). There is one tab look. A vertical tab list shows the selected item as a green
   label with a 2px green bar on the start edge, no fill. The selected tab is green, label and 2px underline (a danger tab is red); the
   list's baseline is an inset 1px shadow, so the underline sits inside the list and is never clipped, and the list never
-  shows a scrollbar unless the tabs really overflow (round 10). In-place view/metric/repeat/time
+  shows a scrollbar unless the tabs really overflow (round 10). `fitNarrow` makes a horizontal strip its own container:
+  under 400px of it a tab takes `--space-sm` side padding, so five tabs fit a phone column (default off; a page never
+  restyles the tabs itself). In-place view/metric/repeat/time
   switching uses `SegmentedControl`: 24px high, only the selected option has the
   accent wash with accent text at 600 (C136: the solid green fill is for primary buttons only), one sliding indicator,
   no motion under
@@ -604,7 +608,10 @@ preselected.
   `SectionHeader` draws no divider and no lead-in of its own (inside a card it is just the header). Parents stack
   sections with no gap of their own. The run and compare reports use the framed `ReportSection` below instead.
   `SectionHeader` takes a `count` prop: the block's count as `Tag kind="count"` right after the title (see "Tag"). A
-  closed-by-default section uses the Section header with a neutral Show / Hide button at its end.
+  closed-by-default section uses the Section header with a neutral Show / Hide button at its end. `wrap` (also on `Section`, which forwards it) is for a
+  description that must be read in full: it wraps instead of ending in an ellipsis, the text keeps at least
+  `--section-text-min` (38ch) and the controls drop under it when the header is narrower than that plus the controls
+  (default off: one line with an ellipsis; no page-local copy of the header).
 - **Settings card** (`SettingsCard`, project settings; round 10, as the old settings page): every settings tab opens
   the same way, a card with a title, one description line and the block's main action (Add, Create) on the title
   row's end side, then the controls. A tab has one Add button, in its card header; its empty state does not repeat it.
@@ -894,7 +901,8 @@ Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill
   muted / normal case (Q06 B); value `--font-stat` / 700 / mono / `tabular-nums`
   (primary, or a `--score-N` colour when it encodes a score). Mid-tier stats in
   drawers and tiles use `--font-xl`. The unit glyph is smaller and muted but sits with no gap (3.1s); percentile
-  marks read p50 2.3s, lowercase.
+  marks read p50 2.3s, lowercase. The Performance pages write a value with its unit through `Quantity`: unit words
+  after a space ("20 of 50 users"), a unit glyph with `tight` ("48.0s", no gap).
 
 - **Connected statistics** (`StatStrip`): primary summary bands; the strip owns
   the outer border, cells have dividers and no card borders, labels sit above
@@ -906,7 +914,9 @@ Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill
   tone; the tile colour follows Q13 (plain grey, done green tick, problem red above 0, Problems orange above 0). A
   sub-line only for a fact. The "mini" variant is for a card. Kind cards are the named exception. Queue environment
   cards use the StatStrip band. Live day numbers are a StatStrip band. A number that is a link is white and turns
-  green on hover with no underline.
+  green on hover with no underline. Under 800px of viewport the cells go two (band) or three (compact) to a row;
+  `pairs` makes the strip answer to its own width instead: one row, then two cells to a row under 600px, so four cells
+  read 2 x 2, never 3 + 1 (default off; a page never overrides the strip's grid).
 
 - **Stat tiles** (`ui/StatTiles`, owner 2026-11-18: the first qym's tiles): seven or fewer equal, separate tiles
   (each 1px `--border-subtle`, `--radius-md`, `--card-bg`, `--space-sm` apart) (the repeat analysis). Each tile: an
@@ -993,6 +1003,8 @@ range; a toolbar has no count. A count tag after a card title or a name is not a
   `--table-header-height` in `--font-sm`, `--text-muted`, `--bg-elevated`, uppercase, `letter-spacing: 0.05em`, 650 (a
   header's minimum width is measured on the drawn header string, never on its accessible `label`: round 10, D10-8);
   body cells `--font-base`, `--text-secondary`, sans (this header/cell recipe is locked in `.thead th` / `.tbody td`).
+  A unit or a percentile header keeps its case through `Column.headerCase: 'as-written'` (p50, p95, ms: the stat
+  rule writes them lower case), the rest of the header type unchanged; a page never restyles a header for it (A3).
   Row height comes from the density tokens `--row-compact` 36 / `--row-regular` 44 / `--row-comfortable` 56 (feedback
   17 Nov R1: each 4px taller; a density chosen on the old heights is dropped once, `DENSITY_SCALE`) (a two-line
   `secondary` cell raises the minimum to comfortable); a wrap cell clamps with no block padding. **Density and wrap

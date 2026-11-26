@@ -1,5 +1,5 @@
 import type { IconName } from '@/ui';
-import { projectPath } from '@/app/routes';
+import { performancePath, projectPath } from '@/app/routes';
 
 export interface NavItem {
   id: string;
@@ -29,6 +29,13 @@ export function projectNav(slug: string): NavItem[] {
       icon: 'clock',
       to: projectPath(slug, 'live'),
       activeFor: ['live-turns', 'live-turn', 'live-worker'],
+    },
+    {
+      id: 'performance',
+      label: 'Performance',
+      icon: 'zap',
+      to: performancePath(slug),
+      activeFor: ['performance-new', 'performance-run', 'performance-runner', 'performance-targets'],
     },
     { id: 'charts', label: 'Charts', icon: 'chart', to: projectPath(slug, 'charts') },
     { id: 'runs', label: 'Runs', icon: 'list', to: projectPath(slug), activeFor: ['run-detail', 'compare'] },
@@ -91,6 +98,11 @@ const PAGE_LABELS: Record<string, string> = {
   'live-turns': 'Turns',
   'live-worker': 'Worker',
   'live-turn': 'Turn',
+  performance: 'Performance',
+  'performance-new': 'New run',
+  'performance-run': 'Run',
+  'performance-runner': 'Runner',
+  'performance-targets': 'Targets',
   charts: 'Charts',
   experiments: 'Experiments',
   'experiments-queue': 'Queue',
@@ -130,6 +142,10 @@ export function parseRoute(pathname: string): RouteContext {
     } else if (rest === 'live/turns') page = 'live-turns';
     else if (rest === 'live/worker') page = 'live-worker';
     else if (rest === 'live') page = 'live';
+    else if (rest === 'performance/new') page = 'performance-new';
+    else if (rest === 'performance/runner') page = 'performance-runner';
+    else if (rest === 'performance/targets') page = 'performance-targets';
+    else if (rest.startsWith('performance/runs/')) page = 'performance-run';
     else if (rest === 'experiments/queue') page = 'experiments-queue';
     else if (rest.startsWith('experiments')) page = 'experiments';
     else if (rest.startsWith('environments')) page = 'environments';

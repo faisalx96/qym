@@ -58,6 +58,26 @@ const LiveOverviewRoute = lazyPage(() => import('@/features/live/LiveRoutes'), '
 const LiveWorkerRoute = lazyPage(() => import('@/features/live/LiveRoutes'), 'LiveWorkerRoute');
 const LiveTurnsRoute = lazyPage(() => import('@/features/live/LiveRoutes'), 'LiveTurnsRoute');
 const LiveTurnRoute = lazyPage(() => import('@/features/live/LiveRoutes'), 'LiveTurnRoute');
+const PerformanceHomeRoute = lazyPage(
+  () => import('@/features/performance/PerformanceRoutes'),
+  'PerformanceHomeRoute',
+);
+const PerformanceNewRunRoute = lazyPage(
+  () => import('@/features/performance/PerformanceRoutes'),
+  'PerformanceNewRunRoute',
+);
+const PerformanceRunRoute = lazyPage(
+  () => import('@/features/performance/PerformanceRoutes'),
+  'PerformanceRunRoute',
+);
+const PerformanceRunnerRoute = lazyPage(
+  () => import('@/features/performance/PerformanceRoutes'),
+  'PerformanceRunnerRoute',
+);
+const PerformanceTargetsRoute = lazyPage(
+  () => import('@/features/performance/PerformanceRoutes'),
+  'PerformanceTargetsRoute',
+);
 
 const C = ROUTES.projectChildren;
 
@@ -88,6 +108,12 @@ const projectChildren: RouteObject[] = [
   { path: C.liveWorker, element: <LiveWorkerRoute /> },
   { path: C.liveTurns, element: <LiveTurnsRoute /> },
   { path: C.liveTurn, element: <LiveTurnRoute /> },
+  { path: C.performance, element: <PerformanceHomeRoute /> },
+  { path: C.performanceNew, element: <PerformanceNewRunRoute /> },
+  { path: C.performanceRunner, element: <PerformanceRunnerRoute /> },
+  { path: C.performanceTargets, element: <PerformanceTargetsRoute /> },
+  { path: C.performanceRunsTrimmed, element: <Navigate to="../performance" replace /> },
+  { path: C.performanceRun, element: <PerformanceRunRoute /> },
   {
     path: C.runs_detail,
     loader: runRouteLoader,

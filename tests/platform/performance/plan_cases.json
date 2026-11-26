@@ -1,0 +1,360 @@
+{
+  "_notes": {
+    "purpose": "One file of test cases for the plan computation. The page (TypeScript), the qym API (Python) and the runner's own check run the same cases, so the three ports cannot drift apart unnoticed.",
+    "status": "Draft contract, 2026-11-20. Expected values were computed by hand from the rules below and then compared with the output of PERF.plan, PERF.recommendHold and PERF.recommendTimeout in kit.js: all cases in `cases` agree with it.",
+    "sources": {
+      "kit": ".perf-area-round/design-options-2026-11-20/kit/kit.js",
+      "suite": "EA_performance_testing/scripts/breakpoint.js at commit d0688f8",
+      "terminal_tool": "EA_performance_testing/interactive-runner.js at commit d0688f8 (not one of the two named sources; quoted only where it shows a different reading)"
+    },
+    "config_fields": {
+      "test_type": "breakpoint | smoke | soak",
+      "baseline_users": "breakpoint: users of the first stage (kit: baselineVUs; suite: BASELINE_VUS)",
+      "max_users": "breakpoint: highest level asked for (kit: maxVUs; suite: MAX_VUS)",
+      "step_users": "breakpoint: users added per level (kit: step; suite: STEP_SIZE)",
+      "hold_seconds": "breakpoint: seconds each level is held (kit: hold; suite: HOLD_DURATION)",
+      "limit_ms": "time limit for 95% of answers, in milliseconds (kit: limitMs; suite: MAX_ACCEPTABLE_RESPONSE_MS)",
+      "max_error_rate_pct": "highest error rate per level, percent (kit: errPct; suite: MAX_ERROR_RATE_PCT). No plan rule reads it; it is in the cases so a port cannot let it change the plan.",
+      "timeout_seconds": "seconds after which one answer is given up (kit: timeoutSec; suite: SSE_TIMEOUT)",
+      "users": "soak: number of users (kit: vus; suite: SOAK_VUS)",
+      "duration_seconds": "soak: length in seconds (kit: duration; suite: SOAK_DURATION)"
+    },
+    "rules": [
+      { "id": "levels", "rule": "levels = step_users, 2 x step_users, ... while the value is <= max_users. A maximum that is not a multiple of the step is not reached. A step above the maximum gives no level.", "from": ["kit.js:109", "scripts/breakpoint.js:119-124"] },
+      { "id": "stages", "rule": "breakpoint stages: one baseline stage of 60 s; per level a ramp of 30 s and a hold of hold_seconds; then two cooldown stages of 30 s each (to baseline_users, then to 0).", "from": ["kit.js:104", "kit.js:110-113", "scripts/breakpoint.js:83-84", "scripts/breakpoint.js:115", "scripts/breakpoint.js:122-123", "scripts/breakpoint.js:127-128"] },
+      { "id": "total_seconds", "rule": "breakpoint: 60 + (number of levels) x (30 + hold_seconds) + 60. It is the end of the last stage.", "from": ["kit.js:131", "scripts/breakpoint.js:334"] },
+      { "id": "steady", "rule": "smoke: levels = [1], total_seconds = 180, whatever users and duration_seconds say. soak: levels = [users], total_seconds = duration_seconds. One stage.", "from": ["kit.js:122-123"] },
+      { "id": "recommended_hold_seconds", "rule": "max(120, round_half_up((2.5 x limit_ms / 1000) / 30) x 30). null for smoke and soak, which have no hold.", "from": ["kit.js:99"] },
+      { "id": "recommended_timeout_seconds", "rule": "min(900, max(180, 3 x limit_ms / 1000)). Computed for every test type.", "from": ["kit.js:100"] },
+      { "id": "checks", "rule": "breakpoint, in this order: (1) no_levels [bad] when there is no level, otherwise max_not_multiple_of_step [warn] when max_users % step_users != 0; (2) timeout_below_limit [bad] when timeout_seconds < limit_ms / 1000; (3) hold_short [warn] when hold_seconds < recommended_hold_seconds, otherwise hold_ok [ok]; (4) first_level_few_answers [warn] when there is a level and levels[0] x hold_seconds / 55 < 20. smoke and soak: steady_ok [ok] only.", "from": ["kit.js:115-120", "kit.js:124"] }
+    ],
+    "rounding": "round_half_up(x) = floor(x + 0.5), which is what JavaScript's Math.round does for positive numbers. Python's built-in round() rounds halves to the even neighbour and gives a different recommended hold for limits of 54 s, 78 s, 150 s, 270 s and others (limit in seconds, modulo 12, equal to 6). The cases 'half-way rounding ...' exist to catch that.",
+    "expect_fields": {
+      "levels": "the measured levels, in order",
+      "total_seconds": "planned length of the run",
+      "recommended_hold_seconds": "number, or null for smoke and soak",
+      "recommended_timeout_seconds": "number",
+      "checks": "the kinds only (ok | warn | bad), in the order the rule 'checks' gives them",
+      "check_codes": "the code of each check, parallel to `checks`. Added so that both ports give the same checks and not only the same kinds; a port that has no codes compares `checks` alone."
+    },
+    "not_covered_here": "Checks that need more than the plan values are not part of these cases: sign-in saved, production target, dataset published, a mix that asks for a tier the dataset does not have (kit.js:126-130), and the limits of a target or of the platform (maximum users, maximum length). The start route checks them.",
+    "allowed_values": {
+      "_decision": "The ranges below are a choice made for this contract: the terminal tool's own input rules (interactive-runner.js:349-358 and :1454-1518) narrowed by the platform caps of research/qym-outline.md section 4. The layout page uses narrower slider ranges (design-options-2026-11-20/pages/perf-new.html:222-230). Listed in OPEN-POINTS.md.",
+      "baseline_users": [1, 200],
+      "max_users": [1, 200],
+      "step_users": [1, 200],
+      "hold_seconds": [30, 3600],
+      "limit_ms": [1000, 900000],
+      "limit_ms_step": 1000,
+      "max_error_rate_pct": [1, 100],
+      "timeout_seconds": [30, 900],
+      "users": [1, 200],
+      "duration_seconds": [60, 28800]
+    },
+    "disagreements": [
+      "D1 baseline stage. kit.js:110 draws it as a flat 60 s at baseline_users. scripts/breakpoint.js:115 gives k6 one stage {60s, target baseline_users}, which k6 runs as a ramp from 1 user (measured: 3 users at 35 s, research/runner-feasibility.md section 7). Levels and length are the same under both readings; the picture and 'users now' differ. Both readings are in `disputed_cases`.",
+      "D2 warm-up for smoke and soak. kit.js:134 sets it to 0. scripts/smoke.js:79 and scripts/soak.js:79 apply the 30 s warm-up of data/config.json when the run is timed. Both readings are in `disputed_cases`.",
+      "D3 recommended timeout for a limit that is not a whole number of seconds. kit.js:100 returns a fraction; interactive-runner.js:1848-1853 rounds up. The two agree when limit_ms is a multiple of 1000, which `allowed_values` requires.",
+      "D4 recommended hold for a limit that is not a whole number of seconds. kit.js:99 uses the exact limit; interactive-runner.js:1467 and :1480 round the limit to whole seconds first. Same remark as D3.",
+      "D5 a timeout below the limit. kit.js:117 makes it 'bad' (the run cannot start). interactive-runner.js:1592-1594 prints a warning and continues. `cases` follows kit.js.",
+      "D6 a short hold. kit.js:118 warns below the recommended hold (2.5 x the limit). interactive-runner.js:1579-1581 says 'TOO SHORT' below 1 x the limit, 'marginal' below 1.5 x and 'OK' above. `cases` follows kit.js.",
+      "D7 smoke users and length. kit.js:122 fixes them at 1 user and 180 s (DESIGN.md says the same). The suite reads SMOKE_VUS and SMOKE_DURATION (src/config.js:146-157). `cases` follows kit.js.",
+      "Not a plan value, noted for completeness: kit.js:130 makes 'the mix asks for a tier the dataset does not have' a warning; DESIGN.md section 5 says qym refuses such a run."
+    ],
+    "how_to_use": "Run every entry of `cases`. For each pair in `disputed_cases` run only the reading the owner has chosen; until then the entry marked \"proposed\": true is the one this contract recommends."
+  },
+  "cases": [
+    {
+      "name": "suite defaults",
+      "comment": "data/config.json 'breakpoint' block and responseTimeThresholds.maxAcceptableMs. The timeout is the terminal tool's default for a 60 s limit.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 50, "step_users": 5, "hold_seconds": 120, "limit_ms": 60000, "max_error_rate_pct": 10, "timeout_seconds": 180 },
+      "expect": { "levels": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50], "total_seconds": 1620, "recommended_hold_seconds": 150, "recommended_timeout_seconds": 180, "checks": ["warn", "warn"], "check_codes": ["hold_short", "first_level_few_answers"] }
+    },
+    {
+      "name": "sample run: 60 users, step 10, hold 450 s, limit 180 s",
+      "comment": "PERF.defaults() in kit.js:96-98. 50 minutes.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 60, "step_users": 10, "hold_seconds": 450, "limit_ms": 180000, "max_error_rate_pct": 10, "timeout_seconds": 540 },
+      "expect": { "levels": [10, 20, 30, 40, 50, 60], "total_seconds": 3000, "recommended_hold_seconds": 450, "recommended_timeout_seconds": 540, "checks": ["ok"], "check_codes": ["hold_ok"] }
+    },
+    {
+      "name": "maximum not a multiple of the step",
+      "comment": "55 is not reached; the last level is 50.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 55, "step_users": 10, "hold_seconds": 450, "limit_ms": 180000, "max_error_rate_pct": 10, "timeout_seconds": 540 },
+      "expect": { "levels": [10, 20, 30, 40, 50], "total_seconds": 2520, "recommended_hold_seconds": 450, "recommended_timeout_seconds": 540, "checks": ["warn", "ok"], "check_codes": ["max_not_multiple_of_step", "hold_ok"] }
+    },
+    {
+      "name": "step larger than the maximum",
+      "comment": "No level. Only the baseline and the two cooldown stages remain: 60 + 30 + 30.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 10, "step_users": 20, "hold_seconds": 450, "limit_ms": 180000, "max_error_rate_pct": 10, "timeout_seconds": 540 },
+      "expect": { "levels": [], "total_seconds": 120, "recommended_hold_seconds": 450, "recommended_timeout_seconds": 540, "checks": ["bad", "ok"], "check_codes": ["no_levels", "hold_ok"] }
+    },
+    {
+      "name": "one level: step equals the maximum",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 25, "step_users": 25, "hold_seconds": 450, "limit_ms": 180000, "max_error_rate_pct": 10, "timeout_seconds": 540 },
+      "expect": { "levels": [25], "total_seconds": 600, "recommended_hold_seconds": 450, "recommended_timeout_seconds": 540, "checks": ["ok"], "check_codes": ["hold_ok"] }
+    },
+    {
+      "name": "hold shorter than recommended",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 40, "step_users": 10, "hold_seconds": 300, "limit_ms": 180000, "max_error_rate_pct": 10, "timeout_seconds": 540 },
+      "expect": { "levels": [10, 20, 30, 40], "total_seconds": 1440, "recommended_hold_seconds": 450, "recommended_timeout_seconds": 540, "checks": ["warn"], "check_codes": ["hold_short"] }
+    },
+    {
+      "name": "timeout below the limit",
+      "comment": "120 s is less than the 180 s limit, so no answer could ever reach the limit.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 30, "step_users": 10, "hold_seconds": 450, "limit_ms": 180000, "max_error_rate_pct": 10, "timeout_seconds": 120 },
+      "expect": { "levels": [10, 20, 30], "total_seconds": 1560, "recommended_hold_seconds": 450, "recommended_timeout_seconds": 540, "checks": ["bad", "ok"], "check_codes": ["timeout_below_limit", "hold_ok"] }
+    },
+    {
+      "name": "timeout equal to the limit is accepted",
+      "comment": "The rule is 'less than', so 180 s against a 180 s limit gives no check.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 30, "step_users": 10, "hold_seconds": 450, "limit_ms": 180000, "max_error_rate_pct": 10, "timeout_seconds": 180 },
+      "expect": { "levels": [10, 20, 30], "total_seconds": 1560, "recommended_hold_seconds": 450, "recommended_timeout_seconds": 540, "checks": ["ok"], "check_codes": ["hold_ok"] }
+    },
+    {
+      "name": "several problems at once",
+      "comment": "Checks come in rule order: multiple, timeout, hold, first level (10 x 100 / 55 = 18.2 answers).",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 25, "step_users": 10, "hold_seconds": 100, "limit_ms": 180000, "max_error_rate_pct": 10, "timeout_seconds": 60 },
+      "expect": { "levels": [10, 20], "total_seconds": 380, "recommended_hold_seconds": 450, "recommended_timeout_seconds": 540, "checks": ["warn", "bad", "warn", "warn"], "check_codes": ["max_not_multiple_of_step", "timeout_below_limit", "hold_short", "first_level_few_answers"] }
+    },
+    {
+      "name": "baseline users do not change levels or length",
+      "config": { "test_type": "breakpoint", "baseline_users": 10, "max_users": 30, "step_users": 10, "hold_seconds": 450, "limit_ms": 180000, "max_error_rate_pct": 10, "timeout_seconds": 540 },
+      "expect": { "levels": [10, 20, 30], "total_seconds": 1560, "recommended_hold_seconds": 450, "recommended_timeout_seconds": 540, "checks": ["ok"], "check_codes": ["hold_ok"] }
+    },
+    {
+      "name": "error rate does not change the plan",
+      "comment": "Same as the sample run with the highest error rate at 50%.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 60, "step_users": 10, "hold_seconds": 450, "limit_ms": 180000, "max_error_rate_pct": 50, "timeout_seconds": 540 },
+      "expect": { "levels": [10, 20, 30, 40, 50, 60], "total_seconds": 3000, "recommended_hold_seconds": 450, "recommended_timeout_seconds": 540, "checks": ["ok"], "check_codes": ["hold_ok"] }
+    },
+    {
+      "name": "half-way rounding: limit 150 s, hold at the recommended 390 s",
+      "comment": "2.5 x 150 / 30 = 12.5, rounded half up to 13, times 30 = 390. Rounding halves to even gives 360, which is wrong.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 50, "step_users": 10, "hold_seconds": 390, "limit_ms": 150000, "max_error_rate_pct": 10, "timeout_seconds": 450 },
+      "expect": { "levels": [10, 20, 30, 40, 50], "total_seconds": 2220, "recommended_hold_seconds": 390, "recommended_timeout_seconds": 450, "checks": ["ok"], "check_codes": ["hold_ok"] }
+    },
+    {
+      "name": "half-way rounding: a hold of 360 s is short for a 150 s limit",
+      "comment": "With the wrong rounding this case would pass as hold_ok.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 50, "step_users": 10, "hold_seconds": 360, "limit_ms": 150000, "max_error_rate_pct": 10, "timeout_seconds": 450 },
+      "expect": { "levels": [10, 20, 30, 40, 50], "total_seconds": 2070, "recommended_hold_seconds": 390, "recommended_timeout_seconds": 450, "checks": ["warn"], "check_codes": ["hold_short"] }
+    },
+    {
+      "name": "half-way rounding: limit 54 s",
+      "comment": "2.5 x 54 / 30 = 4.5, rounded half up to 5, times 30 = 150. The recommended timeout is 3 x 54 = 162, raised to the floor of 180. First level: 5 x 150 / 55 = 13.6 answers.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 20, "step_users": 5, "hold_seconds": 150, "limit_ms": 54000, "max_error_rate_pct": 10, "timeout_seconds": 180 },
+      "expect": { "levels": [5, 10, 15, 20], "total_seconds": 840, "recommended_hold_seconds": 150, "recommended_timeout_seconds": 180, "checks": ["ok", "warn"], "check_codes": ["hold_ok", "first_level_few_answers"] }
+    },
+    {
+      "name": "recommended hold and timeout at their floors",
+      "comment": "Limit 30 s: 2.5 x 30 = 75 rounds to 90 and is raised to 120; 3 x 30 = 90 is raised to 180.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 15, "step_users": 5, "hold_seconds": 120, "limit_ms": 30000, "max_error_rate_pct": 10, "timeout_seconds": 180 },
+      "expect": { "levels": [5, 10, 15], "total_seconds": 570, "recommended_hold_seconds": 120, "recommended_timeout_seconds": 180, "checks": ["ok", "warn"], "check_codes": ["hold_ok", "first_level_few_answers"] }
+    },
+    {
+      "name": "recommended timeout stops at 900 s",
+      "comment": "Limit 400 s: 3 x 400 = 1200 is cut to 900. Recommended hold: 2.5 x 400 = 1000, / 30 = 33.3, rounded to 33, times 30 = 990.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 20, "step_users": 10, "hold_seconds": 990, "limit_ms": 400000, "max_error_rate_pct": 10, "timeout_seconds": 900 },
+      "expect": { "levels": [10, 20], "total_seconds": 2160, "recommended_hold_seconds": 990, "recommended_timeout_seconds": 900, "checks": ["ok"], "check_codes": ["hold_ok"] }
+    },
+    {
+      "name": "first level: exactly 20 expected answers gives no warning",
+      "comment": "5 x 220 / 55 = 20, and the rule is 'fewer than 20'.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 10, "step_users": 5, "hold_seconds": 220, "limit_ms": 60000, "max_error_rate_pct": 10, "timeout_seconds": 180 },
+      "expect": { "levels": [5, 10], "total_seconds": 620, "recommended_hold_seconds": 150, "recommended_timeout_seconds": 180, "checks": ["ok"], "check_codes": ["hold_ok"] }
+    },
+    {
+      "name": "first level: just under 20 expected answers",
+      "comment": "5 x 210 / 55 = 19.1.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 10, "step_users": 5, "hold_seconds": 210, "limit_ms": 60000, "max_error_rate_pct": 10, "timeout_seconds": 180 },
+      "expect": { "levels": [5, 10], "total_seconds": 600, "recommended_hold_seconds": 150, "recommended_timeout_seconds": 180, "checks": ["ok", "warn"], "check_codes": ["hold_ok", "first_level_few_answers"] }
+    },
+    {
+      "name": "measured trial run: 15 users, step 5, hold 45 s, limit 15 s",
+      "comment": "The run of research/runner-feasibility.md section 7. k6 itself reported a planned length of 345 s for these settings, which is the value expected here.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 15, "step_users": 5, "hold_seconds": 45, "limit_ms": 15000, "max_error_rate_pct": 10, "timeout_seconds": 900 },
+      "expect": { "levels": [5, 10, 15], "total_seconds": 345, "recommended_hold_seconds": 120, "recommended_timeout_seconds": 180, "checks": ["warn", "warn"], "check_codes": ["hold_short", "first_level_few_answers"] }
+    },
+    {
+      "name": "smallest allowed values (breakpoint)",
+      "comment": "Every field at the lowest value of _notes.allowed_values. 60 + (30 + 30) + 60 = 180.",
+      "config": { "test_type": "breakpoint", "baseline_users": 1, "max_users": 1, "step_users": 1, "hold_seconds": 30, "limit_ms": 1000, "max_error_rate_pct": 1, "timeout_seconds": 30 },
+      "expect": { "levels": [1], "total_seconds": 180, "recommended_hold_seconds": 120, "recommended_timeout_seconds": 180, "checks": ["warn", "warn"], "check_codes": ["hold_short", "first_level_few_answers"] }
+    },
+    {
+      "name": "largest allowed values (breakpoint)",
+      "comment": "Every field at the highest value of _notes.allowed_values. One level of 200 users: 60 + (30 + 3600) + 60 = 3750. Recommended hold: 2.5 x 900 = 2250. Recommended timeout: 2700 cut to 900; a timeout of 900 against a 900 s limit is not 'below'.",
+      "config": { "test_type": "breakpoint", "baseline_users": 200, "max_users": 200, "step_users": 200, "hold_seconds": 3600, "limit_ms": 900000, "max_error_rate_pct": 100, "timeout_seconds": 900 },
+      "expect": { "levels": [200], "total_seconds": 3750, "recommended_hold_seconds": 2250, "recommended_timeout_seconds": 900, "checks": ["ok"], "check_codes": ["hold_ok"] }
+    },
+    {
+      "name": "most levels the allowed values give",
+      "comment": "Step 1 up to 200 users: 200 levels, 60 + 200 x (30 + 30) + 60 = 12120 s. The plan computes; the start route refuses it for its length.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 200, "step_users": 1, "hold_seconds": 30, "limit_ms": 1000, "max_error_rate_pct": 10, "timeout_seconds": 30 },
+      "expect": { "levels": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200], "total_seconds": 12120, "recommended_hold_seconds": 120, "recommended_timeout_seconds": 180, "checks": ["warn", "warn"], "check_codes": ["hold_short", "first_level_few_answers"] }
+    },
+    {
+      "name": "smoke",
+      "comment": "One user for 3 minutes. The limit is the suite's smoke limit (data/config.json smoke.thresholds: p95 below 60000 ms).",
+      "config": { "test_type": "smoke", "limit_ms": 60000, "max_error_rate_pct": 10, "timeout_seconds": 180 },
+      "expect": { "levels": [1], "total_seconds": 180, "recommended_hold_seconds": null, "recommended_timeout_seconds": 180, "checks": ["ok"], "check_codes": ["steady_ok"] }
+    },
+    {
+      "name": "soak",
+      "comment": "The suite's soak defaults: 20 users for 2 hours.",
+      "config": { "test_type": "soak", "users": 20, "duration_seconds": 7200, "limit_ms": 60000, "max_error_rate_pct": 10, "timeout_seconds": 180 },
+      "expect": { "levels": [20], "total_seconds": 7200, "recommended_hold_seconds": null, "recommended_timeout_seconds": 180, "checks": ["ok"], "check_codes": ["steady_ok"] }
+    },
+    {
+      "name": "smallest allowed values (soak)",
+      "config": { "test_type": "soak", "users": 1, "duration_seconds": 60, "limit_ms": 1000, "max_error_rate_pct": 1, "timeout_seconds": 30 },
+      "expect": { "levels": [1], "total_seconds": 60, "recommended_hold_seconds": null, "recommended_timeout_seconds": 180, "checks": ["ok"], "check_codes": ["steady_ok"] }
+    },
+    {
+      "name": "largest allowed values (soak)",
+      "config": { "test_type": "soak", "users": 200, "duration_seconds": 28800, "limit_ms": 900000, "max_error_rate_pct": 100, "timeout_seconds": 900 },
+      "expect": { "levels": [200], "total_seconds": 28800, "recommended_hold_seconds": null, "recommended_timeout_seconds": 900, "checks": ["ok"], "check_codes": ["steady_ok"] }
+    }
+  ],
+  "disputed_cases": [
+    {
+      "dispute": "D1",
+      "name": "baseline stage, as kit.js draws it: 60 s flat at the baseline users",
+      "reading": "kit.js:110",
+      "proposed": false,
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 60, "step_users": 10, "hold_seconds": 450, "limit_ms": 180000, "max_error_rate_pct": 10, "timeout_seconds": 540 },
+      "expect": { "levels": [10, 20, 30, 40, 50, 60], "total_seconds": 3000, "recommended_hold_seconds": 450, "recommended_timeout_seconds": 540, "checks": ["ok"], "check_codes": ["hold_ok"], "first_stage": { "role": "baseline", "from_users": 5, "to_users": 5, "start_second": 0, "end_second": 60 }, "planned_users_at_second_30": 5 }
+    },
+    {
+      "dispute": "D1",
+      "name": "baseline stage, as k6 runs it: a 60 s ramp from 1 user to the baseline users",
+      "reading": "scripts/breakpoint.js:115 as k6 executes it (measured, research/runner-feasibility.md section 7)",
+      "proposed": true,
+      "why_proposed": "The picture should show what the system under test receives. Levels and length do not change.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 60, "step_users": 10, "hold_seconds": 450, "limit_ms": 180000, "max_error_rate_pct": 10, "timeout_seconds": 540 },
+      "expect": { "levels": [10, 20, 30, 40, 50, 60], "total_seconds": 3000, "recommended_hold_seconds": 450, "recommended_timeout_seconds": 540, "checks": ["ok"], "check_codes": ["hold_ok"], "first_stage": { "role": "baseline", "from_users": 1, "to_users": 5, "start_second": 0, "end_second": 60 }, "planned_users_at_second_30": 3 }
+    },
+    {
+      "dispute": "D2",
+      "name": "smoke warm-up, as kit.js has it: none",
+      "reading": "kit.js:134",
+      "proposed": false,
+      "config": { "test_type": "smoke", "limit_ms": 60000, "max_error_rate_pct": 10, "timeout_seconds": 180 },
+      "expect": { "levels": [1], "total_seconds": 180, "recommended_hold_seconds": null, "recommended_timeout_seconds": 180, "checks": ["ok"], "check_codes": ["steady_ok"], "warmup_seconds": 0 }
+    },
+    {
+      "dispute": "D2",
+      "name": "smoke warm-up, as the suite runs it: the first 30 s are not measured",
+      "reading": "scripts/smoke.js:79 (the same line is in scripts/soak.js:79); data/config.json warmup.duration",
+      "proposed": true,
+      "why_proposed": "It is what the suite does, and the result must equal the terminal tool's.",
+      "config": { "test_type": "smoke", "limit_ms": 60000, "max_error_rate_pct": 10, "timeout_seconds": 180 },
+      "expect": { "levels": [1], "total_seconds": 180, "recommended_hold_seconds": null, "recommended_timeout_seconds": 180, "checks": ["ok"], "check_codes": ["steady_ok"], "warmup_seconds": 30 }
+    },
+    {
+      "dispute": "D3",
+      "name": "recommended timeout for a limit of 100.5 s, as kit.js computes it",
+      "reading": "kit.js:100",
+      "proposed": false,
+      "outside_allowed_values": "limit_ms is not a multiple of 1000",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 20, "step_users": 10, "hold_seconds": 270, "limit_ms": 100500, "max_error_rate_pct": 10, "timeout_seconds": 302 },
+      "expect": { "levels": [10, 20], "total_seconds": 720, "recommended_hold_seconds": 240, "recommended_timeout_seconds": 301.5, "checks": ["ok"], "check_codes": ["hold_ok"] }
+    },
+    {
+      "dispute": "D3",
+      "name": "recommended timeout for a limit of 100.5 s, as the terminal tool computes it",
+      "reading": "interactive-runner.js:1848-1853 (rounds up)",
+      "proposed": true,
+      "why_proposed": "A timeout is a whole number of seconds. With limit_ms restricted to whole seconds the two readings never differ.",
+      "outside_allowed_values": "limit_ms is not a multiple of 1000",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 20, "step_users": 10, "hold_seconds": 270, "limit_ms": 100500, "max_error_rate_pct": 10, "timeout_seconds": 302 },
+      "expect": { "levels": [10, 20], "total_seconds": 720, "recommended_hold_seconds": 240, "recommended_timeout_seconds": 302, "checks": ["ok"], "check_codes": ["hold_ok"] }
+    },
+    {
+      "dispute": "D4",
+      "name": "recommended hold for a limit of 53.5 s, as kit.js computes it",
+      "reading": "kit.js:99 (2.5 x 53.5 / 30 = 4.46, rounded to 4, times 30 = 120)",
+      "proposed": true,
+      "why_proposed": "No reason to round the limit first. With limit_ms restricted to whole seconds the two readings never differ.",
+      "outside_allowed_values": "limit_ms is not a multiple of 1000",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 20, "step_users": 10, "hold_seconds": 120, "limit_ms": 53500, "max_error_rate_pct": 10, "timeout_seconds": 180 },
+      "expect": { "levels": [10, 20], "total_seconds": 420, "recommended_hold_seconds": 120, "recommended_timeout_seconds": 180, "checks": ["ok"], "check_codes": ["hold_ok"] }
+    },
+    {
+      "dispute": "D4",
+      "name": "recommended hold for a limit of 53.5 s, as the terminal tool computes it",
+      "reading": "interactive-runner.js:1467 and :1480 (53.5 s is rounded to 54 s first: 2.5 x 54 / 30 = 4.5, rounded to 5, times 30 = 150)",
+      "proposed": false,
+      "outside_allowed_values": "limit_ms is not a multiple of 1000",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 20, "step_users": 10, "hold_seconds": 120, "limit_ms": 53500, "max_error_rate_pct": 10, "timeout_seconds": 180 },
+      "expect": { "levels": [10, 20], "total_seconds": 420, "recommended_hold_seconds": 150, "recommended_timeout_seconds": 180, "checks": ["warn"], "check_codes": ["hold_short"] }
+    },
+    {
+      "dispute": "D5",
+      "name": "timeout below the limit, as kit.js judges it: the run cannot start",
+      "reading": "kit.js:117",
+      "proposed": true,
+      "why_proposed": "With a timeout below the limit no answer can reach the limit, so the test cannot find what it is looking for.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 30, "step_users": 10, "hold_seconds": 450, "limit_ms": 180000, "max_error_rate_pct": 10, "timeout_seconds": 120 },
+      "expect": { "levels": [10, 20, 30], "total_seconds": 1560, "recommended_hold_seconds": 450, "recommended_timeout_seconds": 540, "checks": ["bad", "ok"], "check_codes": ["timeout_below_limit", "hold_ok"] }
+    },
+    {
+      "dispute": "D5",
+      "name": "timeout below the limit, as the terminal tool judges it: a warning",
+      "reading": "interactive-runner.js:1592-1594",
+      "proposed": false,
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 30, "step_users": 10, "hold_seconds": 450, "limit_ms": 180000, "max_error_rate_pct": 10, "timeout_seconds": 120 },
+      "expect": { "levels": [10, 20, 30], "total_seconds": 1560, "recommended_hold_seconds": 450, "recommended_timeout_seconds": 540, "checks": ["warn", "ok"], "check_codes": ["timeout_below_limit", "hold_ok"] }
+    },
+    {
+      "dispute": "D6",
+      "name": "hold of 300 s for a 180 s limit, as kit.js judges it: short",
+      "reading": "kit.js:118 (below the recommended 450 s)",
+      "proposed": true,
+      "why_proposed": "One rule and one number (the recommended hold) is easier to explain on the page than three bands.",
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 30, "step_users": 10, "hold_seconds": 300, "limit_ms": 180000, "max_error_rate_pct": 10, "timeout_seconds": 540 },
+      "expect": { "levels": [10, 20, 30], "total_seconds": 1110, "recommended_hold_seconds": 450, "recommended_timeout_seconds": 540, "checks": ["warn"], "check_codes": ["hold_short"] }
+    },
+    {
+      "dispute": "D6",
+      "name": "hold of 300 s for a 180 s limit, as the terminal tool judges it: OK",
+      "reading": "interactive-runner.js:1579-1581 (300 is not below 1.5 x 180 = 270)",
+      "proposed": false,
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 30, "step_users": 10, "hold_seconds": 300, "limit_ms": 180000, "max_error_rate_pct": 10, "timeout_seconds": 540 },
+      "expect": { "levels": [10, 20, 30], "total_seconds": 1110, "recommended_hold_seconds": 450, "recommended_timeout_seconds": 540, "checks": ["ok"], "check_codes": ["hold_ok"] }
+    },
+    {
+      "dispute": "D6",
+      "name": "hold of 150 s for a 180 s limit, as kit.js judges it: short",
+      "reading": "kit.js:118",
+      "proposed": true,
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 30, "step_users": 10, "hold_seconds": 150, "limit_ms": 180000, "max_error_rate_pct": 10, "timeout_seconds": 540 },
+      "expect": { "levels": [10, 20, 30], "total_seconds": 660, "recommended_hold_seconds": 450, "recommended_timeout_seconds": 540, "checks": ["warn"], "check_codes": ["hold_short"] }
+    },
+    {
+      "dispute": "D6",
+      "name": "hold of 150 s for a 180 s limit, as the terminal tool judges it: too short, answers will not finish",
+      "reading": "interactive-runner.js:1579 (150 is below the limit itself)",
+      "proposed": false,
+      "config": { "test_type": "breakpoint", "baseline_users": 5, "max_users": 30, "step_users": 10, "hold_seconds": 150, "limit_ms": 180000, "max_error_rate_pct": 10, "timeout_seconds": 540 },
+      "expect": { "levels": [10, 20, 30], "total_seconds": 660, "recommended_hold_seconds": 450, "recommended_timeout_seconds": 540, "checks": ["bad"], "check_codes": ["hold_short"] }
+    },
+    {
+      "dispute": "D7",
+      "name": "smoke given 3 users and 600 s, as kit.js plans it: still 1 user for 180 s",
+      "reading": "kit.js:122",
+      "proposed": true,
+      "why_proposed": "DESIGN.md defines Smoke as 1 user for 3 minutes.",
+      "config": { "test_type": "smoke", "users": 3, "duration_seconds": 600, "limit_ms": 60000, "max_error_rate_pct": 10, "timeout_seconds": 180 },
+      "expect": { "levels": [1], "total_seconds": 180, "recommended_hold_seconds": null, "recommended_timeout_seconds": 180, "checks": ["ok"], "check_codes": ["steady_ok"] }
+    },
+    {
+      "dispute": "D7",
+      "name": "smoke given 3 users and 600 s, as the suite would run it",
+      "reading": "src/config.js:146-157 (SMOKE_VUS and SMOKE_DURATION are honoured)",
+      "proposed": false,
+      "config": { "test_type": "smoke", "users": 3, "duration_seconds": 600, "limit_ms": 60000, "max_error_rate_pct": 10, "timeout_seconds": 180 },
+      "expect": { "levels": [3], "total_seconds": 600, "recommended_hold_seconds": null, "recommended_timeout_seconds": 180, "checks": ["ok"], "check_codes": ["steady_ok"] }
+    }
+  ]
+}

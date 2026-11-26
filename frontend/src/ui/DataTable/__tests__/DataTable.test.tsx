@@ -36,6 +36,24 @@ function Harness(props: Partial<React.ComponentProps<typeof DataTable<Row>>>) {
 }
 
 describe('DataTable v2', () => {
+  it("headerCase 'as-written' keeps a percentile header's case; other headers stay upper case (A3)", () => {
+    const { container } = render(
+      <DataTable<Row>
+        aria-label="Latency"
+        columns={[
+          { id: 'name', header: 'Name', width: 160 },
+          { id: 'p95', header: 'p95', headerCase: 'as-written', accessor: (r) => r.score, width: 80 },
+        ]}
+        rows={ROWS}
+        rowKey={(r) => r.id}
+      />,
+    );
+    const th = (id: string) => container.querySelector(`th[data-col="${id}"]`);
+    expect(th('p95')).toHaveAttribute('data-header-case', 'as-written');
+    expect(th('p95')?.textContent).toContain('p95');
+    expect(th('name')).not.toHaveAttribute('data-header-case');
+  });
+
   it('opts into first-line alignment without changing the default alignment', () => {
     const { rerender } = render(<Harness />);
     expect(screen.getByRole('grid')).not.toHaveAttribute('data-cell-align');

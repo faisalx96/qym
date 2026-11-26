@@ -35,6 +35,23 @@
   flex: none;
 }
 
+/* `wrap`: the description is read in full, so it wraps; the text keeps a reading width and the controls drop under it
+   when the header is too narrow for both (§7 "Text does not give up width to controls"). */
+.head[data-wrap] {
+  flex-wrap: wrap;
+  row-gap: var(--space-sm);
+}
+
+.head[data-wrap] > .text {
+  flex: 1 1 0;
+  min-inline-size: min(100%, var(--section-text-min));
+}
+
+.head[data-wrap] > .aside {
+  flex-wrap: wrap;
+  max-inline-size: 100%;
+}
+
 /* Phone: the controls drop under the title instead of widening the page. */
 @media (max-width: 640px) {
   .head {
@@ -54,5 +71,10 @@
     flex: initial;
     flex-wrap: wrap;
     max-width: 100%;
+  }
+
+  /* The column layout above stacks a wrapping header too; its text takes its own height. */
+  .head[data-wrap] > .text {
+    flex-basis: auto;
   }
 }

@@ -1,0 +1,481 @@
+/* Performance, New run: local layout only, tokens only. Every block is built from primitives and the shared pieces. */
+.page {
+  container-type: inline-size;
+  min-inline-size: 0;
+  font-size: var(--font-base);
+}
+
+/* The blocks under the header, one gap apart. PageHeader keeps its own margin below it, as on qym's other pages. */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-inline-size: 0;
+}
+
+.body > * {
+  min-inline-size: 0;
+}
+
+/* Small shared pieces. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-inline-size: 0;
+}
+
+.tight {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  min-inline-size: 0;
+}
+
+.between {
+  justify-content: space-between;
+}
+
+.label {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.number {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.figures {
+  font-variant-numeric: tabular-nums;
+}
+
+.host {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.text {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.rule {
+  padding-block-start: var(--space-md);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+/* The steps beside "Your run so far", three parts to one; that card is never narrower than its facts need. */
+.wizard {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(17rem, 1fr);
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+.wizard[data-wide] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* The step bar is the launch wizard's bar (LaunchBar); this host only names it and draws no box of its own, so the
+   bar stays a sticky child of the page. */
+.barHost {
+  display: contents;
+}
+
+.options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  gap: var(--space-sm);
+}
+
+.options[data-columns='2'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Option box (DESIGN_LANGUAGE "Option box"): a selectable box inside a card. A React Aria Radio (a label whose
+   radio input is visually hidden) or, for "Add a target", a button. */
+.option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* The button: Chrome 131 starts it at flex-start, which shrinks the rows and the kinds bar to their content. */
+  align-items: stretch;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font: inherit;
+  line-height: 1.5;
+  text-align: start;
+  cursor: pointer;
+}
+
+.option:hover {
+  background: var(--bg-hover);
+}
+
+.option:focus-visible,
+.option[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.option[data-selected] {
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), var(--bg-elevated));
+  box-shadow: inset var(--rail-width) 0 0 var(--accent-primary);
+}
+
+.option[data-disabled],
+.option[aria-disabled='true'] {
+  cursor: default;
+  color: var(--text-muted);
+}
+
+.option[data-disabled]:hover,
+.option[aria-disabled='true']:hover {
+  background: var(--bg-elevated);
+}
+
+.option[data-add] {
+  border-style: dashed;
+  background: none;
+}
+
+.option[data-add]:hover {
+  background: var(--bg-hover);
+}
+
+.option[data-add][aria-disabled='true']:hover {
+  background: none;
+}
+
+.optionTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.option[data-disabled] .optionTitle,
+.option[aria-disabled='true'] .optionTitle {
+  color: var(--text-secondary);
+}
+
+/* The test's shape: its size is the drawing's own (the svg's width and height). */
+.shape {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* A Skeleton bone in the loading frame, as tall as the line it stands for: a text line (1.5 times its font size,
+   the option box's line height) or a tag. */
+.bone {
+  display: flex;
+  align-items: center;
+  block-size: 1.5em;
+}
+
+.bone[data-tag] {
+  block-size: var(--badge-height);
+}
+
+.tokens {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md) var(--space-lg);
+  align-items: start;
+}
+
+.sliders {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-md) var(--space-xl);
+  align-items: start;
+}
+
+.sliders[data-columns='2'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-md) var(--space-lg);
+  align-items: start;
+}
+
+.mixBar {
+  display: flex;
+  gap: calc(var(--space-xs) / 2);
+  block-size: var(--space-sm);
+  min-inline-size: 0;
+}
+
+.mixBar > span {
+  min-inline-size: calc(var(--space-xs) / 2);
+  border-radius: var(--radius-xs);
+  background: var(--tone);
+}
+
+/* Question rows: the kind, the question, the follow-up. One grid for all rows, so the kind column is as wide as its
+   widest tag and every question starts at the same x. */
+.samples {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) auto;
+  column-gap: var(--space-md);
+}
+
+.samples[data-columns='2'] {
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+
+.sample {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  row-gap: var(--space-sm);
+  align-items: baseline;
+  padding-block: var(--space-sm);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+/* The kind tag keeps its own width when the row is one column (a narrow column), never the row's. */
+.sample > :first-child {
+  justify-self: start;
+}
+
+.sample:first-child {
+  border-block-start: 0;
+}
+
+.review {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--space-md) var(--space-xl);
+  align-items: start;
+}
+
+.settings {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) auto;
+  gap: var(--space-sm) var(--space-md);
+  align-items: baseline;
+  margin: 0;
+}
+
+.settings > div {
+  display: contents;
+}
+
+.settings dt {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.settings dd {
+  margin: 0;
+  min-inline-size: 0;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-sm) var(--space-md);
+  align-items: baseline;
+  margin: 0;
+}
+
+.facts dt {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.facts dd {
+  margin: 0;
+  min-inline-size: 0;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+/* One grid for every line, so the sentences start at the same x after the widest tag. */
+.checks {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checks > li {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+  line-height: 1.5;
+}
+
+.checks > li > :first-child {
+  justify-self: start;
+}
+
+/* The upload's tiles: a container, so StatTiles' own narrow layout (its container queries) answers to this column.
+   Nothing here restyles the tiles (DESIGN_LANGUAGE §2 rule 10). */
+.uploadTiles {
+  container-type: inline-size;
+}
+
+/* Dialog bodies. A dialog is outside the page, so these answer to the window. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.formPair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+  align-items: start;
+}
+
+.upload {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-lg) var(--space-xl);
+  align-items: start;
+}
+
+.role {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: var(--space-xs) var(--space-md);
+  align-items: start;
+  padding-block: var(--space-sm);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.kindRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-md);
+  padding-block: var(--space-xs);
+}
+
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xl) var(--space-lg);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  line-height: 1.5;
+  text-align: center;
+  cursor: pointer;
+}
+
+.drop[data-over] {
+  border-color: var(--accent-primary);
+  background: var(--bg-hover);
+}
+
+.drop:focus-within {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.fileInput {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+/* Narrow columns: the page answers to its own width. */
+@container (max-width: 899px) {
+  .review,
+  .wizard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sliders,
+  .sliders[data-columns='2'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 520px) {
+  .fields,
+  .tokens,
+  .options[data-columns='2'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .settings dt {
+    grid-column: 1 / -1;
+  }
+
+  .samples,
+  .samples[data-columns='2'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (width <= 760px) {
+  .upload,
+  .formPair,
+  .role {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -1,0 +1,677 @@
+{
+  "discovery_request": {
+    "schema": 1,
+    "target_kind": "estishraf_platform",
+    "started_at": "2026-11-25T16:00:02Z",
+    "ended_at": "2026-11-25T16:00:04Z",
+    "duration_s": 2,
+    "active_duration_s": 2,
+    "partial": false,
+    "partial_reasons": [],
+    "selection_limited": false,
+    "counts": {
+      "dashboards_visible": 1,
+      "dashboards_discovered": 1,
+      "dashboards_selected": 1,
+      "dashboards_runnable": 1,
+      "charts_found": 1,
+      "charts_usable": 1,
+      "charts_unusable": 0,
+      "filters_found": 1,
+      "skipped_by_budget": 0
+    },
+    "dashboards": [
+      {
+        "id": 101,
+        "title": "Population",
+        "detail_loaded": true,
+        "runnable": true,
+        "charts_found": 1,
+        "charts_usable": 1,
+        "filters_found": 1,
+        "charts_unusable": []
+      }
+    ],
+    "titles_truncated": 0,
+    "resolved_plan": {
+      "users": null,
+      "iterations": null,
+      "smoke_max_duration_seconds": null,
+      "levels": [
+        1
+      ],
+      "stages": [
+        {
+          "role": "baseline",
+          "target_users": 1,
+          "start_s": 0,
+          "end_s": 60
+        },
+        {
+          "role": "ramp",
+          "target_users": 1,
+          "start_s": 60,
+          "end_s": 90
+        },
+        {
+          "role": "hold",
+          "target_users": 1,
+          "start_s": 90,
+          "end_s": 210
+        },
+        {
+          "role": "cooldown",
+          "target_users": 1,
+          "start_s": 210,
+          "end_s": 240
+        },
+        {
+          "role": "cooldown",
+          "target_users": 0,
+          "start_s": 240,
+          "end_s": 270
+        }
+      ],
+      "total_seconds": 270,
+      "dashboard_ids": [
+        101
+      ],
+      "theme": "blue",
+      "chart_batch": 6,
+      "baseline_seconds": 60,
+      "abort_grace_seconds": 30
+    }
+  },
+  "progress_request": {
+    "seq": 10,
+    "status": "running",
+    "at": "2026-11-25T16:01:55Z",
+    "progress": {
+      "target_kind": "estishraf_platform",
+      "phase": "hold",
+      "step": null,
+      "message": "Holding 1 user",
+      "error_code": null,
+      "elapsed_s": 110,
+      "preflight_elapsed_s": 4,
+      "planned_s": 270,
+      "stage": {
+        "index": 3,
+        "of": 5,
+        "role": "hold",
+        "target_users": 1,
+        "start_s": 90,
+        "end_s": 210
+      },
+      "level": 1,
+      "users": 1,
+      "users_sample_age_s": 0.2,
+      "users_max": 1,
+      "discovery_counts": {
+        "dashboards_visible": 1,
+        "dashboards_discovered": 1,
+        "dashboards_selected": 1,
+        "dashboards_runnable": 1,
+        "charts_found": 1,
+        "charts_usable": 1,
+        "charts_unusable": 0,
+        "filters_found": 1,
+        "skipped_by_budget": 0
+      },
+      "discovery_ready": true,
+      "dashboard_opens": 2,
+      "filter_changes": 2,
+      "charts_drawn": 2,
+      "charts_failed": 0,
+      "errors_by_class": {
+        "auth": 0,
+        "chart_unavailable": 0,
+        "callback_error": 1,
+        "timeout": 0,
+        "server_error": 0,
+        "client_error": 0
+      },
+      "requests": null,
+      "error_rate_pct": null,
+      "open_p50_ms": 1000,
+      "open_p95_ms": 1000,
+      "filter_p95_ms": 500,
+      "levels": [
+        {
+          "level": 1,
+          "state": "running",
+          "hold_elapsed_s": 20,
+          "hold_elapsed_pct": 16.6666666667,
+          "dashboard_opens": 1,
+          "filter_changes": 1,
+          "charts_drawn": 1,
+          "charts_failed": 0,
+          "errors_by_class": {
+            "auth": 0,
+            "chart_unavailable": 0,
+            "callback_error": 1,
+            "timeout": 0,
+            "server_error": 0,
+            "client_error": 0
+          },
+          "open_p50_ms": 1000,
+          "open_p95_ms": 1000,
+          "filter_p95_ms": 500,
+          "requests": null,
+          "error_rate_pct": null,
+          "per_minute": 3,
+          "result": null
+        }
+      ],
+      "records": {
+        "received": 5,
+        "dropped": 0,
+        "malformed": 0,
+        "uploaded": 5
+      },
+      "measurement": {
+        "basis": "completed_records",
+        "complete": true,
+        "percentiles_complete": true
+      },
+      "auth": {
+        "state": "ok",
+        "token_versions": {
+          "session_cookie": 1
+        },
+        "session_expires_at": "2026-11-25T17:00:00Z",
+        "rejected_at": null,
+        "recovered_at": null,
+        "wait_deadline_at": null,
+        "incidents": 0,
+        "refresh_ok": 0,
+        "refresh_failed": 0
+      },
+      "waiting_for_token": null,
+      "coverage": "complete",
+      "coverage_counts": {
+        "dashboards_selected": 1,
+        "dashboards_runnable": 1,
+        "dashboards_exercised": 1,
+        "dashboards_unexercised": 0,
+        "dashboards_unusable": 0,
+        "charts_found": 1,
+        "charts_usable": 1,
+        "charts_unusable": 0,
+        "discovery_partial": false,
+        "discovery_reasons": [],
+        "selection_limited": false
+      },
+      "dropped": {
+        "log_lines": 0
+      }
+    },
+    "error": null,
+    "exit_code": null
+  },
+  "steps_request": {
+    "records": [
+      {
+        "seq": 1,
+        "at": "2026-11-25T16:00:15Z",
+        "elapsed_s": 10,
+        "stage": "baseline",
+        "level": null,
+        "user_number": 1,
+        "type": "open",
+        "dashboard_id": 101,
+        "title": "Population",
+        "insight_id": null,
+        "control": null,
+        "step": null,
+        "http_status": null,
+        "error_class": null,
+        "duration_ms": 1000,
+        "charts": 1,
+        "charts_ok": 1,
+        "errors": {
+          "auth": 0,
+          "chart_unavailable": 0,
+          "callback_error": 0,
+          "timeout": 0,
+          "server_error": 0,
+          "client_error": 0
+        }
+      },
+      {
+        "seq": 2,
+        "at": "2026-11-25T16:00:17Z",
+        "elapsed_s": 12,
+        "stage": "baseline",
+        "level": null,
+        "user_number": 1,
+        "type": "filter",
+        "dashboard_id": 101,
+        "title": "Population",
+        "insight_id": null,
+        "control": "measurement_type",
+        "step": null,
+        "http_status": null,
+        "error_class": null,
+        "duration_ms": 500,
+        "charts": 1,
+        "charts_ok": null,
+        "errors": {
+          "auth": 0,
+          "chart_unavailable": 0,
+          "callback_error": 0,
+          "timeout": 0,
+          "server_error": 0,
+          "client_error": 0
+        }
+      },
+      {
+        "seq": 3,
+        "at": "2026-11-25T16:01:45Z",
+        "elapsed_s": 100,
+        "stage": "hold",
+        "level": 1,
+        "user_number": 1,
+        "type": "open",
+        "dashboard_id": 101,
+        "title": "Population",
+        "insight_id": null,
+        "control": null,
+        "step": null,
+        "http_status": null,
+        "error_class": null,
+        "duration_ms": 1000,
+        "charts": 1,
+        "charts_ok": 1,
+        "errors": {
+          "auth": 0,
+          "chart_unavailable": 0,
+          "callback_error": 0,
+          "timeout": 0,
+          "server_error": 0,
+          "client_error": 0
+        }
+      },
+      {
+        "seq": 4,
+        "at": "2026-11-25T16:01:47.100Z",
+        "elapsed_s": 102.1,
+        "stage": "hold",
+        "level": 1,
+        "user_number": 1,
+        "type": "error",
+        "dashboard_id": 101,
+        "title": "Population",
+        "insight_id": 82801,
+        "control": null,
+        "step": "filter",
+        "http_status": 500,
+        "error_class": "callback_error",
+        "duration_ms": null,
+        "charts": null,
+        "charts_ok": null,
+        "errors": {
+          "auth": 0,
+          "chart_unavailable": 0,
+          "callback_error": 0,
+          "timeout": 0,
+          "server_error": 0,
+          "client_error": 0
+        }
+      },
+      {
+        "seq": 5,
+        "at": "2026-11-25T16:01:47Z",
+        "elapsed_s": 102,
+        "stage": "hold",
+        "level": 1,
+        "user_number": 1,
+        "type": "filter",
+        "dashboard_id": 101,
+        "title": "Population",
+        "insight_id": null,
+        "control": "measurement_type",
+        "step": null,
+        "http_status": null,
+        "error_class": null,
+        "duration_ms": 500,
+        "charts": 1,
+        "charts_ok": null,
+        "errors": {
+          "auth": 0,
+          "chart_unavailable": 0,
+          "callback_error": 1,
+          "timeout": 0,
+          "server_error": 0,
+          "client_error": 0
+        }
+      }
+    ]
+  },
+  "final_summary_request": {
+    "schema": 1,
+    "target_kind": "estishraf_platform",
+    "test_type": "breakpoint",
+    "identity": {
+      "run_id": "run-1",
+      "run_number": 1,
+      "project_name": "Performance",
+      "target_name": "Estishraf · Preprod"
+    },
+    "verdict": "not_reached",
+    "verdict_reason": "No break up to 1 user",
+    "source_verdict_reason": "All clean levels with data stayed within the configured dashboard-ready latency and error limits.",
+    "ended_by": "plan",
+    "exit_code": 0,
+    "started_at": "2026-11-25T16:00:05Z",
+    "ended_at": "2026-11-25T16:04:35Z",
+    "target_url": "https://platform.example.test",
+    "headline": {
+      "safe_load_users": 1,
+      "recommended_max_users": 1,
+      "breaking_level_users": null,
+      "breaking_reason": null,
+      "p95_at_safe_load_ms": 1000,
+      "p95_at_break_ms": null,
+      "error_rate_pct": 1.6666666666666667,
+      "open_p95_ms": 1000,
+      "filter_p95_ms": 500,
+      "opens_measured": 1,
+      "opens_total": 3,
+      "filters_total": 3,
+      "charts_drawn": 3,
+      "charts_failed": 0,
+      "duration_s": 270,
+      "max_users": 1,
+      "highest_tested_users": 1
+    },
+    "thresholds": [
+      {
+        "scope": "run",
+        "level": null,
+        "metric": "dashboard_ready",
+        "expression": "p(95)<10000",
+        "measured": 1000,
+        "ok": true
+      },
+      {
+        "scope": "run",
+        "level": null,
+        "metric": "journey_errors",
+        "expression": "rate<0.05",
+        "measured": 0.016666666666666666,
+        "ok": true
+      },
+      {
+        "scope": "level",
+        "level": 1,
+        "metric": "j_level_ready",
+        "expression": "p(95)<10000",
+        "measured": 1000,
+        "ok": true
+      },
+      {
+        "scope": "level",
+        "level": 1,
+        "metric": "j_level_errors",
+        "expression": "rate<0.05",
+        "measured": 0.025,
+        "ok": true
+      }
+    ],
+    "levels": [
+      {
+        "level": 1,
+        "role": "hold",
+        "start_s": 90,
+        "end_s": 210,
+        "actual_duration_s": 120,
+        "hold_elapsed_pct": 100,
+        "per_minute": 0.5,
+        "has_data": true,
+        "passed": true,
+        "latency_breach": false,
+        "error_breach": false,
+        "auth_contaminated": false,
+        "result": "pass",
+        "requests": 40,
+        "request_outcomes": 40,
+        "failed_request_outcomes": 1,
+        "dashboards_opened": 1,
+        "filters_applied": 1,
+        "charts_drawn": 1,
+        "chart_unavailable_errors": 0,
+        "charts_failed": 0,
+        "errors_by_class": {
+          "auth": 0,
+          "chart_unavailable": 0,
+          "callback_error": 1,
+          "timeout": 0,
+          "server_error": 0,
+          "client_error": 0
+        },
+        "open_p50_ms": 1000,
+        "open_p95_ms": 1000,
+        "open_p99_ms": 1000,
+        "open_max_ms": 1000,
+        "filter_p50_ms": 500,
+        "filter_p95_ms": 500,
+        "filter_max_ms": 500,
+        "error_rate_pct": 2.5,
+        "auth_error_rate_pct": 0,
+        "auth_waits": 0,
+        "auth_wait_recovered": 0
+      }
+    ],
+    "overall": {
+      "request_outcomes": 60,
+      "failed_request_outcomes": 1,
+      "error_rate_pct": 1.6666666666666667,
+      "errors_by_class": {
+        "auth": 0,
+        "chart_unavailable": 0,
+        "callback_error": 1,
+        "timeout": 0,
+        "server_error": 0,
+        "client_error": 0
+      },
+      "chart_unavailable_errors": 0
+    },
+    "auth": {
+      "recovered": 0,
+      "unrecovered": 0,
+      "broker_pickups": 0,
+      "refreshes": 0,
+      "refresh_failures": 0,
+      "waits": 0,
+      "wait_recovered": 0,
+      "incident": null,
+      "handoffs": [],
+      "handoffs_omitted": 0
+    },
+    "counts": {
+      "planned_iterations": null,
+      "completed_iterations": 3,
+      "records_received": 7,
+      "records_dropped": 0
+    },
+    "plan": {
+      "users": null,
+      "iterations": null,
+      "smoke_max_duration_seconds": null,
+      "levels": [
+        1
+      ],
+      "stages": [
+        {
+          "role": "baseline",
+          "target_users": 1,
+          "start_s": 0,
+          "end_s": 60
+        },
+        {
+          "role": "ramp",
+          "target_users": 1,
+          "start_s": 60,
+          "end_s": 90
+        },
+        {
+          "role": "hold",
+          "target_users": 1,
+          "start_s": 90,
+          "end_s": 210
+        },
+        {
+          "role": "cooldown",
+          "target_users": 1,
+          "start_s": 210,
+          "end_s": 240
+        },
+        {
+          "role": "cooldown",
+          "target_users": 0,
+          "start_s": 240,
+          "end_s": 270
+        }
+      ],
+      "total_seconds": 270,
+      "dashboard_ids": [
+        101
+      ],
+      "theme": "blue",
+      "chart_batch": 6,
+      "baseline_seconds": 60,
+      "abort_grace_seconds": 30
+    },
+    "coverage": "complete",
+    "coverage_counts": {
+      "dashboards_selected": 1,
+      "dashboards_runnable": 1,
+      "dashboards_exercised": 1,
+      "dashboards_unexercised": 0,
+      "dashboards_unusable": 0,
+      "charts_found": 1,
+      "charts_usable": 1,
+      "charts_unusable": 0,
+      "discovery_partial": false,
+      "discovery_reasons": [],
+      "selection_limited": false
+    },
+    "measurements": {
+      "source_complete": true,
+      "percentiles_complete": true,
+      "percentile_basis": "all_completed_steps",
+      "reason": null,
+      "records_retained": 7
+    },
+    "dashboards": [
+      {
+        "dashboard_id": 101,
+        "title": "Population",
+        "opens": 3,
+        "filters": 3,
+        "open_p50_ms": 1000,
+        "open_p95_ms": 1000,
+        "filter_p95_ms": 500,
+        "charts_drawn": 3,
+        "charts_failed": 0,
+        "errors_by_class": {
+          "auth": 0,
+          "chart_unavailable": 0,
+          "callback_error": 1,
+          "timeout": 0,
+          "server_error": 0,
+          "client_error": 0
+        },
+        "charts_unusable": 0,
+        "detail_loaded": true,
+        "measurement_complete": true
+      }
+    ]
+  },
+  "frozen_config": {
+    "schema": 1,
+    "test_type": "breakpoint",
+    "target": {
+      "id": "target-1",
+      "name": "Estishraf · Preprod",
+      "kind": "estishraf_platform",
+      "is_production": false,
+      "base_url": "https://platform.example.test",
+      "settings": {
+        "routes": {
+          "session": "/api/auth/session",
+          "token_refresh": "/api/auth/oauth2/token",
+          "health_check": "/api/user-management/user/health-check",
+          "my_topics": "/api/core/topic/user",
+          "dashboards": "/api/core/dashboard/client-dashboard?page={page}&pageSize={page_size}",
+          "dashboard": "/api/core/dashboard/client-dashboard/{dashboard_id}",
+          "dashboard_logo": "/api/core/dashboard/client-dashboard/{dashboard_id}/logo",
+          "latest_insights": "/api/core/insight/client-insight",
+          "dashboard_background": "/api/core/dashboard/background-image/{dashboard_id}",
+          "insight_last_update": "/api/core/insight/last-update/{insight_id}",
+          "siblings": "/api/core/dashboard/client-dashboard/?topicId={topic_id}",
+          "chart_wrapper": "/api/chart?insightId={insight_id}&theme={theme}",
+          "chart_layout": "/chart-assets/{insight_id}/_dash-layout?theme={theme}",
+          "chart_dependencies": "/chart-assets/{insight_id}/_dash-dependencies?theme={theme}",
+          "chart_callback": "/chart-assets/{insight_id}/_dash-update-component?theme={theme}"
+        },
+        "client_id": "estishraf",
+        "request_timeout_seconds": null
+      },
+      "max_users": 200,
+      "max_duration_s": 28800
+    },
+    "tokens": [
+      {
+        "name": "session_cookie",
+        "hint": "2 cookies, saved 2026-11-25T16:00:00Z",
+        "version": 1
+      }
+    ],
+    "plan": {
+      "baseline_users": 1,
+      "max_users": 1,
+      "step_users": 1,
+      "hold_seconds": 120,
+      "ramp_seconds": 30,
+      "limit_ms": 10000,
+      "max_error_rate_pct": 5,
+      "abort_on_break": true,
+      "pause_seconds": 5,
+      "filters_per_dashboard": "all",
+      "pick": "random",
+      "max_dashboards": null,
+      "timeout_seconds": 60,
+      "handoff_wait_seconds": 600,
+      "discovery_budget_seconds": 300,
+      "filter_reference_ms": 5000
+    },
+    "note": ""
+  },
+  "start_request": {
+    "target_id": "target-1",
+    "target_kind": "estishraf_platform",
+    "test_type": "breakpoint",
+    "plan": {
+      "baseline_users": 1,
+      "max_users": 1,
+      "step_users": 1,
+      "hold_seconds": 120,
+      "ramp_seconds": 30,
+      "limit_ms": 10000,
+      "max_error_rate_pct": 5,
+      "abort_on_break": true,
+      "pause_seconds": 5,
+      "filters_per_dashboard": "all",
+      "pick": "random",
+      "max_dashboards": null,
+      "timeout_seconds": 60,
+      "handoff_wait_seconds": 600,
+      "discovery_budget_seconds": 300,
+      "filter_reference_ms": 5000
+    },
+    "note": "",
+    "confirm_target": null
+  }
+}

@@ -25,6 +25,7 @@ os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
 from qym_platform import main, serve
 from qym_platform.api.ingest import router as ingest_router
 from qym_platform.api.live_ingest import live_ingest_router
+from qym_platform.api.performance_ingest import performance_ingest_router
 from qym_platform.app import create_app, create_ingestion_app, create_workers_app
 from qym_platform.datetime_utils import utc_now_naive
 from qym_platform.db.background_job_models import BackgroundJob, ServiceHeartbeat
@@ -260,7 +261,12 @@ def test_all_mode_keeps_legacy_paths_and_adds_the_service_prefixes(db_factory) -
 def test_main_service_can_drop_the_ingest_routes(db_factory) -> None:
     app = create_app(_settings(service="main", main_include_ingest=False))
     assert not any(
-        route.path.startswith("/v1/projects/{project_id}/live")
+        route.path.startswith(
+            (
+                "/v1/projects/{project_id}/live",
+                "/v1/projects/{project_id}/performance",
+            )
+        )
         for route in _api_routes(app)
     )
     with _client(app, db_factory) as client:
@@ -279,6 +285,8 @@ def test_ingestion_app_serves_only_the_write_path(db_factory) -> None:
     paths = {route.path for route in _api_routes(app)}
     assert "/v1/projects/{project_id}/live/sources/{key:path}" in paths
     assert "/ingestion/v1/projects/{project_id}/live/sources/{key:path}" in paths
+    assert "/v1/projects/{project_id}/performance/runners/{key}" in paths
+    assert "/ingestion/v1/projects/{project_id}/performance/runners/{key}" in paths
     with _client(app, db_factory) as client:
         created = _create_run(client, "/ingestion/v1/runs")
         _create_run(client, "/v1/runs")  # legacy path (ingress routes it here)
@@ -315,6 +323,8 @@ def test_ingestion_app_serves_only_the_write_path(db_factory) -> None:
     paths = {route.path for route in _api_routes(app)}
     assert "/v1/projects/{project_id}/live/sources/{key:path}" not in paths
     assert "/ingestion/v1/projects/{project_id}/live/sources/{key:path}" in paths
+    assert "/v1/projects/{project_id}/performance/runners/{key}" not in paths
+    assert "/ingestion/v1/projects/{project_id}/performance/runners/{key}" in paths
     with _client(app, db_factory) as client:
         assert (
             client.post(
@@ -358,6 +368,7 @@ INGRESS_TO_INGESTION = [
     re.compile(r"^/v1/runs:upload$"),
     re.compile(r"^/v1/runs/[^/]+/events$"),
     re.compile(r"^/v1/projects/[^/]+/live/"),
+    re.compile(r"^/v1/projects/[^/]+/performance/"),
     re.compile(r"^/ingestion/"),
 ]
 
@@ -394,7 +405,11 @@ def _api_routes(app):
 
 
 def test_ingress_rules_send_exactly_the_ingest_routes_to_ingestion() -> None:
-    ingest_routes = list(ingest_router.routes) + list(live_ingest_router.routes)
+    ingest_routes = (
+        list(ingest_router.routes)
+        + list(live_ingest_router.routes)
+        + list(performance_ingest_router.routes)
+    )
     ingest_endpoints = {route.endpoint for route in ingest_routes}
     main_app = create_app(_settings(service="main", main_include_ingest=False))
     matched = [
@@ -425,6 +440,7 @@ def test_ingress_rules_send_exactly_the_ingest_routes_to_ingestion() -> None:
         "location = /v1/runs:upload ",
         r"location ~ ^/v1/runs/[^/]+/events$ ",
         r"location ~ ^/v1/projects/[^/]+/live/ ",
+        r"location ~ ^/v1/projects/[^/]+/performance/ ",
         "location /ingestion/ ",
         "location /workers/ ",
         "location / ",

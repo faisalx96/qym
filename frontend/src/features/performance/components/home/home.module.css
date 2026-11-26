@@ -1,0 +1,190 @@
+/* Performance home: layout only; every block is built from primitives and the shared pieces. */
+.page {
+  container-type: inline-size;
+  min-inline-size: 0;
+  font-size: var(--font-base);
+}
+
+/* The blocks under the header, one gap apart. PageHeader keeps its own margin below it, as on qym's other pages. */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-inline-size: 0;
+}
+
+.body > * {
+  min-inline-size: 0;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-inline-size: 0;
+}
+
+.tight {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  min-inline-size: 0;
+}
+
+.inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+}
+
+.between {
+  justify-content: space-between;
+}
+
+.label {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.number {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.figures {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A phrase or a date in a stat value: sans with tabular figures; only a bare id or value is mono (§1 Font families). */
+.words {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* The titled blocks of Home are Sections: they stack with no gap of their own, so the hairline and the section gap
+   between them are the Section's (§3.2). */
+.sections {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+/* A loading frame adds no box of its own: its blocks sit in the page exactly as the loaded ones do. */
+.frame {
+  display: contents;
+}
+
+/* The runner line: its strip of facts, then the ways to the Targets and Runner pages at the end. */
+.runnerLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-lg);
+  min-inline-size: 0;
+}
+
+/* The strip keeps at least a reading width and takes the rest of the line; the links wrap under it when both do not
+   fit (the strip is a size container, so its content gives it no width of its own). */
+.runnerLine > :first-child {
+  flex: 999 1 var(--section-text-min);
+  min-inline-size: 0;
+}
+
+.rule {
+  padding-block-start: var(--space-md);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+/* The run in progress: its name and actions, then the numbers beside the plan picture. */
+.runHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-sm) var(--space-md);
+}
+
+.runBody {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--space-md) var(--space-xl);
+  align-items: center;
+}
+
+.runBody[data-plain] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* The controls at the end of the capacity title row. */
+.aside {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-xs) var(--space-md);
+}
+
+/* The three numbered sentences of a project with no run yet. */
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-md) var(--space-lg);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps > li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-inline-start: var(--space-md);
+  border-inline-start: var(--rail-width) solid var(--border-strong);
+  line-height: 1.5;
+}
+
+/* Narrow columns: the page answers to its own width. */
+@container (max-width: 899px) {
+  .runBody,
+  .steps {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .aside {
+    justify-content: flex-start;
+  }
+}
+
+/* Placeholder rows of a loading table: one bone per text line, the lines as far apart as a cell's own lines. */
+.skeletonLines {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}

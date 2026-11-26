@@ -14,6 +14,10 @@ key so the previous keys can be dropped. Columns covered:
 - ``eval_experiments.dataset_read_token_encrypted`` (the experiment's dataset read
   token of live experiments, same rule)
 - ``live_worker_settings.secrets_encrypted`` (each worker secret in every version)
+- ``performance_target_tokens.token_encrypted`` (the sign-in tokens of performance
+  targets; ``version``, ``token_hint`` and ``updated_at`` stay as they are, so the
+  runner does not take the rewritten value for a new token and the page keeps the
+  time a person saved it)
 
 It is idempotent: values that already decrypt with the current key are left alone,
 so re-running it rewrites nothing. Each batch is committed separately, and a row is
@@ -48,6 +52,7 @@ from qym_platform.db.models import (
     EvalEnvironment,
     EvalExperiment,
     LiveWorkerSettings,
+    PerformanceTargetToken,
     ProjectLlmConnection,
 )
 from qym_platform.secrets import (
@@ -73,6 +78,8 @@ ENCRYPTED_COLUMNS: Tuple[Tuple[str, Any, str], ...] = (
         "dataset_read_token_encrypted",
     ),
     ("live_worker_settings.secrets_encrypted", LiveWorkerSettings, "secrets_encrypted"),
+    ("performance_target_tokens.token_encrypted", PerformanceTargetToken, "token_encrypted"),
+    ("performance_target_tokens.history_encrypted", PerformanceTargetToken, "history_encrypted"),
 )
 
 _MAX_FAILED_IDS = 50
@@ -102,6 +109,8 @@ def reencrypt_column(
     stats = _empty_stats()
     column = getattr(model, attr)
     is_secret_map = model is LiveWorkerSettings and attr == "secrets_encrypted"
+    # A performance token shows when a person saved it: the rewrite keeps that time.
+    keeps_updated_at = model is PerformanceTargetToken
     last_id: Optional[str] = None
     while True:
         query = select(model.id, column).where(column.isnot(None))
@@ -142,10 +151,13 @@ def reencrypt_column(
                 stats["reencrypted"] += 1
                 continue
             # Only if nobody replaced the value since it was read.
+            changes = {attr: new_value}
+            if keeps_updated_at:
+                changes["updated_at"] = model.updated_at
             result = db.execute(
                 update(model)
                 .where(model.id == row_id, column == value)
-                .values({attr: new_value})
+                .values(changes)
                 .execution_options(synchronize_session=False)
             )
             if result.rowcount:

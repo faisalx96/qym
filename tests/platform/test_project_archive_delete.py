@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import os
 import sys
+import zlib
 from datetime import datetime
 from pathlib import Path
 
@@ -18,11 +19,20 @@ import re
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, insert
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from _helpers import app_client
 from _live_support import _png
+from _performance_support import (
+    NOW as PERFORMANCE_NOW,
+    seed_dataset,
+    seed_run,
+    seed_runner,
+    seed_target,
+    use_encryption_key,
+)
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
 ROOT = Path(__file__).resolve().parents[2]
@@ -53,6 +63,14 @@ from qym_platform.db.models import (
     LiveSource,
     LiveTurn,
     LiveTurnScore,
+    PerformanceEvent,
+    PerformanceLogLine,
+    PerformanceQuestion,
+    PerformanceReport,
+    PerformanceRun,
+    PerformanceRunner,
+    PerformanceTarget,
+    PerformanceTargetToken,
     Project,
     ProjectAnalysisCategoryCatalogVersion,
     ProjectAnalysisRuleMergeParent,
@@ -302,6 +320,9 @@ def test_delete_removes_datasets_llm_connections_and_settings(client, session_fa
         "analyzer_documents": 1,
         "live_sources": 0,
         "live_turns": 0,
+        "performance_runners": 0,
+        "performance_targets": 0,
+        "performance_runs": 0,
     }
 
     response = client.delete(f"/v1/admin/projects/{project_id}?confirm=Project%20doomed", headers=ADMIN)
@@ -402,6 +423,153 @@ def test_delete_removes_live_rows_only_for_the_project(client, session_factory, 
             assert db.query(LiveTurnScore).filter(LiveTurnScore.turn_pk == turn_pk).count() == expected
             assert db.query(LiveChartImage).filter(LiveChartImage.turn_pk == turn_pk).count() == expected
             assert db.query(LiveChartSnapshot).filter(LiveChartSnapshot.turn_pk == turn_pk).count() == expected
+
+
+def _add_performance_rows(db, project_id: str, slug: str) -> dict:
+    """A runner with two events, a target with both tokens, an ended run with two
+    questions, a report and more log lines than one delete batch, and a run in progress."""
+    project, manager = db.get(Project, project_id), db.get(User, "mgr")
+    runner = seed_runner(
+        db, project, api_key=db.get(ApiKey, f"key-{slug}"), user=manager
+    )
+    target = seed_target(db, project, user=manager)
+    version = seed_dataset(db, project, manager)
+    ended = seed_run(
+        db, project, runner, target, version=version, user=manager,
+        status="finished", report_received_at=PERFORMANCE_NOW,
+    )
+    active = seed_run(
+        db, project, runner, target, version=version, user=manager, status="running"
+    )
+    for seq in (1, 2):
+        db.add(
+            PerformanceQuestion(
+                run_id=ended.id, seq=seq, asked_at=PERFORMANCE_NOW, elapsed_s=float(seq),
+                stage="hold", level=10, user_number=1, tier="simple",
+                question_id="simple-1", question="Question simple-1?", status="ok",
+                http_status=200, duration_ms=1200.0,
+            )
+        )
+    db.execute(
+        insert(PerformanceLogLine),
+        [
+            {"run_id": ended.id, "seq": seq, "at": PERFORMANCE_NOW, "level": "info", "message": f"line {seq}"}
+            for seq in range(1, 1002)
+        ],
+    )
+    db.add(
+        PerformanceLogLine(
+            run_id=active.id, seq=1, at=PERFORMANCE_NOW, level="info", message="started"
+        )
+    )
+    html = zlib.compress(b"<p>report</p>")
+    db.add(
+        PerformanceReport(
+            run_id=ended.id, content_type="text/html", html=html, html_size=13,
+            byte_size=len(html), sha256=hashlib.sha256(b"<p>report</p>").hexdigest(),
+            received_at=PERFORMANCE_NOW,
+        )
+    )
+    db.add_all(
+        [
+            PerformanceEvent(
+                runner_id=runner.id, run_id=ended.id, at=PERFORMANCE_NOW, level="info",
+                code="claimed", message="The runner took the run.", source="qym",
+            ),
+            PerformanceEvent(
+                runner_id=runner.id, at=PERFORMANCE_NOW, level="warning",
+                code="records_dropped", message="Some records were dropped.",
+            ),
+        ]
+    )
+    db.flush()
+    return {"runner": runner.id, "target": target.id, "runs": [ended.id, active.id]}
+
+
+def _performance_row_counts(db, project_id: str, ids: dict) -> dict:
+    return {
+        "runners": db.query(PerformanceRunner).filter(PerformanceRunner.project_id == project_id).count(),
+        "events": db.query(PerformanceEvent).filter(PerformanceEvent.runner_id == ids["runner"]).count(),
+        "targets": db.query(PerformanceTarget).filter(PerformanceTarget.project_id == project_id).count(),
+        "tokens": db.query(PerformanceTargetToken).filter(PerformanceTargetToken.target_id == ids["target"]).count(),
+        "runs": db.query(PerformanceRun).filter(PerformanceRun.project_id == project_id).count(),
+        "questions": db.query(PerformanceQuestion).filter(PerformanceQuestion.run_id.in_(ids["runs"])).count(),
+        "log_lines": db.query(PerformanceLogLine).filter(PerformanceLogLine.run_id.in_(ids["runs"])).count(),
+        "reports": db.query(PerformanceReport).filter(PerformanceReport.run_id.in_(ids["runs"])).count(),
+    }
+
+
+def _check_delete_removes_performance_rows(client, session_factory) -> None:
+    projects = {}
+    for slug in ("performance-doomed", "performance-keeper"):
+        project_id = _create_project(client, session_factory, slug)
+        with session_factory() as db:
+            projects[slug] = (project_id, _add_performance_rows(db, project_id, slug))
+            db.commit()
+    seeded = {
+        "runners": 1, "events": 2, "targets": 1, "tokens": 2,
+        "runs": 2, "questions": 2, "log_lines": 1002, "reports": 1,
+    }
+    with session_factory() as db:
+        for project_id, ids in projects.values():
+            assert _performance_row_counts(db, project_id, ids) == seeded
+
+    project_id, _ = projects["performance-doomed"]
+    preview = client.get(f"/v1/admin/projects/{project_id}/deletion", headers=ADMIN)
+    assert preview.status_code == 200
+    body = preview.json()
+    # A performance run, even one in progress, does not block the delete.
+    assert body["can_delete"] is True and body["blocked_reason"] is None
+    assert body["counts"]["performance_runners"] == 1
+    assert body["counts"]["performance_targets"] == 1
+    assert body["counts"]["performance_runs"] == 2
+
+    response = client.delete(
+        f"/v1/admin/projects/{project_id}?confirm=performance-doomed", headers=ADMIN
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["deleted"] is True
+    assert response.json()["counts"] == body["counts"]
+    with session_factory() as db:
+        for slug, expected in (
+            ("performance-doomed", dict.fromkeys(seeded, 0)),
+            ("performance-keeper", seeded),
+        ):
+            project_id, ids = projects[slug]
+            assert db.query(Project).filter(Project.id == project_id).count() == (slug == "performance-keeper")
+            assert _performance_row_counts(db, project_id, ids) == expected
+        # Nothing of the deleted project is left in any performance table.
+        assert db.query(PerformanceLogLine).count() == seeded["log_lines"]
+        assert db.query(PerformanceTargetToken).count() == seeded["tokens"]
+
+
+@pytest.mark.parametrize("foreign_keys", [True, False])
+def test_delete_removes_performance_rows_only_for_the_project(
+    client, session_factory, monkeypatch, foreign_keys
+):
+    use_encryption_key(monkeypatch)
+    if not foreign_keys:
+        with session_factory() as db:
+            db.connection().exec_driver_sql("PRAGMA foreign_keys=OFF")
+    _check_delete_removes_performance_rows(client, session_factory)
+
+
+def test_delete_removes_performance_rows_on_postgresql(postgres_engine, monkeypatch):
+    """The same delete where the database itself refuses a row left behind."""
+    use_encryption_key(monkeypatch)
+    monkeypatch.setenv("QYM_AUTH_MODE", "proxy_headers")
+    monkeypatch.setenv("QYM_AUTH_LOCAL_ENABLED", "false")
+    factory = sessionmaker(bind=postgres_engine, autoflush=False, autocommit=False)
+    with factory() as db:
+        db.add_all(
+            [
+                User(id="admin", email="admin@x.com", role=UserRole.ADMIN),
+                User(id="mgr", email="mgr@x.com", role=UserRole.MEMBER),
+            ]
+        )
+        db.commit()
+    with app_client(factory) as postgres_client:
+        _check_delete_removes_performance_rows(postgres_client, factory)
 
 
 def test_delete_accepts_the_slug_as_confirmation(client, session_factory):

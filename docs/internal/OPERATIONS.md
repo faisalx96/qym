@@ -37,6 +37,19 @@ sure one process runs a given job.
 | `QYM_LIVE_TURN_BATCH_MAX` | `100` | Maximum number of turns accepted in one live ingest batch |
 | `QYM_LIVE_DETAIL_MAX_BYTES` | `524288` | Maximum serialized bytes of a live turn's detail; larger detail is dropped and flagged in its summary |
 | `QYM_LIVE_TREND_MAX_DAYS` | `90` | Maximum number of days returned by the live overview trend |
+| `QYM_PERFORMANCE_ENABLED` | `true` | `false` switches the Performance area off: its page routes and the runner routes answer `404` "Performance is switched off", nothing new starts, and stored runs stay in the database (retention keeps running). See "Performance runner" |
+| `QYM_PERFORMANCE_STARTS_PER_HOUR` | `20` | Performance runs one person may start per hour (`0` disables the limit) |
+| `QYM_PERFORMANCE_MAX_USERS` / `QYM_PERFORMANCE_MAX_DURATION_SECONDS` | `200` / `28800` | Platform limits of a performance plan: highest number of simulated users, longest planned run (8 hours; minimum 60). A target's own limits, set by a Manager, cannot exceed them |
+| `QYM_PERFORMANCE_RUNNER_FRESH_SECONDS` | `30` | The performance runner counts as connected, and a run may start, while its last heartbeat is at most this old (it sends one every 10 s; minimum 20) |
+| `QYM_PERFORMANCE_STALE_AFTER_SECONDS` | `120` | A claimed performance run with no sign of life from its runner for this long ends as `interrupted` and never runs again (minimum 30) |
+| `QYM_PERFORMANCE_QUEUE_TIMEOUT_SECONDS` | `600` | A started performance run that no runner claimed for this long ends as `expired` (minimum 30) |
+| `QYM_PERFORMANCE_LATE_WINDOW_SECONDS` | `600` | After a performance run ends, whatever its state, its questions, log lines, result, report file and a rotated token are still accepted from the runner that claimed it for this long |
+| `QYM_PERFORMANCE_DETAIL_RETENTION_DAYS` / `QYM_PERFORMANCE_REPORT_RETENTION_DAYS` / `QYM_PERFORMANCE_RETENTION_DAYS` / `QYM_PERFORMANCE_EVENTS_RETENTION_DAYS` | `90` / `180` / `730` / `30` | Performance retention, hourly by the maintenance loop: a run's questions and log lines that many days after the run ended, its report file after the day it arrived, the run itself with its result and everything else of it after the run ended, runner events after their own time. A run that has not ended is never deleted; targets, their tokens and the runner are kept |
+| `QYM_PERFORMANCE_INFO_MAX_BYTES` / `QYM_PERFORMANCE_PROGRESS_MAX_BYTES` / `QYM_PERFORMANCE_SUMMARY_MAX_BYTES` / `QYM_PERFORMANCE_REPORT_MAX_BYTES` | `8192` / `65536` / `262144` / `5242880` | Body caps of the runner's registration, progress report, result and report file (the file in uncompressed UTF-8 bytes) |
+| `QYM_PERFORMANCE_QUESTIONS_BATCH_MAX` / `QYM_PERFORMANCE_QUESTIONS_MAX_BYTES` / `QYM_PERFORMANCE_QUESTIONS_PER_RUN_MAX` | `200` / `1048576` / `50000` | Finished questions per request (at most 1000), bytes per request, questions stored per run |
+| `QYM_PERFORMANCE_LOG_BATCH_MAX` / `QYM_PERFORMANCE_LOG_MAX_BYTES` / `QYM_PERFORMANCE_LOG_LINES_PER_RUN_MAX` | `500` / `262144` / `50000` | Log lines per request (at most 5000), bytes per request, log lines stored per run |
+| `QYM_PERFORMANCE_EVENTS_BATCH_MAX` / `QYM_PERFORMANCE_EVENTS_MAX_BYTES` | `100` / `262144` | Runner events per request (at most 1000), bytes per request |
+| `QYM_PERFORMANCE_QUESTION_CHARS_MAX` / `QYM_PERFORMANCE_ANSWER_CHARS_MAX` / `QYM_PERFORMANCE_LOG_MESSAGE_CHARS_MAX` | `2000` / `1000` / `2000` | Characters qym keeps of a question, of an answer, and of a log message or error text (minimum 100 each). The control document repeats every performance cap to the runner as `limits` |
 | `QYM_EVENT_LOG_MODE` | `full` | `structural` drops item/metric bodies from `run_events` (bodies live in `run_items`/attempts/scores). Enable after the new image is live |
 | `QYM_SPAN_MAX_BYTES` | `1048576` | Safety ceiling per span; larger spans keep scalar attributes only and are flagged |
 | `QYM_SPAN_RETENTION_DAYS` | `60` | Raw traces older than this are dropped by partition (0 = keep forever) |
@@ -220,12 +233,12 @@ A component that tries to write anywhere else now fails loudly
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0107`, following `0050` through
+The combined migration chain has one head, `0108`, following `0050` through
 `0051`–`0085`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
-Migrations `0058`–`0084`, `0086`–`0097`, `0099`, `0100` and `0102`–`0107` are quick DDL or small job/queue inserts.
+Migrations `0058`–`0084`, `0086`–`0097`, `0099`, `0100` and `0102`–`0108` are quick DDL or small job/queue inserts.
 `0098` builds one partial index on `dashboard_change_events`; when that table is over
 256 MB it queues the build (`create_deferred_indexes`, CONCURRENTLY) instead.
 `0101` builds two covering indexes (`run_item_pass_scores`, and `spans` on every partition);
@@ -267,6 +280,7 @@ replica and worker.
 | 0068 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (on every database, an empty one included, since the job also builds the index): fills search text in id windows (one statement per 500-item window), stores lineage counts of published versions, builds the small partial index `ix_dataset_items_unindexed_version` CONCURRENTLY, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the trigram index; search stays correct, only unindexed. Until the job reaches a row, search rebuilds that row's text on read; results match except a search for a JSON fragment spanning several keys of one object, whose key order PostgreSQL's JSONB text may differ. If the job ever failed (Admin → Maintenance shows it), start `backfill_dataset_search_text` again there: it resumes and is safe to repeat |
 | 0069 | Empty `dashboard_run_overview` (each run's overview inputs) and `dashboard_overview_snapshots` (the overview shared by every process and pod) tables | `backfill_dashboard_overview` — **queued, runs by itself** (on every database; on SQLite, or with no runs, it finishes at once): stores each run's overview inputs in run-key windows (one statement per 500-run window; about 0.4 s per 1,000 runs on the perf lab). Until it reaches a run, the overview reads that run's JSON, with the same numbers; the summary worker stores every run it publishes from the start. Resumable and safe to start again from Admin → Maintenance |
 | 0070 | — (one job insert) | `build_runs_search_index` — **queued, runs by itself**: runs `CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public`, then builds `ix_dashboard_run_dimensions_search_trgm` (the Runs search box) CONCURRENTLY. Without the privilege to create the extension it logs "runs search index skipped" and finishes; the search stays correct, only unindexed. Safe to start again: it rebuilds the index |
+| 0108 | Nine empty performance tables: `performance_runners`, `performance_targets`, `performance_target_tokens`, `performance_runs`, `performance_questions`, `performance_dashboard_steps`, `performance_log_lines`, `performance_reports`, `performance_events` (questions, dashboard steps, log lines and the report go with their run, tokens with their target, events with their runner, by `ON DELETE CASCADE`; partial unique indexes allow one queued or active run per runner and per target, and one name and one address per project among targets that are not archived) | None. Quick DDL, nothing to backfill |
 | 0107 | `factory_rules.bridge_to_groups` (the groups a bridge rule opens, JSON list) | Data: the `bridge` rows of `factory_rule_links` are deleted and bridge rules become plain rules (name their groups again, or run the analysis). Small table, quick |
 | 0106 | `bookmark_groups` (a user's named folder of bookmarks in a project, pinned or not) and `run_bookmarks.group_id`; `run_bookmarks.pinned` / `pinned_at` dropped | Data: one `General` group per author and project is created and every existing bookmark filed in it (a pinned bookmark pins that group). Small tables, quick |
 | 0105 | Six empty data factory tables: `data_factories`, `factory_grants`, `factory_rule_categories`, `factory_rules`, `factory_rule_links`, `factory_jobs` (rows go with their factory, a factory with its dataset, by `ON DELETE CASCADE`) | None. Quick DDL, nothing to backfill. The factory worker loop (`services/data_factory.py`) starts with the API in `all` mode and with the workers service in split mode |
@@ -436,7 +450,7 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0107` and a healthy API. The API process then runs every queued job itself.
+   `0108` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -660,7 +674,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0107`.
+deployment only after the API has migrated to `0108`.
 
 ```yaml
 apiVersion: apps/v1
@@ -817,7 +831,8 @@ jobs for the workers service.
 
 SDK clients need no change: they keep `QYM_BASE_URL` pointed at the ingress
 and the ingress sends the three run ingest paths to ingestion. The live
-evaluation ingest paths go to the ingestion service as well. None of
+evaluation ingest paths and the performance runner paths go to the ingestion
+service as well. None of
 main's own `/v1/runs/*` routes (`submit`, `owner`, `approve`, `reject`,
 `unapprove`, `unreject`, `/v1/runs/submit`) matches them (a test asserts the
 route sets are disjoint). Paths are passed through unchanged (no rewrite).
@@ -828,6 +843,7 @@ route sets are disjoint). Paths are passed through unchanged (no rewrite).
 | `= /v1/runs:upload` | ingestion |
 | `~ ^/v1/runs/[^/]+/events$` | ingestion |
 | `~ ^/v1/projects/[^/]+/live/` | ingestion |
+| `~ ^/v1/projects/[^/]+/performance/` | ingestion |
 | `/ingestion/` | ingestion |
 | `/workers/` | workers |
 | `/` | main |
@@ -856,6 +872,7 @@ spec:
           - { path: "/v1/runs:upload$",       pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
           - { path: "/v1/runs/[^/]+/events$", pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
           - { path: "/v1/projects/[^/]+/live/", pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
+          - { path: "/v1/projects/[^/]+/performance/", pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
           - { path: "/ingestion/",            pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
           - { path: "/workers/",              pathType: ImplementationSpecific, backend: { service: { name: qym-workers,   port: { number: 8000 } } } }
           - { path: "/",                      pathType: ImplementationSpecific, backend: { service: { name: qym-main,      port: { number: 8000 } } } }
@@ -1287,6 +1304,133 @@ a day ago (`chart_styles`).
   after the response's `Retry-After` delay (60 seconds).
 - **Turns rejected**: a batch can return 200 with rejected turns. Read each
   `results[].error`, correct the reported fields and retry those turns.
+
+## Performance runner
+
+The performance runner runs the load tests of a project's **Performance** pages
+(Breakpoint, Smoke and Soak against the chat of a target). It is its own image,
+like the Live evaluation worker, and holds everything it needs; nothing is
+downloaded at runtime. It asks qym for work every few seconds, runs the test, and
+sends progress, the questions asked, the log, the result and the report file back
+to qym's runner routes. qym never connects to the runner and never connects to a
+target: the load comes from where the runner sits, so place it where the numbers
+should be measured from. The request contract is the
+[Performance Runner Protocol v1.0](../performance-runner-protocol-v1.0.md).
+
+One runner per project. Targets (name, address, chat and sign-in paths, highest
+number of users, production switch) are added on the pages by a Manager; their
+sign-in tokens are pasted on the pages and stored encrypted with
+`QYM_LLM_CONFIG_ENCRYPTION_KEY` (without it, saving a token returns `409`). The
+pages show only the last 4 characters of a token. The runner receives the token
+values in its control answer, and only with the API key a Manager chose on
+**Performance → Runner**. Keep the encryption key stable: the key rotation tool
+(`python -m qym_platform.tools.reencrypt_llm_keys`) also re-encrypts these tokens.
+
+### Runner settings
+
+The runner needs four settings; everything else (targets, tokens, the plan of a
+run) comes from qym. Copy `docker/performance-runner.env.example` to
+`docker/performance-runner.env`, fill it in and keep the filled file private.
+
+| Variable | Value / meaning |
+|---|---|
+| `QYM_URL` | qym's address, with the ingestion prefix (for example `/ingestion`) when one is deployed; Compose sets it below |
+| `QYM_PROJECT_ID` | ID of the project whose runs this runner executes, not its slug (**Performance → Runner** shows it under "Connect a runner") |
+| `QYM_API_KEY` | A project API key from **Project settings → API keys**; a Manager chooses the same key as the runner key on **Performance → Runner**. With another key of the project the runner connects but receives no tokens, and the page says "The runner uses another key" |
+| `RUNNER_CA_BUNDLE` | Path inside the container of a PEM file with the extra certificate authorities to trust for qym and for the runner's sign-in check of the targets; empty when both use publicly trusted certificates. Under Compose leave it empty and set `QYM_PERFORMANCE_RUNNER_CA_BUNDLE` below: Compose mounts the file and sets this variable itself (an env file value is overridden, as for `QYM_URL`) |
+
+`RUNNER_KEY` (default `performance-runner-1`) is the name the runner registers
+under: keep it on every restart, and run exactly one process per name (two
+processes keep replacing each other and no run survives). `RUNNER_NAME` and
+`RUNNER_LOCATION` are shown on the Runner page. The runner image's own notes list
+its remaining settings.
+
+Compose variables (set in the shell or Compose `.env`, not the runner env file):
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `QYM_PERFORMANCE_RUNNER_IMAGE` | `qym-performance-runner:unset` | Runner image from the deployment bundle; the placeholder keeps the other services starting when the profile is off, so set it before using the profile |
+| `QYM_PERFORMANCE_RUNNER_ENV_FILE` | `./performance-runner.env` | Path relative to the Compose file; supplies the runner's project, key and CA bundle |
+| `QYM_PERFORMANCE_RUNNER_QYM_URL` | `http://api:8000` (split: `http://ingestion:8000`) | Overrides the runner's `QYM_URL`; use for an external platform or a path prefix |
+| `QYM_PERFORMANCE_RUNNER_CA_BUNDLE` | unset | Host path of a PEM file with a private certificate authority; mounted read-only at `/etc/performance-runner/ca-bundle.pem` and named in `RUNNER_CA_BUNDLE`. Unset: `/dev/null` is mounted there, `RUNNER_CA_BUNDLE` stays empty and the runner trusts the public authorities only |
+
+The `performance-runner` service starts only with the `performance` profile,
+exposes no ports, mounts nothing but the CA bundle (read-only) and gets 60 seconds
+to stop (`stop_grace_period: 60s`, see shutdown below). With the platform's Compose
+environment configured, run from `docker/`:
+
+```bash
+export QYM_PERFORMANCE_RUNNER_IMAGE='<registry>/performance-runner:<release>'
+docker compose --profile performance up -d
+```
+
+For the split layout, run `docker compose -f docker/docker-compose.split.yml
+--profile performance up -d` from the repository root. The runner routes are
+ingest routes (`^/v1/projects/[^/]+/performance/` goes to ingestion, see "Service
+split deployment"); with `QYM_INGESTION_LEGACY_PATHS=false` set
+`QYM_PERFORMANCE_RUNNER_QYM_URL=http://ingestion:8000/ingestion`.
+
+In Kubernetes use one replica with `strategy: Recreate`, the env file as a Secret
+(`kubectl create secret generic performance-runner-env
+--from-env-file=performance-runner.env`) and, for a private CA, the bundle mounted
+from a ConfigMap and named in `RUNNER_CA_BUNDLE`. On shutdown the runner stops
+the test (killing it after 20 seconds) and sends what was measured before it
+exits, so allow at least 60 seconds of termination grace. A restart is safe: a
+new process never resumes the run of the old one.
+
+### Connected, not connected, interrupted
+
+- **Connected**: the runner's last heartbeat (every 10 s) is at most
+  `QYM_PERFORMANCE_RUNNER_FRESH_SECONDS` (30) old. A run can start only then.
+- **Not connected** (the pages show it when the runner is silent): no heartbeat
+  for longer than that. Starting is refused with the reason; runs already stored
+  stay readable. Check that the container runs, `QYM_URL`, the project ID and
+  the key.
+- **Interrupted**: a claimed run whose runner gave no sign of life for
+  `QYM_PERFORMANCE_STALE_AFTER_SECONDS` (120), or whose runner process was
+  restarted or replaced, ends as `interrupted`. It never runs again. What was
+  measured is kept: for `QYM_PERFORMANCE_LATE_WINDOW_SECONDS` (600) after the end
+  qym still accepts the result, the report file, questions and log lines from the
+  process that claimed the run. The runner, for its part, stops the test by
+  itself when it could not reach qym for 120 seconds, because a stop could no
+  longer reach it. During maintenance mode the runner routes answer `503`, so a
+  maintenance window longer than 120 seconds ends a run in progress.
+- **Expired**: a started run that no runner claimed within
+  `QYM_PERFORMANCE_QUEUE_TIMEOUT_SECONDS` (600).
+
+The maintenance loop ends silent and unclaimed runs every 15 seconds, and the
+pages and runner calls apply the same rule on every read.
+
+### Retention and switching the area off
+
+Retention runs hourly in the maintenance loop: questions and log lines 90 days
+after their run ended (`QYM_PERFORMANCE_DETAIL_RETENTION_DAYS`), report files 180
+days after they arrived (`QYM_PERFORMANCE_REPORT_RETENTION_DAYS`), runs with their
+results 730 days after they ended (`QYM_PERFORMANCE_RETENTION_DAYS`), runner
+events after 30 days (`QYM_PERFORMANCE_EVENTS_RETENTION_DAYS`). A run that has not
+ended is never deleted; targets, tokens and the runner are kept.
+
+To switch the area off, stop any run in progress on its page, set
+`QYM_PERFORMANCE_ENABLED=false` on every qym process and stop the runner (drop
+the `performance` profile, or scale it to 0). The page and runner routes then
+answer `404` "Performance is switched off"; the stored data stays and retention
+keeps running. A runner left running counts the `404` as qym being unreachable
+and stops a test it was running after 120 seconds; qym ends that run as
+`interrupted`.
+
+### Performance troubleshooting
+
+- **401 / 403**: as for the Live worker: a wrong or revoked key, a key of another
+  project, or a key owner who lost project access.
+- **409 `instance_mismatch`**: another process registered under the same
+  `RUNNER_KEY`. Run one process per runner name.
+- **Runs end as `expired`**: no runner claimed them; the Runner page shows when it
+  last reported.
+- **422 `contains_token`**: the result or the report file held the value of a
+  current sign-in token and was refused whole. Token text in log lines and events
+  is masked before it is stored instead.
+- **Run waits for a token**: the target refused the saved sign-in; the run page
+  asks for a new refresh token, and the run carries on once it is sent.
 
 ## Evaluation Service experiments
 
@@ -1851,3 +1995,43 @@ harness no longer seeds or checks one.) Reproduce with
 the API (cancel, retry) and the dispatcher and locks the experiment row on PostgreSQL,
 so a queue cancel racing the dispatcher settling the last job still settles the
 experiment (`test_eval_dispatcher_concurrency.py::test_queue_cancel_racing_a_dispatcher_settle_settles_the_experiment`).
+
+
+### Estishraf Platform performance limits
+
+Platform targets use the same Performance runner, project roles, production
+confirmation, one-active-run rules and retention cycle. A process must register
+`info.supported_target_kinds` containing `estishraf_platform`; missing capability
+means chat only. qym never contacts the target. Platform Smoke and Breakpoint
+plans have no dataset and keep a separate discovery result and dashboard steps.
+
+The following settings apply only to platform payloads. Each defaults to its
+structural ceiling and may be lowered, not raised. Setup and platform control
+advertise the effective values; chat limits remain unchanged.
+
+| Setting | Default / maximum | What it limits |
+|---|---:|---|
+| `QYM_PERFORMANCE_PLATFORM_PROGRESS_MAX_BYTES` | 262144 | Size of one progress report of a platform run |
+| `QYM_PERFORMANCE_PLATFORM_SUMMARY_MAX_BYTES` | 16777216 | Size of a platform run's final summary |
+| `QYM_PERFORMANCE_PLATFORM_DISCOVERY_MAX_BYTES` | 16777216 | Size of the discovery result (dashboards, charts, filters) |
+| `QYM_PERFORMANCE_PLATFORM_MAX_DASHBOARDS` | 10000 | Dashboards one run may list |
+| `QYM_PERFORMANCE_PLATFORM_MAX_CHART_ASSOCIATIONS` | 100000 | Dashboard-to-chart links one run may list |
+| `QYM_PERFORMANCE_PLATFORM_STEPS_PER_RUN_MAX` | 50000 | Step records kept for one run |
+
+An empty dashboard cap means all visible dashboards, subject to the explicit
+resource ceiling. Overflow fails discovery and asks for a smaller explicit cap;
+it never silently selects a smaller workload. Partial discovery and excluded
+charts remain visible as incomplete coverage beside the native result.
+
+The session cookie is encrypted as one jar; its hint shows only cookie count and
+saved time. Deleted cookies retain a version/generation tombstone. Replaced jars
+are retained encrypted for historical/late-result redaction and are covered by
+`reencrypt_llm_keys` through `performance_target_tokens.history_encrypted`.
+The step table is removed with detail retention, including manual child deletion
+on SQLite. Discovery and summary persist until whole-run retention.
+
+New ingest routes, under both normal and configured ingestion prefixes, require
+a project API key and the claiming instance: PUT `.../runs/{run_id}/discovery`,
+POST `.../runs/{run_id}/steps`. Reads remain project-member scoped; Viewers may
+read but cannot start, stop, edit targets or supply sign-in. New page clients
+send `X-Qym-Performance-Platform: 1`; old clients continue seeing chat only.

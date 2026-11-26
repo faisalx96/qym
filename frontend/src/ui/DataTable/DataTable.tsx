@@ -1542,6 +1542,7 @@ function DataTableInner<R>({
         className={styles.th}
         data-col={col.id}
         data-align={align}
+        data-header-case={col.headerCase === 'as-written' ? 'as-written' : undefined}
         data-pin={pin ?? undefined}
         data-fold={pin === 'end' && (col.foldLabel || col.menuColumn) ? '' : undefined}
         data-pin-edge={col.id === lastStart ? 'start' : col.id === firstEnd ? 'end' : undefined}

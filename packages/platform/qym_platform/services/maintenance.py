@@ -489,6 +489,10 @@ def run_job(job_id: str, session_factory: Callable[[], Session], engine: Engine,
                 return status
 
 
+# How often the loop ends performance runs that a silence rule has ended (seconds).
+PERFORMANCE_SWEEP_INTERVAL = 15.0
+
+
 class MaintenanceWorker:
     """Polls for claimable jobs and runs them one at a time in this process."""
 
@@ -498,6 +502,7 @@ class MaintenanceWorker:
         self.interval = interval
         self.retention_interval = retention_interval
         self._next_retention = time.monotonic() + 60.0  # first pass a minute after start
+        self._next_performance_sweep = time.monotonic() + PERFORMANCE_SWEEP_INTERVAL
         self.owner = f"{socket.gethostname()[:24]}:{uuid4().hex}"
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -565,9 +570,30 @@ class MaintenanceWorker:
         except Exception:  # noqa: BLE001
             logger.exception("live retention purge failed")
 
+        from qym_platform.services.performance_retention import purge_performance
+
+        try:
+            purge_performance(self.session_factory, now=utc_now_naive())
+        except Exception:  # noqa: BLE001
+            logger.exception("performance retention purge failed")
+
+    def _maybe_sweep_performance(self) -> None:
+        """End performance runs whose runner went silent, and runs nobody claimed."""
+        if time.monotonic() < self._next_performance_sweep:
+            return
+        self._next_performance_sweep = time.monotonic() + PERFORMANCE_SWEEP_INTERVAL
+        from qym_platform.datetime_utils import utc_now_naive
+        from qym_platform.services.performance_retention import sweep_stale
+
+        try:
+            sweep_stale(self.session_factory, now=utc_now_naive())
+        except Exception:  # noqa: BLE001
+            logger.exception("performance stale sweep failed")
+
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
+                self._maybe_sweep_performance()
                 result = self.tick()
                 if not result:
                     self._maybe_run_retention()
